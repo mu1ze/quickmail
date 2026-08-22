@@ -9,10 +9,10 @@
 	},
 	"scripts": {
 		"dev": "vite dev",
-		"build": "vite build && bun scripts/wrap-cloudflare-worker.mjs",
+		"build": "node scripts/embed-migrations.mjs && vite build && bun scripts/wrap-cloudflare-worker.mjs",
 		"preview": "bun run build && wrangler dev",
 		"setup": "node scripts/setup.mjs",
-		"deploy": "bun run build && wrangler deploy",
+		"deploy": "bun run build && wrangler d1 migrations apply quickmail --remote && wrangler deploy",
 		"db:migrate:local": "wrangler d1 migrations apply quickmail --local",
 		"db:migrate:remote": "wrangler d1 migrations apply quickmail --remote",
 		"prepare": "svelte-kit sync || echo ''",
@@ -21,7 +21,7 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"cf-typegen": "wrangler types",
 		"quickmail": "bun cli/main.ts",
-		"test": "bun test src/lib/email-signature.test.ts src/lib/push-client.test.ts src/lib/server/api-access.test.ts src/lib/server/api-tokens.test.ts src/lib/server/outbox.test.ts src/lib/server/push-notifications.test.ts cli/client.test.ts"
+		"test": "bun test src/lib/email-signature.test.ts src/lib/push-client.test.ts src/lib/server/api-access.test.ts src/lib/server/api-tokens.test.ts src/lib/server/outbox.test.ts src/lib/server/push-notifications.test.ts src/lib/server/schema.test.ts cli/client.test.ts"
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "^4.20260601.1",

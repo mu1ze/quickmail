@@ -1,9 +1,10 @@
-import { redirect, type Handle } from '@sveltejs/kit';
+import { redirect, type Handle, type HandleServerError } from '@sveltejs/kit';
 import { authorizeApiRequest } from '$lib/server/api-access';
 import { getUserByApiToken, readBearerToken } from '$lib/server/api-tokens';
 import { countUsers, getUserFromSession, readSessionToken } from '$lib/server/auth';
 import { DOMAIN_COOKIE } from '$lib/server/constants';
 import { listAddressesForUser, listDomains } from '$lib/server/domains';
+import { ensureSchema } from '$lib/server/schema';
 
 const PUBLIC_PREFIXES = [
 	'/login',
@@ -25,6 +26,33 @@ function jsonError(error: string, status: number): Response {
 	});
 }
 
+function schemaUnavailableResponse(): Response {
+	return new Response(
+		`<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Mailbox unavailable</title>
+	</head>
+	<body style="font-family: system-ui, sans-serif; max-width: 40rem; margin: 4rem auto; padding: 0 1.5rem; line-height: 1.5;">
+		<h1>Mailbox database is not ready</h1>
+		<p>The Worker is running, but it could not apply the D1 schema. Create the <code>quickmail</code> database, then either retry this page or run:</p>
+		<pre style="background: #111; color: #eee; padding: 1rem; overflow: auto;">bun run db:migrate:remote</pre>
+	</body>
+</html>`,
+		{
+			status: 503,
+			headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }
+		}
+	);
+}
+
+export const handleError: HandleServerError = ({ error }) => {
+	console.error(error);
+	return { message: 'Internal Error' };
+};
+
 export const handle: Handle = async ({ event, resolve }) => {
 	const db = event.platform?.env.DB;
 	event.locals.user = null;
@@ -38,6 +66,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const { pathname } = event.url;
 
 	if (db) {
+		try {
+			await ensureSchema(db);
+		} catch (error) {
+			console.error('Failed to apply the D1 schema', error);
+			return schemaUnavailableResponse();
+		}
+
 		const session = readSessionToken(event.cookies);
 		event.locals.user = await getUserFromSession(db, session);
 		if (event.locals.user) {
@@ -99,7 +134,15 @@ export const handle: Handle = async ({ event, resolve }) => {
 		return resolve(event);
 	}
 
-	const needsSetup = db ? (await countUsers(db)) === 0 : false;
+	let needsSetup = false;
+	if (db) {
+		try {
+			needsSetup = (await countUsers(db)) === 0;
+		} catch (error) {
+			console.error('Failed to read mailbox users', error);
+			return schemaUnavailableResponse();
+		}
+	}
 
 	if (
 		needsSetup &&

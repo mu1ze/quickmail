@@ -4,6 +4,7 @@ import {
 	type CloudflareInboundEnv,
 	type CloudflareInboundMessage
 } from './lib/server/cloudflare-inbound';
+import { ensureSchema } from './lib/server/schema';
 // Renamed from `_worker.js` by `scripts/wrap-cloudflare-worker.mjs` after `vite build`.
 // @ts-expect-error file is created at build time
 import sveltekit from '../.svelte-kit/cloudflare/_sveltekit.js';
@@ -41,6 +42,12 @@ export default {
 			waitUntil: (promise) => ctx.waitUntil(promise)
 		};
 
-		await handleCloudflareInbound(message, inboundEnv);
+		try {
+			await ensureSchema(env.DB);
+			await handleCloudflareInbound(message, inboundEnv);
+		} catch (error) {
+			console.error('Cloudflare inbound mail failed', error);
+			message.setReject('Mailbox could not store this message');
+		}
 	}
 };

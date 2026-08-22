@@ -283,6 +283,7 @@ migrations/          D1 schema, applied in order
 
 | Symptom | Fix |
 | --- | --- |
+| 500 on every page | D1 schema is missing. Redeploy this build (it applies migrations on first request) or run `bun run db:migrate:remote` |
 | `wrangler email sending enable` → 404 | Wrangler too old — upgrade to 4.123+ |
 | Mail never arrives (Resend) | `dig MX yourdomain.com` must point at Resend; enable receiving on the domain |
 | Mail never arrives (Cloudflare) | Apex MX must be Cloudflare Routing, catch-all must target this Worker, `EMAIL_PROVIDER=cloudflare`, Worker must be deployed |
