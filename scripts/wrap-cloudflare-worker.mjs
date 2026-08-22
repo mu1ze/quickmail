@@ -30,11 +30,3 @@ await writeFile(
 export { default } from '../../src/worker.ts';
 `
 );
-
-const assetsIgnore = path.resolve('.svelte-kit/cloudflare/.assetsignore');
-if (existsSync(assetsIgnore)) {
-	const ignore = await readFile(assetsIgnore, 'utf8');
-	if (!ignore.includes('_sveltekit.js')) {
-		await writeFile(assetsIgnore, `${ignore.trimEnd()}\n_sveltekit.js\n`);
-	}
-}
