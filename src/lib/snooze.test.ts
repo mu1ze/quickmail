@@ -26,7 +26,7 @@ describe('snooze presets', () => {
 	});
 
 	test('formatSnoozeUntil says Today for a time later today', () => {
-		const now = new Date();
+		const now = new Date(2026, 7, 23, 12, 0, 0);
 		const later = new Date(now.getTime() + 2 * 60 * 60 * 1000);
 		assert.match(formatSnoozeUntil(toSqliteDatetime(later), now), /Today/);
 	});

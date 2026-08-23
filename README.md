@@ -166,6 +166,13 @@ Inbound mail only works on a **deployed** Worker (or `bun run preview`) —
 
 Send yourself a message from another account — it should land within seconds.
 
+### Existing account passwords
+
+Existing legacy password hashes remain valid and are upgraded automatically to the
+versioned PBKDF2 format after the next successful sign-in. No shared migration
+password is used. To reset one forgotten password, use the per-account reset script
+shown under **Forgot the admin password** below.
+
 ### Desktop notifications (optional)
 
 QuickMail can push-notify users about new mail even with no tab open:
