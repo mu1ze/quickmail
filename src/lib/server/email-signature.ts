@@ -1,5 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import { normalizeEmailSignature } from '$lib/email-signature';
+import { parseAccountSignature } from '$lib/email-signature';
 
 export async function getEmailSignature(db: D1Database, userId: string): Promise<string> {
 	const row = await db
@@ -15,7 +15,7 @@ export async function updateEmailSignature(
 	userId: string,
 	value: string
 ): Promise<string> {
-	const signature = normalizeEmailSignature(value);
+	const signature = parseAccountSignature(value);
 	await db
 		.prepare('UPDATE users SET email_signature = ? WHERE id = ?')
 		.bind(signature, userId)

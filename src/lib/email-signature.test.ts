@@ -55,13 +55,62 @@ import {
 		assert.equal(pickEmailSignature(null, ''), '');
 	});
 
+	test('appends compiled template HTML without escaping the markup', () => {
+		const result = appendEmailSignature({
+			text: 'Hello',
+			html: '<p>Hello</p>',
+			signature: JSON.stringify({
+				version: 1,
+				layout: 'stacked',
+				name: 'Ada <Corp>',
+				title: 'Engineer',
+				company: '',
+				phone: '',
+				website: '',
+				accent: '#111111',
+				photoId: null,
+				logoId: null,
+				socials: [],
+				text: ''
+			})
+		});
+		assert.match(result.html ?? '', /<table role="presentation"/);
+		assert.match(result.html ?? '', /Ada &lt;Corp&gt;/);
+		assert.match(result.text ?? '', /Ada <Corp>/);
+	});
+
 	test('rejects mailbox signatures over the character limit', () => {
 		assert.equal(parseMailboxSignature('  Best  '), 'Best');
 		assert.equal(parseMailboxSignature('   '), null);
-		assert.equal(parseMailboxSignature('x'.repeat(MAX_EMAIL_SIGNATURE_LENGTH))?.length, 1000);
+		assert.equal(parseMailboxSignature('x'.repeat(MAX_EMAIL_SIGNATURE_LENGTH))?.length, 4000);
 		assert.throws(
 			() => parseMailboxSignature('x'.repeat(MAX_EMAIL_SIGNATURE_LENGTH + 1)),
-			/1000 characters or fewer/
+			/4000 characters or fewer/
 		);
+	});
+
+	test('rewrites hosted photos to absolute URLs when an origin is provided', () => {
+		const photoId = '2f1a0c8e-4b3d-4a9f-8c1e-0a7b6d5c4e3f';
+		const result = appendEmailSignature({
+			text: 'Hello',
+			html: '<p>Hello</p>',
+			origin: 'https://mail.example.com',
+			signature: JSON.stringify({
+				version: 1,
+				layout: 'photo',
+				name: 'Ada',
+				title: '',
+				company: '',
+				phone: '',
+				website: '',
+				accent: '#111111',
+				photoId,
+				logoId: null,
+				socials: [],
+				text: ''
+			})
+		});
+		assert.match(result.html ?? '', new RegExp(`src="https://mail.example.com/s/${photoId}"`));
+		assert.match(result.html ?? '', /data-email-signature="true"/);
 	});
 });

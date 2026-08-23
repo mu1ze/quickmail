@@ -5,9 +5,12 @@
 	import AttachmentPicker from '$lib/components/AttachmentPicker.svelte';
 	import RecipientField from '$lib/components/RecipientField.svelte';
 	import LoadingButton from '$lib/interior/LoadingButton.svelte';
+	import SignaturePreview from '$lib/components/SignaturePreview.svelte';
 	import { queueMailSend } from '$lib/pending-send';
 	import { isMod } from '$lib/shortcuts';
+	import { compileSignature, parseSignatureConfig, pickEmailSignature } from '$lib/email-signature';
 	import { htmlToPlainText, isHtmlEmpty } from '$lib/utils/html';
+	import { page } from '$app/stores';
 	import type { OutboundAttachmentInput } from '$lib/types';
 	import type { PageData } from './$types';
 
@@ -39,6 +42,13 @@
 	let savedAt = $state('');
 
 	const isEmpty = $derived(!to.trim() && !subject.trim() && isHtmlEmpty(html));
+	const selectedAddress = $derived(addresses.find((address) => address.id === fromAddressId));
+	const storedSignature = $derived(
+		pickEmailSignature(selectedAddress?.signature, data.accountSignature)
+	);
+	const compiledSignature = $derived(
+		compileSignature(parseSignatureConfig(storedSignature), $page.url.origin)
+	);
 
 	async function saveDraft() {
 		if (savingDraft || isEmpty) return;
@@ -236,6 +246,13 @@
 		<RichTextEditor bind:html minHeight={220} />
 	</div>
 
+	{#if compiledSignature.html}
+		<div class="signature-preview">
+			<p class="signature-label">Signature</p>
+			<SignaturePreview html={compiledSignature.html} />
+		</div>
+	{/if}
+
 	<div class="mt-4 px-1">
 		<AttachmentPicker bind:attachments />
 	</div>
@@ -279,6 +296,16 @@
 	.field-static {
 		font-size: 0.9375rem;
 		color: var(--color-text-secondary);
+	}
+
+	.signature-preview {
+		margin-top: 1rem;
+	}
+
+	.signature-label {
+		margin-bottom: 0.4rem;
+		font-size: 0.75rem;
+		color: var(--color-muted);
 	}
 
 	@media (max-width: 900px) {
