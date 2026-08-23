@@ -12,40 +12,31 @@ scoped to a user, API tokens are hashed and constrained by an endpoint allowlist
 session cookies use secure attributes, attachment reads check ownership, and Resend
 webhooks are authenticated before processing.
 
-The most important attack points are the public first-run bootstrap endpoint and the
-unthrottled password login endpoint. Together, these make deployment sequencing and
-edge rate limiting security-critical. Received HTML mail also loads sender-controlled
-remote resources automatically, which allows conventional tracking pixels and can
-disclose a user's IP address and message-open time.
+The review originally identified login abuse, remote email resources, password hashing,
+browser headers, and webhook request size as the main attack points. Those items are
+now mitigated in the repository as described below. The first-run bootstrap route is
+explicitly accepted as part of the deployment trust model rather than treated as a
+vulnerability.
 
 ## Findings
 
-### QM-01 — Public first-run setup can be claimed by an attacker (High)
+### QM-01 — First-run setup trust assumption (Accepted / not a finding)
 
-**Evidence.** `/api/setup` is deliberately included in the public route list. Its POST
+**Original evidence.** `/api/setup` is deliberately included in the public route list. Its POST
 handler accepts the future administrator's address, name, and password without an
 operator-held bootstrap secret. The only gate is `countUsers(db) === 0`; after that
 check, it creates an administrator and signs the caller in.
 
-**Attack scenario.** A new Worker is deployed before its legitimate operator completes
-setup. Anyone who discovers or scans the `workers.dev` hostname can submit setup first
-and become the administrator. The attacker can then connect mail identities, read
-mail routed to the instance, and create additional users or API keys. The initial
-check and the later check in `bootstrapAdmin` also do not constitute an atomic
-compare-and-create operation, so concurrent setup requests can race (the unique email
-constraint limits some outcomes but does not make bootstrap ownership deterministic).
+**Disposition.** The operator explicitly accepts this behavior: control of the
+Cloudflare account and deployment URL is the trust boundary, and setup is completed as
+part of deployment. No code change is planned. Operators should still complete setup
+immediately and keep the Cloudflare account protected with strong MFA.
 
-**Recommendation.** Require a high-entropy, one-time `SETUP_TOKEN` secret on every
-setup GET/POST until initialization completes, or provision the first admin through a
-deployment command rather than a public route. Perform the uninitialized check and
-first-admin creation as one serialized/atomic operation. Operators should deploy with
-the setup secret already configured and remove or rotate it immediately afterward.
+### QM-02 — Login abuse controls (Remediated)
 
-### QM-02 — Login has no application-level abuse controls (High)
-
-**Evidence.** The public login POST accepts an unlimited sequence of email/password
-pairs and runs password verification for every request to an existing account. There
-is no per-IP, per-account, or global failure counter, delay, lockout, CAPTCHA, or
+**Original evidence.** The public login POST accepted an unlimited sequence of email/password
+pairs and ran password verification for every request to an existing account. There
+was no per-IP, per-account, or global failure counter, delay, lockout, CAPTCHA, or
 Cloudflare rate-limit binding in the repository.
 
 **Attack scenario.** An attacker can perform online password guessing against known
@@ -54,16 +45,15 @@ consume Worker CPU and provide an inexpensive denial-of-service vector. The endp
 generic error is good practice and prevents direct account enumeration, but it does
 not mitigate guessing or resource exhaustion.
 
-**Recommendation.** Apply layered throttling: a Cloudflare rate-limiting/WAF rule at
-the edge, plus short-lived per-IP and per-normalized-account failure buckets in a
-Durable Object or another consistent store. Return `429` with `Retry-After`, add
-exponential backoff, alert on sustained failures, and preserve the same observable
-response for existing and nonexistent users. Consider optional WebAuthn or TOTP for
-administrators.
+**Remediation.** Failed attempts are now recorded in hashed per-IP and per-account D1
+buckets. Account attempts are limited to 10 and IP attempts to 30 in a 15-minute
+window; limited requests receive `429` and `Retry-After`, successful authentication
+clears the account bucket, and stale rows are cleaned opportunistically. A Cloudflare
+WAF rule remains useful as defense in depth.
 
-### QM-03 — Viewing mail automatically requests sender-controlled resources (Medium)
+### QM-03 — Sender-controlled remote resources (Remediated)
 
-**Evidence.** Received HTML is inserted into an iframe `srcdoc` without URL rewriting
+**Original evidence.** Received HTML was inserted into an iframe `srcdoc` without URL rewriting
 or resource filtering. The iframe blocks scripts but permits normal image, stylesheet,
 font, media, and CSS `url()` fetches. Its `referrerpolicy="no-referrer"` suppresses the
 Referer header but does not stop the request itself.
@@ -73,16 +63,15 @@ requests that URL, confirming the mailbox is active and disclosing open time, IP
 metadata, and browser characteristics to the sender. Remote CSS can cause further
 requests. This is a privacy issue and can improve phishing reconnaissance.
 
-**Recommendation.** Default to blocking remote resources in received mail. Sanitize
-HTML and rewrite `src`, `srcset`, poster, stylesheet, SVG, and CSS URL-bearing values;
-show a per-message “Load remote content” control. A privacy-preserving image proxy is
-an alternative if it strips credentials, blocks private/link-local destinations,
-limits size and redirects, and caches responses. Keep the current scriptless sandbox.
+**Remediation.** Received HTML now gets an early iframe-local CSP that permits inline
+styles and embedded data/blob media but blocks network resources. Messages containing
+remote URL-bearing attributes or CSS show an explicit “Load remote content” control.
+The scriptless sandbox and no-referrer policy remain in place.
 
-### QM-04 — Password hashing cost is below current defensive expectations (Medium)
+### QM-04 — Password hashing cost (Remediated)
 
-**Evidence.** Passwords use PBKDF2-HMAC-SHA-256 with a random 16-byte salt, but the
-work factor is fixed at 100,000 iterations. The stored format contains only
+**Original evidence.** Passwords used PBKDF2-HMAC-SHA-256 with a random 16-byte salt, but the
+work factor was fixed at 100,000 iterations. The stored format contained only
 `salt:hash`, so it cannot identify an algorithm/version or raise cost opportunistically
 without coordinated migration logic.
 
@@ -90,16 +79,13 @@ without coordinated migration logic.
 passwords faster than with a contemporary work factor or memory-hard KDF. The
 eight-character minimum further increases the likelihood of guessable credentials.
 
-**Recommendation.** Prefer Argon2id where the runtime and deployment constraints allow
-it. Otherwise benchmark and substantially increase PBKDF2-SHA-256 iterations while
-staying within Worker CPU limits. Store a versioned format containing algorithm and
-cost, and rehash after successful login. Raise the minimum length (while allowing long
-passphrases), screen new passwords against known-compromised values, and do not impose
-composition rules.
+**Remediation.** New hashes use a versioned PBKDF2-SHA-256 format with 600,000
+iterations. Existing 100,000-iteration hashes remain verifiable and are upgraded after
+a successful login. New and changed passwords require at least 12 characters.
 
-### QM-05 — No explicit browser security-header policy (Medium)
+### QM-05 — Browser security-header policy (Remediated)
 
-**Evidence.** The global hook resolves responses without adding a Content Security
+**Original evidence.** The global hook resolved responses without adding a Content Security
 Policy, `frame-ancestors`, `X-Content-Type-Options`, `Referrer-Policy`, or an explicit
 Permissions Policy. The deployment configuration also does not define static response
 headers.
@@ -109,27 +95,25 @@ Cloudflare rule supplies protection. If a future injection bug is introduced, th
 of a restrictive CSP makes exploitation easier. Browser feature and MIME-sniffing
 defaults are left to user agents.
 
-**Recommendation.** Add centrally tested headers to document responses and APIs. Start
-with `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`,
-`X-Content-Type-Options: nosniff`, a conservative `Referrer-Policy`, and a restrictive
-Permissions Policy. Roll CSP out in report-only mode first because Svelte styles and
-received-message iframe content require deliberate directives/nonces. Configure HSTS
-at the custom domain/Cloudflare edge after confirming HTTPS-only operation.
+**Remediation.** The global server hook now adds an enforcing Content Security Policy
+with `frame-ancestors 'none'`, `object-src 'none'`, restricted base/form/connect
+directives, and HTTPS upgrades. It also adds `X-Content-Type-Options`, a conservative
+referrer policy, and a restrictive Permissions Policy. HSTS remains an edge/custom
+domain responsibility so local HTTP development is not accidentally pinned.
 
-### QM-06 — Public webhook buffers the body before applying a size policy (Low)
+### QM-06 — Webhook request size (Remediated)
 
-**Evidence.** The unauthenticated webhook route calls `request.text()` before signature
-verification and defines no application-specific Content-Length or decoded-body limit.
-The platform's request limits remain the only bound.
+**Original evidence.** The unauthenticated webhook route called `request.text()` before signature
+verification and defined no application-specific Content-Length or decoded-body limit.
+The platform's request limits were the only bound.
 
 **Impact.** An attacker can repeatedly send large bodies to a public endpoint, causing
 avoidable allocation and HMAC work. This is primarily a cost and availability concern;
 the signature check correctly prevents unauthorized mail processing.
 
-**Recommendation.** Reject absent or excessive Content-Length values where practical,
-enforce a conservative maximum while reading, and rate-limit malformed/unsigned
-requests at the edge. Set the maximum above the largest legitimate provider event and
-test attachment-event metadata at that boundary.
+**Remediation.** The webhook rejects invalid or declared bodies over 1 MiB before
+buffering and verifies the actual UTF-8 byte length after reading to cover chunked or
+misdeclared requests. Provider signatures are still checked before event processing.
 
 ## Positive controls observed
 
@@ -148,12 +132,10 @@ test attachment-event metadata at that boundary.
 
 ## Suggested remediation order
 
-1. Protect first-run setup before the next fresh deployment (QM-01).
-2. Add edge and application login throttling (QM-02).
-3. Block remote mail content by default (QM-03).
-4. Introduce versioned password hashes and tune the KDF (QM-04).
-5. Deploy and regression-test browser headers (QM-05).
-6. Bound and edge-throttle webhook requests (QM-06).
+1. Apply migration `0015_login_rate_limits.sql` before deploying the new login route.
+2. Regression-test the CSP against production mail templates and provider flows.
+3. Consider a Cloudflare WAF login/webhook rule as defense in depth.
+4. Consider WebAuthn/TOTP for administrator accounts.
 
 ## Review limitations
 

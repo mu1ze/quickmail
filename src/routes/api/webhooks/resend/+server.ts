@@ -2,6 +2,11 @@ import { json, text, type RequestHandler } from '@sveltejs/kit';
 import { getResendClient, getWebhookSecret } from '$lib/server/context';
 import { claimWebhookEvent, handleResendWebhook, type ResendWebhookEvent } from '$lib/server/inbound';
 import { verifyWebhookSignature } from '$lib/server/webhook';
+import {
+	MAX_WEBHOOK_BODY_BYTES,
+	utf8ByteLength,
+	webhookBodyTooLarge
+} from '$lib/server/request-limits';
 
 /**
  * Resend webhook receiver — used when EMAIL_PROVIDER=resend.
@@ -15,6 +20,9 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 	if (!db || !bucket) {
 		return json({ error: 'Storage unavailable' }, { status: 503 });
 	}
+	if (webhookBodyTooLarge(request.headers.get('content-length'))) {
+		return json({ error: 'Webhook payload too large' }, { status: 413 });
+	}
 
 	const secret = getWebhookSecret(platform);
 	if (!secret) {
@@ -24,6 +32,9 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 
 	// Must be the raw body — parsing first would invalidate the signature.
 	const rawBody = await request.text();
+	if (utf8ByteLength(rawBody) > MAX_WEBHOOK_BODY_BYTES) {
+		return json({ error: 'Webhook payload too large' }, { status: 413 });
+	}
 	const verified = await verifyWebhookSignature(request.headers, rawBody, secret);
 	if (!verified.ok) {
 		console.warn('Rejected webhook signature:', verified.reason);

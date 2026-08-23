@@ -1,5 +1,10 @@
 <script lang="ts">
-	import { buildEmailDocument, emailCss, isRichHtml } from '$lib/utils/email-html';
+	import {
+		buildEmailDocument,
+		emailCss,
+		hasRemoteContent,
+		isRichHtml
+	} from '$lib/utils/email-html';
 	import { foldQuotedHtml } from '$lib/utils/quotes';
 
 	const STYLE_ID = '__mail-frame-style';
@@ -7,7 +12,9 @@
 	let { html }: { html: string } = $props();
 
 	const rich = $derived(isRichHtml(html));
-	const srcdoc = $derived(buildEmailDocument(html, { rich }));
+	const remote = $derived(hasRemoteContent(html));
+	let allowRemote = $state(false);
+	const srcdoc = $derived(buildEmailDocument(html, { rich, allowRemote }));
 
 	let frame = $state<HTMLIFrameElement | null>(null);
 	let height = $state(0);
@@ -118,6 +125,13 @@
 	});
 </script>
 
+{#if remote && !allowRemote}
+	<div class="remote-notice">
+		<span>Remote images are blocked to protect your privacy.</span>
+		<button type="button" onclick={() => (allowRemote = true)}>Load remote content</button>
+	</div>
+{/if}
+
 <iframe
 	bind:this={frame}
 	class="frame"
@@ -132,6 +146,29 @@
 ></iframe>
 
 <style>
+	.remote-notice {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		margin-bottom: 0.75rem;
+		padding: 0.6rem 0.75rem;
+		border: 1px solid var(--color-line);
+		border-radius: 0.6rem;
+		color: var(--color-text-secondary);
+		font-size: 0.8rem;
+	}
+
+	.remote-notice button {
+		flex: none;
+		border: 0;
+		background: transparent;
+		color: var(--color-accent-text);
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
 	.frame {
 		display: block;
 		width: 100%;

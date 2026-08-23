@@ -1,5 +1,5 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { createUser, listUsers } from '$lib/server/auth';
+import { createUser, listUsers, MIN_PASSWORD_LENGTH } from '$lib/server/auth';
 import { createAddress, getDomain, listAllAddresses } from '$lib/server/domains';
 
 export const GET: RequestHandler = async ({ locals, platform }) => {
@@ -37,8 +37,11 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 		return json({ error: 'Name, address, and domain are required' }, { status: 400 });
 	}
 
-	if (!body.password || body.password.length < 8) {
-		return json({ error: 'Password must be at least 8 characters' }, { status: 400 });
+	if (!body.password || body.password.length < MIN_PASSWORD_LENGTH) {
+		return json(
+			{ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` },
+			{ status: 400 }
+		);
 	}
 
 	const domain = await getDomain(db, body.domainId);
