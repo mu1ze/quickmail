@@ -980,18 +980,72 @@
 		box-shadow: inset 0 1px 0 var(--color-line);
 	}
 
-	@media (max-width: 780px) {
-		.row-link {
-			grid-template-columns: minmax(0, 1fr) auto;
-			grid-template-areas:
-				'sender date'
-				'body body';
-			gap: 0.25rem 0.5rem;
+	@media (max-width: 900px) {
+		.toolbar {
+			flex-wrap: wrap;
+			row-gap: 0.5rem;
+			padding: 0.5rem 0.625rem;
 		}
 
-		.avatar,
-		.indicators {
-			display: none;
+		.toolbar-left,
+		.toolbar-right {
+			width: 100%;
+			justify-content: space-between;
+		}
+
+		.toolbar-right {
+			padding-bottom: 0.125rem;
+			overflow-x: auto;
+			-webkit-overflow-scrolling: touch;
+		}
+
+		.title {
+			font-size: 1rem;
+		}
+
+		.tool-btn,
+		.pager-btn,
+		.caret {
+			width: 2.75rem;
+			height: 2.75rem;
+			min-width: 2.75rem;
+		}
+
+		.pill {
+			height: 2.5rem;
+			padding: 0 0.875rem;
+		}
+
+		.bulk-actions {
+			flex-wrap: wrap;
+		}
+
+		.row {
+			padding: 0.35rem 0.5rem 0.35rem 0.375rem;
+			min-height: 4.25rem;
+			gap: 0.25rem;
+		}
+
+		.star {
+			width: 2.5rem;
+			height: 2.5rem;
+		}
+
+		.row-link {
+			grid-template-columns: auto minmax(0, 1fr) auto;
+			grid-template-areas:
+				'avatar sender date'
+				'avatar body indicators';
+			gap: 0.2rem 0.5rem;
+			padding: 0.5rem 0.25rem 0.5rem 0;
+		}
+
+		.avatar {
+			grid-area: avatar;
+			align-self: center;
+			width: 2rem;
+			height: 2rem;
+			font-size: 0.6875rem;
 		}
 
 		.sender {
@@ -1006,12 +1060,18 @@
 			grid-area: body;
 		}
 
-		.row-actions {
-			display: none !important;
+		.indicators {
+			grid-area: indicators;
+			justify-self: end;
 		}
 
-		.title {
-			font-size: 0.9375rem;
+		.row :global(.check) {
+			width: 2.5rem;
+			height: 2.5rem;
+		}
+
+		.row-actions {
+			display: none !important;
 		}
 	}
 </style>

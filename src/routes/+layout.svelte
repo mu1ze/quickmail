@@ -4,6 +4,7 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import Topbar from '$lib/components/Topbar.svelte';
+	import MobileDock from '$lib/components/MobileDock.svelte';
 	import { disablePushForCurrentAccount } from '$lib/push-client';
 	import { watchSystemTheme } from '$lib/theme';
 	import type { LayoutData } from './$types';
@@ -19,6 +20,9 @@
 
 	let collapsed = $state(false);
 	let mobileOpen = $state(false);
+	let searchInput = $state<HTMLInputElement | null>(null);
+
+	const composing = $derived($page.url.pathname.startsWith('/compose'));
 
 	// app.html already applied the theme; this keeps "System" live afterwards.
 	$effect(() => watchSystemTheme());
@@ -35,6 +39,28 @@
 	$effect(() => {
 		toggleCollapsed(collapsed);
 	});
+
+	let lastPath = '';
+	$effect(() => {
+		const path = $page.url.pathname;
+		if (lastPath && path !== lastPath) mobileOpen = false;
+		lastPath = path;
+	});
+
+	$effect(() => {
+		document.body.classList.toggle('nav-open', mobileOpen);
+		return () => document.body.classList.remove('nav-open');
+	});
+
+	function onWindowKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape' && mobileOpen) mobileOpen = false;
+	}
+
+	function focusSearch() {
+		mobileOpen = false;
+		searchInput?.focus();
+		searchInput?.scrollIntoView({ block: 'nearest' });
+	}
 
 	async function logout() {
 		try {
@@ -58,8 +84,10 @@
 	/>
 </svelte:head>
 
+<svelte:window onkeydown={onWindowKeydown} />
+
 {#if showShell}
-	<div class="app-shell" data-collapsed={collapsed}>
+	<div class="app-shell" class:has-dock={!composing} data-collapsed={collapsed}>
 		<Sidebar
 			counts={data.counts}
 			domains={data.domains}
@@ -74,6 +102,7 @@
 				userName={data.user!.name}
 				userEmail={data.user!.email}
 				addresses={data.addresses}
+				bind:searchInput
 				onToggleNav={() => (mobileOpen = !mobileOpen)}
 				onLogout={logout}
 			/>
@@ -82,6 +111,15 @@
 				{@render children()}
 			</main>
 		</div>
+
+		{#if !composing}
+			<MobileDock
+				inboxUnread={data.counts.inbox_unread}
+				menuOpen={mobileOpen}
+				onOpenMenu={() => (mobileOpen = !mobileOpen)}
+				onSearch={focusSearch}
+			/>
+		{/if}
 	</div>
 {:else}
 	{@render children()}

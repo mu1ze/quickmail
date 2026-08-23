@@ -1031,6 +1031,25 @@
 		min-width: 0;
 	}
 
+	@media (max-width: 640px) {
+		.theme-options {
+			grid-template-columns: 1fr;
+		}
+
+		.add-form {
+			flex-direction: column;
+			align-items: stretch;
+		}
+
+		.add-form .btn-primary {
+			width: 100%;
+		}
+
+		.password-form .text-input {
+			font-size: 1rem;
+		}
+	}
+
 	.domain-list {
 		margin-top: 1rem;
 	}

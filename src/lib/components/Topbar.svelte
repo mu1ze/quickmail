@@ -8,12 +8,14 @@
 		userName,
 		userEmail,
 		addresses,
+		searchInput = $bindable(null),
 		onToggleNav,
 		onLogout
 	}: {
 		userName: string;
 		userEmail: string;
 		addresses: MailAddress[];
+		searchInput?: HTMLInputElement | null;
 		onToggleNav: () => void;
 		onLogout: () => void;
 	} = $props();
@@ -68,9 +70,11 @@
 		<Icon name="search-line" size={16} />
 		<input
 			type="search"
+			bind:this={searchInput}
 			bind:value={query}
 			placeholder="Search messages"
 			aria-label="Search messages"
+			enterkeyhint="search"
 		/>
 		{#if query}
 			<button type="button" class="search-clear" aria-label="Clear search" onclick={clearSearch}>
@@ -314,11 +318,29 @@
 
 	@media (max-width: 900px) {
 		.topbar {
-			padding: 0 0.875rem;
+			padding: 0 0.5rem 0 0.375rem;
+			height: calc(var(--topbar-height) + env(safe-area-inset-top));
+			padding-top: env(safe-area-inset-top);
 		}
 
 		.nav-toggle {
 			display: flex;
+			width: 2.75rem;
+			height: 2.75rem;
+		}
+
+		.search {
+			height: 2.5rem;
+			max-width: none;
+		}
+
+		.account-trigger {
+			padding: 0.125rem;
+		}
+
+		.avatar {
+			width: 2.25rem;
+			height: 2.25rem;
 		}
 	}
 </style>

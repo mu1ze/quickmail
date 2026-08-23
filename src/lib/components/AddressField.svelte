@@ -80,4 +80,14 @@
 		outline: none;
 		cursor: pointer;
 	}
+
+	@media (max-width: 640px) {
+		.local-input {
+			min-width: 0;
+		}
+
+		.domain-select {
+			max-width: 48%;
+		}
+	}
 </style>
