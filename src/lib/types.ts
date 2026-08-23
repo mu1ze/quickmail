@@ -71,8 +71,10 @@ export type MailAddress = {
 	/** From display name on outbound mail. Falls back to the account name. */
 	label: string | null;
 	is_default: boolean;
-	/** Sign-off for this mailbox. Falls back to the account signature when empty. */
+	/** Legacy per-mailbox body. Used when `signature_id` is unset. */
 	signature: string | null;
+	/** Pinned library signature for this mailbox. Null uses the account default. */
+	signature_id: string | null;
 	created_at: string;
 };
 

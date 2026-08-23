@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { getDraft } from '$lib/server/mail-store';
-import { getEmailSignature } from '$lib/server/email-signature';
+import { listSignatures } from '$lib/server/email-signature';
 
 export const load: PageServerLoad = async ({ locals, platform, url }) => {
 	const draftId = url.searchParams.get('draft');
@@ -13,8 +13,7 @@ export const load: PageServerLoad = async ({ locals, platform, url }) => {
 		(address) => locals.domainPermissions[address.domain_id]?.can_send !== false
 	);
 
-	const accountSignature =
-		locals.user && db ? await getEmailSignature(db, locals.user.id) : '';
+	const signatures = locals.user && db ? await listSignatures(db, locals.user.id) : [];
 
-	return { addresses, draft, accountSignature };
+	return { addresses, draft, signatures };
 };

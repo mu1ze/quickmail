@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { getEmailForUser, listThreadMessages, markThreadRead } from '$lib/server/mail-store';
-import { getEmailSignature } from '$lib/server/email-signature';
+import { listSignatures } from '$lib/server/email-signature';
 import { resolveReplyFromAddress } from '$lib/server/outbox';
 import { displaySubject } from '$lib/server/threads';
 
@@ -21,7 +21,7 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
 
 	const latest = messages[messages.length - 1] ?? email;
 	const replyIdentity = await resolveReplyFromAddress(platform.env.DB, locals.user, latest);
-	const accountSignature = await getEmailSignature(platform.env.DB, locals.user.id);
+	const signatures = await listSignatures(platform.env.DB, locals.user.id);
 
 	return {
 		threadId: email.thread_id ?? email.id,
@@ -32,7 +32,7 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
 		subject: displaySubject(messages[0]?.subject ?? email.subject),
 		replyFrom: replyIdentity?.address ?? null,
 		replyFromName: replyIdentity?.label?.trim() || null,
-		accountSignature,
+		signatures,
 		addresses: locals.addresses,
 		messages: messages.map((message) => ({ ...message, is_read: true }))
 	};
