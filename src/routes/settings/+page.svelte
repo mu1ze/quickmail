@@ -4,6 +4,7 @@
 	import Check from '$lib/components/Check.svelte';
 	import AddressField from '$lib/components/AddressField.svelte';
 	import DesktopNotifications from '$lib/components/DesktopNotifications.svelte';
+	import CopyButton from '$lib/interior/CopyButton.svelte';
 	import BrrrNotifications from '$lib/components/BrrrNotifications.svelte';
 	import {
 		readThemePreference,
@@ -136,7 +137,6 @@
 	let keyError = $state('');
 	let creating = $state(false);
 	let revealed = $state<{ summary: ApiTokenSummary; token: string } | null>(null);
-	let copied = $state(false);
 	let installCopied = $state(false);
 	const installCommand =
 		'curl -fsSL https://raw.githubusercontent.com/DivinPrince/quickmail/main/scripts/install.sh | sh';
@@ -152,14 +152,12 @@
 		adminScope = false;
 		keyError = '';
 		revealed = null;
-		copied = false;
 		creating = true;
 	}
 
 	function closeCreate() {
 		creating = false;
 		revealed = null;
-		copied = false;
 		keyError = '';
 	}
 
@@ -189,23 +187,11 @@
 			}
 			tokens = [body.tokenMeta, ...tokens.filter((token) => token.id !== body.tokenMeta.id)];
 			revealed = { summary: body.tokenMeta, token: body.token };
-			copied = false;
 			keyName = '';
 		} catch {
 			keyError = 'Network error';
 		} finally {
 			keyBusy = false;
-		}
-	}
-
-	async function copyKey() {
-		if (!revealed) return;
-		try {
-			await navigator.clipboard.writeText(revealed.token);
-			copied = true;
-			setTimeout(() => (copied = false), 1600);
-		} catch {
-			/* clipboard unavailable — the box is still selectable */
 		}
 	}
 
@@ -664,10 +650,7 @@
 				<p class="modal-note">Shown once. Copy it now.</p>
 				<pre class="token-box">{revealed.token}</pre>
 				<div class="modal-actions">
-					<button type="button" class="btn-primary" onclick={copyKey}>
-						<Icon name={copied ? 'check-line' : 'file-copy-line'} size={15} />
-						{copied ? 'Copied' : 'Copy'}
-					</button>
+					<CopyButton value={revealed.token} label="Copy" copiedLabel="Copied" />
 					<button type="button" class="btn-ghost" onclick={closeCreate}>Done</button>
 				</div>
 			{:else}
@@ -859,13 +842,13 @@
 	.preview-bar {
 		width: 60%;
 		height: 0.375rem;
-		border-radius: 9999px;
+		border-radius: 6px;
 	}
 
 	.preview-line {
 		width: 100%;
 		height: 0.25rem;
-		border-radius: 9999px;
+		border-radius: 6px;
 		opacity: 0.55;
 	}
 
@@ -925,7 +908,7 @@
 		justify-content: center;
 		width: 1.125rem;
 		height: 1.125rem;
-		border-radius: 9999px;
+		border-radius: 6px;
 		color: var(--color-on-accent);
 		background: var(--color-accent);
 	}
@@ -1016,7 +999,7 @@
 
 	.badge {
 		padding: 0.125rem 0.5rem;
-		border-radius: 9999px;
+		border-radius: 6px;
 		font-size: 0.6875rem;
 		font-weight: 500;
 		background: var(--color-surface-muted);
@@ -1084,7 +1067,7 @@
 
 	.chip {
 		padding: 0.0625rem 0.4375rem;
-		border-radius: 9999px;
+		border-radius: 6px;
 		font-size: 0.6875rem;
 		color: var(--color-muted);
 		background: var(--color-surface-muted);

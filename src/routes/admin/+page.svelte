@@ -497,7 +497,7 @@
 
 	.chip {
 		padding: 0.0625rem 0.4375rem;
-		border-radius: 9999px;
+		border-radius: 6px;
 		font-size: 0.6875rem;
 		color: var(--color-muted);
 		background: var(--color-surface-muted);
@@ -665,7 +665,7 @@
 		justify-content: center;
 		width: 2.25rem;
 		height: 2.25rem;
-		border-radius: 9999px;
+		border-radius: 6px;
 		font-size: 0.8125rem;
 		font-weight: 600;
 		color: var(--color-text-secondary);
@@ -687,7 +687,7 @@
 
 	.admin-badge {
 		padding: 0.125rem 0.5rem;
-		border-radius: 9999px;
+		border-radius: 6px;
 		font-size: 0.6875rem;
 		font-weight: 500;
 		color: var(--color-text);

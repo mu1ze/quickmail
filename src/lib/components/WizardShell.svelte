@@ -73,8 +73,8 @@
 		display: flex;
 		margin-bottom: 1rem;
 		/* Matches the mark's own corner radius so the shadow hugs the tile. */
-		border-radius: 0.775rem;
-		box-shadow: var(--shadow-sm);
+		border-radius: 14px;
+		box-shadow: var(--mat-panel);
 	}
 
 	.wizard-head h1 {
@@ -116,7 +116,7 @@
 		justify-content: center;
 		width: 1.25rem;
 		height: 1.25rem;
-		border-radius: 9999px;
+		border-radius: 6px;
 		font-size: 0.6875rem;
 		font-weight: 600;
 		background: var(--color-surface-muted);
