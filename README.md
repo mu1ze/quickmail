@@ -166,20 +166,12 @@ Inbound mail only works on a **deployed** Worker (or `bun run preview`) —
 
 Send yourself a message from another account — it should land within seconds.
 
-### Upgrading existing accounts
+### Existing account passwords
 
-Security migration `0016_reset_existing_passwords.sql` moves existing accounts
-onto the versioned password format. After applying remote migrations, existing
-users sign in once with the temporary password `TestPassword123.` and immediately
-replace it under **Settings → Security**:
-
-```bash
-bun run db:migrate:remote
-```
-
-The migration revokes existing sessions and API keys. Recreate any required API
-keys after changing the temporary password. The shared password is public and is
-only intended to recover accounts during this one-time upgrade.
+Existing legacy password hashes remain valid and are upgraded automatically to the
+versioned PBKDF2 format after the next successful sign-in. No shared migration
+password is used. To reset one forgotten password, use the per-account reset script
+shown under **Forgot the admin password** below.
 
 ### Desktop notifications (optional)
 

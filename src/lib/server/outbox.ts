@@ -1,6 +1,6 @@
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
 import type { MailAddress, OutboundAttachmentInput, User } from '$lib/types';
-import { appendEmailSignature, pickEmailSignature } from '$lib/email-signature';
+import { appendEmailSignature } from '$lib/email-signature';
 import { base64ByteLength, insertAttachments } from './attachments';
 import { MAX_TOTAL_ATTACHMENT_BYTES } from './constants';
 import {
@@ -11,7 +11,7 @@ import {
 } from './domains';
 import { getDomainPermissionFlags } from './domain-permissions';
 import { parseEmailAddress } from './email-address';
-import { getEmailSignature } from './email-signature';
+import { resolveOutboundSignature } from './email-signature';
 import { stripHtml } from './html';
 import { insertEmail } from './mail-store';
 import { initialOutboundStatus, type EmailProvider } from './email-provider';
@@ -31,6 +31,12 @@ export type ComposeInput = {
 	references?: string | null;
 	replyToEmailId?: string | null;
 	attachments?: OutboundAttachmentInput[];
+	/** Public origin for hosted signature images. */
+	origin?: string;
+	/** Defaults to true for new mail and false for replies. */
+	includeSignature?: boolean;
+	/** Explicit library pick. `null` omits a signature; omit the field to use the default. */
+	signatureId?: string | null;
 };
 
 /**
@@ -102,6 +108,7 @@ export async function resolveReplyFromAddress(
 			address: mailbox,
 			label: null,
 			signature: null,
+			signature_id: null,
 			is_default: false,
 			created_at: new Date().toISOString()
 		};
@@ -144,11 +151,23 @@ export async function sendAndStore(
 		throw new Error('Message body is required');
 	}
 
-	const { text, html } = appendEmailSignature({
-		text: bodyText,
-		html: bodyHtml,
-		signature: pickEmailSignature(from.signature, await getEmailSignature(env.DB, user.id))
-	});
+	const includeSignature = input.includeSignature ?? !input.replyToEmailId;
+	const signature =
+		input.signatureId !== undefined || includeSignature
+			? await resolveOutboundSignature(env.DB, user.id, from, {
+					signatureId: input.signatureId,
+					includeSignature,
+					isReply: Boolean(input.replyToEmailId)
+				})
+			: '';
+	const { text, html } = signature
+		? appendEmailSignature({
+				text: bodyText,
+				html: bodyHtml,
+				signature,
+				origin: input.origin ?? ''
+			})
+		: { text: bodyText, html: bodyHtml };
 
 	const attachments = input.attachments ?? [];
 	const totalBytes = attachments.reduce(

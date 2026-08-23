@@ -132,19 +132,10 @@ misdeclared requests. Provider signatures are still checked before event process
 
 ## Suggested remediation order
 
-1. Apply migration `0015_login_rate_limits.sql` before deploying the new login route.
+1. Apply migration `0016_login_rate_limits.sql` before deploying the new login route.
 2. Regression-test the CSP against production mail templates and provider flows.
 3. Consider a Cloudflare WAF login/webhook rule as defense in depth.
 4. Consider WebAuthn/TOTP for administrator accounts.
-
-## One-time existing-account recovery
-
-Migration `0016_reset_existing_passwords.sql` resets every account that exists when the
-migration runs to the temporary password `TestPassword123.`. It also revokes all
-sessions and API tokens so credentials derived before the reset cannot continue to
-authenticate. This shared password is public in the repository and must be changed on
-every account immediately after the migration is applied. It is a recovery mechanism,
-not a safe long-term credential.
 
 ## Review limitations
 

@@ -5,10 +5,14 @@
 	import AttachmentPicker from '$lib/components/AttachmentPicker.svelte';
 	import ThreadMessage from '$lib/components/ThreadMessage.svelte';
 	import SnoozeMenu from '$lib/components/SnoozeMenu.svelte';
+	import SignaturePreview from '$lib/components/SignaturePreview.svelte';
+	import SignaturePicker from '$lib/components/SignaturePicker.svelte';
 	import { queueMailSend } from '$lib/pending-send';
 	import { isMod, isTypingTarget } from '$lib/shortcuts';
 	import { showUndo } from '$lib/undo';
+	import { compileSignature, parseSignatureConfig, resolveSignatureBody } from '$lib/email-signature';
 	import { htmlToPlainText, isHtmlEmpty } from '$lib/utils/html';
+	import { page } from '$app/stores';
 	import type { OutboundAttachmentInput } from '$lib/types';
 	import type { PageData } from './$types';
 
@@ -20,9 +24,24 @@
 	let sending = $state(false);
 	let error = $state('');
 	let snoozeOpen = $state(false);
+	let selectedSignatureId = $state('');
 
 	const messages = $derived(data.messages);
 	const latest = $derived(messages[messages.length - 1]);
+	const replyAddress = $derived(
+		data.addresses.find((address) => address.address === data.replyFrom) ?? null
+	);
+	const storedReplySignature = $derived(
+		resolveSignatureBody({
+			signatures: data.signatures,
+			selectedId: selectedSignatureId,
+			mailboxSignatureId: replyAddress?.signature_id,
+			mailboxBody: replyAddress?.signature
+		})
+	);
+	const compiledReplySignature = $derived(
+		compileSignature(parseSignatureConfig(storedReplySignature), $page.url.origin)
+	);
 	const starred = $derived(messages.some((message) => message.is_starred));
 
 	const backHref = $derived(
@@ -137,7 +156,9 @@
 					body: JSON.stringify({
 						html,
 						text: htmlToPlainText(html),
-						attachments
+						attachments,
+						signatureId: data.signatures.length ? selectedSignatureId || null : undefined,
+						includeSignature: Boolean(selectedSignatureId)
 					})
 				});
 				const body = await res.json();
@@ -313,9 +334,23 @@
 
 				<RichTextEditor bind:html={replyHtml} embedded minHeight={160} placeholder="Reply…" />
 
+				{#if selectedSignatureId && compiledReplySignature.html}
+					<div class="signature-preview">
+						<SignaturePreview html={compiledReplySignature.html} />
+					</div>
+				{/if}
+
 				<div class="reply-footer">
 					<AttachmentPicker bind:attachments={replyAttachments} />
 					<div class="reply-actions">
+						{#if data.signatures.length > 0}
+							<SignaturePicker
+								bind:value={selectedSignatureId}
+								signatures={data.signatures}
+								noneLabel="No signature"
+								compact
+							/>
+						{/if}
 						<button type="button" class="btn-ghost" onclick={() => (replyOpen = false)}>
 							Cancel
 						</button>
@@ -430,6 +465,10 @@
 	.reply-from strong {
 		font-weight: 500;
 		color: var(--color-text-secondary);
+	}
+
+	.signature-preview {
+		margin-top: 0.75rem;
 	}
 
 	.reply-footer {

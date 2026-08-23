@@ -13,7 +13,12 @@
 		THEME_OPTIONS,
 		type ThemePreference
 	} from '$lib/theme';
-	import { MAX_EMAIL_SIGNATURE_LENGTH } from '$lib/email-signature';
+	import SignatureEditor from '$lib/components/SignatureEditor.svelte';
+	import {
+		MAX_EMAIL_SIGNATURE_LENGTH,
+		MAX_SAVED_SIGNATURES,
+		type SavedSignature
+	} from '$lib/email-signature';
 	import type { ApiTokenSummary, MailAddress } from '$lib/types';
 	import type { PageData } from './$types';
 
@@ -78,31 +83,125 @@
 		}
 	}
 
-	let signature = $state(untrack(() => data.signature));
+	let signatures = $state<SavedSignature[]>(untrack(() => data.signatures));
+	let activeSignatureId = $state(untrack(() => data.signatures[0]?.id ?? ''));
+	let nameDraft = $state(untrack(() => data.signatures[0]?.name ?? 'Signature'));
+	let bodyDraft = $state(untrack(() => data.signatures[0]?.body ?? ''));
 	let signatureBusy = $state(false);
 	let signatureError = $state('');
 	let signatureSaved = $state(false);
+	let customizing = $state<Record<string, boolean>>({});
+	let mailboxDrafts = $state<Record<string, string>>({});
 
-	async function saveSignature(event: SubmitEvent) {
-		event.preventDefault();
+	const activeSignature = $derived(
+		signatures.find((signature) => signature.id === activeSignatureId) ?? null
+	);
+
+	function selectSignature(id: string) {
+		activeSignatureId = id;
+		const next = signatures.find((signature) => signature.id === id);
+		nameDraft = next?.name ?? 'Signature';
+		bodyDraft = next?.body ?? '';
+		signatureSaved = false;
+		signatureError = '';
+	}
+
+	function applySignatures(next: SavedSignature[], preferId?: string) {
+		signatures = next;
+		const id =
+			(preferId && next.some((signature) => signature.id === preferId) ? preferId : null) ??
+			next.find((signature) => signature.is_default)?.id ??
+			next[0]?.id ??
+			'';
+		selectSignature(id);
+	}
+
+	async function addSignature() {
+		if (signatureBusy || signatures.length >= MAX_SAVED_SIGNATURES) return;
 		signatureBusy = true;
 		signatureError = '';
 		signatureSaved = false;
-
 		try {
-			const res = await fetch('/api/settings/signature', {
+			const res = await fetch('/api/signatures', { method: 'POST' });
+			const body = await res.json();
+			if (!res.ok) {
+				signatureError = body.error ?? 'Could not add a signature';
+				return;
+			}
+			const created = (body.signatures as SavedSignature[]).at(-1);
+			applySignatures(body.signatures, created?.id);
+		} catch {
+			signatureError = 'Network error';
+		} finally {
+			signatureBusy = false;
+		}
+	}
+
+	async function saveSignature(event?: SubmitEvent) {
+		event?.preventDefault();
+		if (!activeSignatureId) {
+			await addSignature();
+			return;
+		}
+		signatureBusy = true;
+		signatureError = '';
+		signatureSaved = false;
+		try {
+			const res = await fetch(`/api/signatures/${activeSignatureId}`, {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ signature })
+				body: JSON.stringify({ name: nameDraft, body: bodyDraft })
 			});
 			const body = await res.json();
 			if (!res.ok) {
 				signatureError = body.error ?? 'Could not save signature';
 				return;
 			}
-
-			signature = body.signature;
+			applySignatures(body.signatures, activeSignatureId);
 			signatureSaved = true;
+		} catch {
+			signatureError = 'Network error';
+		} finally {
+			signatureBusy = false;
+		}
+	}
+
+	async function makeSignatureDefault() {
+		if (!activeSignatureId || activeSignature?.is_default) return;
+		signatureBusy = true;
+		signatureError = '';
+		try {
+			const res = await fetch(`/api/signatures/${activeSignatureId}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ isDefault: true })
+			});
+			const body = await res.json();
+			if (!res.ok) {
+				signatureError = body.error ?? 'Could not set the default';
+				return;
+			}
+			applySignatures(body.signatures, activeSignatureId);
+		} catch {
+			signatureError = 'Network error';
+		} finally {
+			signatureBusy = false;
+		}
+	}
+
+	async function deleteActiveSignature() {
+		if (!activeSignatureId) return;
+		signatureBusy = true;
+		signatureError = '';
+		signatureSaved = false;
+		try {
+			const res = await fetch(`/api/signatures/${activeSignatureId}`, { method: 'DELETE' });
+			const body = await res.json();
+			if (!res.ok) {
+				signatureError = body.error ?? 'Could not delete that signature';
+				return;
+			}
+			applySignatures(body.signatures);
 		} catch {
 			signatureError = 'Network error';
 		} finally {
@@ -113,6 +212,13 @@
 	// Server data until an edit happens, then whatever the API returned.
 	let edited = $state<MailAddress[] | null>(null);
 	const addresses = $derived(edited ?? data.addresses);
+	$effect(() => {
+		for (const address of addresses) {
+			if ((customizing[address.id] || address.signature) && !(address.id in mailboxDrafts)) {
+				mailboxDrafts[address.id] = address.signature ?? '';
+			}
+		}
+	});
 
 	let localPart = $state('');
 	let displayName = $state('');
@@ -316,6 +422,32 @@
 		}
 	}
 
+	async function saveMailboxSignatureId(id: string, signatureId: string) {
+		const current = addresses.find((address) => address.id === id);
+		if (!current || (current.signature_id ?? '') === signatureId) return;
+
+		savingId = id;
+		error = '';
+		try {
+			const res = await fetch(`/api/addresses/${id}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ signatureId: signatureId || null })
+			});
+			const body = await res.json();
+			if (!res.ok) {
+				error = body.error ?? 'Could not save that signature';
+				return;
+			}
+			edited = body.addresses;
+			customizing = { ...customizing, [id]: false };
+		} catch {
+			error = 'Network error';
+		} finally {
+			savingId = '';
+		}
+	}
+
 	async function remove(id: string) {
 		const res = await fetch(`/api/addresses/${id}`, { method: 'DELETE' });
 		const body = await res.json();
@@ -425,36 +557,101 @@
 	<BrrrNotifications initial={data.brrr} sounds={data.brrrSounds} />
 
 	<section class="surface-lg card">
-		<h2><Icon name="pencil-line" size={18} /> Signature</h2>
-		<p class="card-hint">Used when a mailbox has no signature of its own.</p>
+		<h2><Icon name="pencil-line" size={18} /> Signatures</h2>
+		<p class="card-hint">
+			Save up to {MAX_SAVED_SIGNATURES}. Switch between them when you write a message.
+		</p>
 
-		<form class="signature-form" onsubmit={saveSignature}>
-			<textarea
-				id="email-signature"
-				bind:value={signature}
-				maxlength={MAX_EMAIL_SIGNATURE_LENGTH}
-				rows="3"
-				placeholder={'Best,\nEmmanuel'}
-				class="signature-input"
-			></textarea>
-
-			<div class="signature-actions">
-				<span class="character-count">{signature.length}/{MAX_EMAIL_SIGNATURE_LENGTH}</span>
-				<button type="submit" class="btn-primary" disabled={signatureBusy}>
-					{signatureBusy ? 'Saving…' : 'Save'}
+		<div class="signature-tabs" role="tablist" aria-label="Saved signatures">
+			{#each signatures as signature (signature.id)}
+				<button
+					type="button"
+					role="tab"
+					class="signature-tab"
+					class:active={signature.id === activeSignatureId}
+					aria-selected={signature.id === activeSignatureId}
+					disabled={signatureBusy}
+					onclick={() => selectSignature(signature.id)}
+				>
+					{signature.name}
+					{#if signature.is_default}<span class="tab-default">Default</span>{/if}
 				</button>
-			</div>
+			{/each}
+			{#if signatures.length < MAX_SAVED_SIGNATURES}
+				<button
+					type="button"
+					class="signature-tab add"
+					disabled={signatureBusy}
+					onclick={addSignature}
+				>
+					<Icon name="add-line" size={14} />
+					New
+				</button>
+			{/if}
+		</div>
 
+		{#if activeSignature}
+			<form class="signature-form" onsubmit={saveSignature}>
+				<label class="field-title" for="signature-name">Name</label>
+				<input
+					id="signature-name"
+					class="text-input"
+					bind:value={nameDraft}
+					maxlength="40"
+					disabled={signatureBusy}
+					placeholder="Work"
+				/>
+
+				<SignatureEditor
+					bind:value={bodyDraft}
+					disabled={signatureBusy}
+					placeholderName={data.userName}
+				/>
+
+				<div class="signature-actions">
+					<span class="character-count">{bodyDraft.length}/{MAX_EMAIL_SIGNATURE_LENGTH}</span>
+					<div class="signature-buttons">
+						{#if !activeSignature.is_default}
+							<button
+								type="button"
+								class="btn-ghost"
+								disabled={signatureBusy}
+								onclick={makeSignatureDefault}
+							>
+								Make default
+							</button>
+						{/if}
+						<button
+							type="button"
+							class="btn-ghost"
+							disabled={signatureBusy}
+							onclick={deleteActiveSignature}
+						>
+							Delete
+						</button>
+						<button type="submit" class="btn-primary" disabled={signatureBusy}>
+							{signatureBusy ? 'Saving…' : 'Save'}
+						</button>
+					</div>
+				</div>
+
+				{#if signatureError}<p class="error">{signatureError}</p>{/if}
+				{#if signatureSaved}<p class="saved">Saved</p>{/if}
+			</form>
+		{:else}
+			<p class="empty-signatures">No signatures yet.</p>
+			<button type="button" class="btn-primary" disabled={signatureBusy} onclick={addSignature}>
+				Create a signature
+			</button>
 			{#if signatureError}<p class="error">{signatureError}</p>{/if}
-			{#if signatureSaved}<p class="saved">Saved</p>{/if}
-		</form>
+		{/if}
 	</section>
 
 	<section class="surface-lg card">
 		<h2><Icon name="at-line" size={18} /> Addresses</h2>
 		<p class="card-hint">
-			The From name is what recipients see. A signature on an address replaces the account
-			signature for that mailbox. Leave either blank to use the account default.
+			The From name is what recipients see. Pin a saved signature to an address, or leave it on
+			the account default.
 		</p>
 
 		<ul class="address-list">
@@ -493,16 +690,30 @@
 							</button>
 						{/if}
 					</div>
-					<textarea
-						class="mailbox-signature"
-						rows="2"
-						maxlength={MAX_EMAIL_SIGNATURE_LENGTH}
-						value={address.signature ?? ''}
-						placeholder="Signature for this address"
-						aria-label="Signature for {address.address}"
-						disabled={savingId === address.id}
-						onchange={(event) => saveMailboxSignature(address.id, event.currentTarget.value)}
-					></textarea>
+					{#if address.signature && !address.signature_id}
+						<SignatureEditor
+							bind:value={mailboxDrafts[address.id]}
+							compact
+							disabled={savingId === address.id}
+							placeholderName={address.label || data.userName}
+							onsave={(next) => saveMailboxSignature(address.id, next)}
+						/>
+					{:else}
+						<label class="mailbox-pick">
+							<span>Signature</span>
+							<select
+								class="text-input"
+								value={address.signature_id ?? ''}
+								disabled={savingId === address.id || signatures.length === 0}
+								onchange={(event) => saveMailboxSignatureId(address.id, event.currentTarget.value)}
+							>
+								<option value="">Account default</option>
+								{#each signatures as signature (signature.id)}
+									<option value={signature.id}>{signature.name}</option>
+								{/each}
+							</select>
+						</label>
+					{/if}
 				</li>
 			{/each}
 		</ul>
@@ -732,6 +943,64 @@
 
 	.signature-form {
 		margin-top: 1rem;
+	}
+
+	.signature-tabs {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.375rem;
+		margin-top: 1rem;
+	}
+
+	.signature-tab {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.4rem 0.7rem;
+		border-radius: 999px;
+		font-size: 0.8125rem;
+		color: var(--color-text-secondary);
+		box-shadow: inset 0 0 0 1px var(--color-line);
+	}
+
+	.signature-tab:hover:not(:disabled) {
+		background: var(--color-surface-muted);
+	}
+
+	.signature-tab.active {
+		color: var(--color-text);
+		box-shadow: inset 0 0 0 2px var(--color-accent);
+	}
+
+	.signature-tab.add {
+		color: var(--color-muted);
+	}
+
+	.tab-default {
+		font-size: 0.6875rem;
+		color: var(--color-muted);
+	}
+
+	.signature-buttons {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		gap: 0.375rem;
+	}
+
+	.empty-signatures {
+		margin: 1rem 0 0.75rem;
+		font-size: 0.875rem;
+		color: var(--color-muted);
+	}
+
+	.mailbox-pick {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		margin-top: 0.5rem;
+		font-size: 0.75rem;
+		color: var(--color-muted);
 	}
 
 	.password-form {
@@ -967,6 +1236,12 @@
 
 	.mailbox-signature::placeholder {
 		color: var(--color-muted);
+	}
+
+	.customize {
+		align-self: flex-start;
+		margin-top: 0.25rem;
+		font-size: 0.8125rem;
 	}
 
 	.address-domain {

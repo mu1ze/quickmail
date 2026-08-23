@@ -6,6 +6,7 @@ import {
 } from '$lib/server/context';
 import { deleteDraft, listMailbox } from '$lib/server/mail-store';
 import { sendAndStore } from '$lib/server/outbox';
+import { resolvePublicOrigin } from '$lib/server/public-origin';
 import type { MailboxView, OutboundAttachmentInput } from '$lib/types';
 
 type SendMailBody = {
@@ -19,6 +20,7 @@ type SendMailBody = {
 	text?: string;
 	html?: string;
 	attachments?: OutboundAttachmentInput[];
+	signatureId?: string | null;
 };
 
 function mailboxView(url: URL): MailboxView {
@@ -66,7 +68,7 @@ export const GET: RequestHandler = async ({ locals, platform, url }) => {
 	return json(mailbox);
 };
 
-export const POST: RequestHandler = async ({ request, locals, platform }) => {
+export const POST: RequestHandler = async ({ request, locals, platform, url }) => {
 	const db = platform?.env.DB;
 	const bucket = platform?.env.ATTACHMENTS;
 	if (!db || !bucket || !locals.user) {
@@ -93,7 +95,9 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 				subject: body.subject,
 				text: body.text,
 				html: body.html,
-				attachments: body.attachments
+				attachments: body.attachments,
+				origin: resolvePublicOrigin(platform?.env, url.origin),
+				signatureId: body.signatureId
 			}
 		);
 

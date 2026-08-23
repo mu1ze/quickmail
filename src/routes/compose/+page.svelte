@@ -5,9 +5,18 @@
 	import AttachmentPicker from '$lib/components/AttachmentPicker.svelte';
 	import RecipientField from '$lib/components/RecipientField.svelte';
 	import LoadingButton from '$lib/interior/LoadingButton.svelte';
+	import SignaturePreview from '$lib/components/SignaturePreview.svelte';
+	import SignaturePicker from '$lib/components/SignaturePicker.svelte';
 	import { queueMailSend } from '$lib/pending-send';
 	import { isMod } from '$lib/shortcuts';
+	import {
+		compileSignature,
+		defaultComposeSignatureId,
+		parseSignatureConfig,
+		resolveSignatureBody
+	} from '$lib/email-signature';
 	import { htmlToPlainText, isHtmlEmpty } from '$lib/utils/html';
+	import { page } from '$app/stores';
 	import type { OutboundAttachmentInput } from '$lib/types';
 	import type { PageData } from './$types';
 
@@ -39,6 +48,28 @@
 	let savedAt = $state('');
 
 	const isEmpty = $derived(!to.trim() && !subject.trim() && isHtmlEmpty(html));
+	const selectedAddress = $derived(addresses.find((address) => address.id === fromAddressId));
+	let lastFromId = $state('');
+	let selectedSignatureId = $state('');
+	$effect(() => {
+		if (fromAddressId === lastFromId) return;
+		lastFromId = fromAddressId;
+		selectedSignatureId = defaultComposeSignatureId(
+			data.signatures,
+			selectedAddress?.signature_id
+		);
+	});
+	const storedSignature = $derived(
+		resolveSignatureBody({
+			signatures: data.signatures,
+			selectedId: selectedSignatureId,
+			mailboxSignatureId: selectedAddress?.signature_id,
+			mailboxBody: selectedAddress?.signature
+		})
+	);
+	const compiledSignature = $derived(
+		compileSignature(parseSignatureConfig(storedSignature), $page.url.origin)
+	);
 
 	async function saveDraft() {
 		if (savingDraft || isEmpty) return;
@@ -102,7 +133,8 @@
 			subject,
 			html,
 			text: htmlToPlainText(html),
-			attachments
+			attachments,
+			signatureId: data.signatures.length ? selectedSignatureId || null : undefined
 		};
 
 		queueMailSend({
@@ -236,6 +268,15 @@
 		<RichTextEditor bind:html minHeight={220} />
 	</div>
 
+	{#if data.signatures.length > 0}
+		<div class="signature-preview">
+			<SignaturePicker bind:value={selectedSignatureId} signatures={data.signatures} />
+			{#if compiledSignature.html}
+				<SignaturePreview html={compiledSignature.html} />
+			{/if}
+		</div>
+	{/if}
+
 	<div class="mt-4 px-1">
 		<AttachmentPicker bind:attachments />
 	</div>
@@ -279,6 +320,13 @@
 	.field-static {
 		font-size: 0.9375rem;
 		color: var(--color-text-secondary);
+	}
+
+	.signature-preview {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin-top: 1rem;
 	}
 
 	@media (max-width: 900px) {

@@ -13,6 +13,7 @@ import {
 	setEmailFlags
 } from '$lib/server/mail-store';
 import { resolveReplyFromAddress, sendAndStore } from '$lib/server/outbox';
+import { resolvePublicOrigin } from '$lib/server/public-origin';
 import { buildReferences, displaySubject } from '$lib/server/threads';
 import type { OutboundAttachmentInput } from '$lib/types';
 
@@ -21,6 +22,8 @@ type ReplyBody = {
 	text?: string;
 	html?: string;
 	attachments?: OutboundAttachmentInput[];
+	includeSignature?: boolean;
+	signatureId?: string | null;
 };
 
 export const GET: RequestHandler = async ({ params, locals, platform }) => {
@@ -94,7 +97,7 @@ export const DELETE: RequestHandler = async ({ params, locals, platform }) => {
 	return json({ ok: true });
 };
 
-export const POST: RequestHandler = async ({ params, request, locals, platform }) => {
+export const POST: RequestHandler = async ({ params, request, locals, platform, url }) => {
 	const db = platform?.env.DB;
 	const bucket = platform?.env.ATTACHMENTS;
 	if (!db || !bucket || !locals.user) {
@@ -139,7 +142,10 @@ export const POST: RequestHandler = async ({ params, request, locals, platform }
 				// when they answer — keeps the conversation together.
 				references: buildReferences(original.references_header, original.message_id),
 				replyToEmailId: original.id,
-				attachments: body.attachments
+				attachments: body.attachments,
+				includeSignature: body.includeSignature,
+				signatureId: 'signatureId' in body ? body.signatureId : undefined,
+				origin: resolvePublicOrigin(platform?.env, url.origin)
 			}
 		);
 

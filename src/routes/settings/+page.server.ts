@@ -1,12 +1,12 @@
 import type { PageServerLoad } from './$types';
 import { listApiTokens } from '$lib/server/api-tokens';
 import { BRRR_SOUND_OPTIONS, loadBrrrSettings } from '$lib/server/brrr';
-import { getEmailSignature } from '$lib/server/email-signature';
+import { listSignatures } from '$lib/server/email-signature';
 import { readVapidConfiguration } from '$lib/server/push-notifications';
 
 export const load: PageServerLoad = async ({ locals, platform }) => {
 	const db = platform?.env.DB;
-	const signature = locals.user && db ? await getEmailSignature(db, locals.user.id) : '';
+	const signatures = locals.user && db ? await listSignatures(db, locals.user.id) : [];
 	const apiTokens = locals.user && db ? await listApiTokens(db, locals.user.id) : [];
 	const vapid = platform?.env ? readVapidConfiguration(platform.env) : null;
 	const brrr =
@@ -26,7 +26,7 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 		),
 		domainPermissions: locals.domainPermissions,
 		addresses: locals.addresses,
-		signature,
+		signatures,
 		apiTokens,
 		push: {
 			configured: Boolean(vapid),
@@ -34,6 +34,7 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 		},
 		brrr,
 		brrrSounds: BRRR_SOUND_OPTIONS,
-		isAdmin: locals.user?.is_admin ?? false
+		isAdmin: locals.user?.is_admin ?? false,
+		userName: locals.user?.name ?? ''
 	};
 };
