@@ -172,12 +172,12 @@
 		}
 		if (key === 'ArrowDown') {
 			event.preventDefault();
-			moveFocus(CARD_COLUMNS);
+			moveFocus(cardColumns());
 			return;
 		}
 		if (key === 'ArrowUp') {
 			event.preventDefault();
-			moveFocus(-CARD_COLUMNS);
+			moveFocus(-cardColumns());
 			return;
 		}
 		if (key === 'x') {
@@ -262,7 +262,11 @@
 	);
 	const rangeEnd = $derived(Math.min(mailbox.page * mailbox.pageSize, mailbox.total));
 
-	const CARD_COLUMNS = 3;
+	/** Two cards on a phone, three on a wider mailbox. */
+	function cardColumns(): number {
+		if (typeof window === 'undefined') return 3;
+		return window.matchMedia('(max-width: 900px)').matches ? 2 : 3;
+	}
 
 	function moveFocus(delta: number) {
 		focused = Math.max(0, Math.min(items.length - 1, focused + delta));
@@ -1283,11 +1287,12 @@
 		}
 
 		.cards {
-			gap: 0.375rem;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 0.5rem;
 		}
 
 		.card {
-			padding: 0.375rem 0.4rem 0.45rem;
+			padding: 0.5rem 0.55rem 0.55rem;
 			border-radius: 12px;
 		}
 
@@ -1320,9 +1325,9 @@
 		}
 
 		.preview {
-			font-size: 0.6875rem;
-			-webkit-line-clamp: 3;
-			line-clamp: 3;
+			font-size: 0.75rem;
+			-webkit-line-clamp: 4;
+			line-clamp: 4;
 		}
 
 		.date {
