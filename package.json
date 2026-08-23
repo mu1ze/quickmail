@@ -69,6 +69,9 @@
 			},
 			"PUBLIC_APP_URL": {
 				"description": "Optional public origin used in Brrr phone-notification open links, e.g. `https://mail.example.com`."
+			},
+			"PASSWORD_RESET_KEY": {
+				"description": "Shared secret for the /recover page. Anyone with this key can set a new password for an existing account."
 			}
 		}
 	}

@@ -223,6 +223,15 @@ webhook at the tunnel — never repoint production.
 
 **Forgot the admin password:**
 
+Set a recovery secret, deploy, then open `/recover` (also linked from the sign-in page). Existing mail is kept.
+
+```bash
+bunx wrangler secret put PASSWORD_RESET_KEY
+bun run deploy
+```
+
+Or reset one account from the CLI:
+
 ```bash
 bun scripts/reset-admin-password.mjs you@example.com newpassword --local
 ```

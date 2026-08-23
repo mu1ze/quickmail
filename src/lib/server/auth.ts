@@ -154,6 +154,47 @@ export async function logout(db: D1Database, token: string): Promise<void> {
 	await db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(token_hash).run();
 }
 
+export async function recoverUserPassword(
+	db: D1Database,
+	input: { email: string; password: string; recoveryKey: string; expectedKey: string }
+): Promise<{ user: User; token: string }> {
+	if (!input.expectedKey) {
+		throw new Error('Password recovery is not enabled');
+	}
+	if (!(await recoveryKeysMatch(input.recoveryKey, input.expectedKey))) {
+		throw new Error('Recovery key is incorrect');
+	}
+
+	assertPasswordLength(input.password);
+
+	const user = await getUserByEmail(db, input.email);
+	if (!user) {
+		throw new Error('No account with that email');
+	}
+
+	await setUserPassword(db, user.id, input.password);
+	const result = await login(db, user.email, input.password);
+	if (!result) {
+		throw new Error('Password was saved but sign-in failed');
+	}
+	return result;
+}
+
+async function recoveryKeysMatch(provided: string, expected: string): Promise<boolean> {
+	const encoder = new TextEncoder();
+	const [left, right] = await Promise.all([
+		crypto.subtle.digest('SHA-256', encoder.encode(provided)),
+		crypto.subtle.digest('SHA-256', encoder.encode(expected))
+	]);
+	const a = new Uint8Array(left);
+	const b = new Uint8Array(right);
+	let mismatch = 0;
+	for (let i = 0; i < a.length; i++) {
+		mismatch |= a[i] ^ b[i];
+	}
+	return mismatch === 0;
+}
+
 export async function setUserPassword(
 	db: D1Database,
 	userId: string,
