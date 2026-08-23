@@ -16,4 +16,12 @@ describe('password hashing', () => {
 		assert.equal(await verifyPassword('password', 'unknown$1$YQ==$Yg=='), false);
 		assert.equal(passwordNeedsRehash('legacy:hash'), true);
 	});
+
+	test('accepts the one-time recovery hash for TestPassword123', async () => {
+		const recovery =
+			'pbkdf2_sha256$600000$dctywKy3RvjOyZo9AmqOZA==$3Gpyil1sdt/6sk8AbHI0AQBIc2Q030rhINAEPtDh5Nk=';
+		assert.equal(await verifyPassword('TestPassword123', recovery), true);
+		assert.equal(await verifyPassword('wrong-password', recovery), false);
+		assert.equal(passwordNeedsRehash(recovery), false);
+	});
 });
