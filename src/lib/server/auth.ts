@@ -1,12 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { SESSION_COOKIE, SESSION_DAYS } from './constants';
-import {
-	createSessionToken,
-	hashPassword,
-	hashToken,
-	passwordNeedsRehash,
-	verifyPassword
-} from './crypto';
+import { createSessionToken, hashPassword, hashToken, verifyPassword } from './crypto';
 import type { User } from '$lib/types';
 
 type UserRow = {
@@ -28,8 +22,7 @@ function mapUser(row: UserRow): User {
 }
 
 export const MIN_PASSWORD_LENGTH = 12;
-const DUMMY_PASSWORD_HASH =
-	'pbkdf2_sha256$600000$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+const DUMMY_PASSWORD_HASH = 'AAAAAAAAAAAAAAAAAAAAAA==:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 
 export function assertPasswordLength(password: string): void {
 	if (password.length < MIN_PASSWORD_LENGTH) {
@@ -141,12 +134,6 @@ export async function login(
 
 	const valid = await verifyPassword(password, user.password_hash);
 	if (!valid) return null;
-	if (passwordNeedsRehash(user.password_hash)) {
-		await db
-			.prepare('UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?')
-			.bind(await hashPassword(password), user.id, user.password_hash)
-			.run();
-	}
 
 	const token = createSessionToken();
 	const token_hash = await hashToken(token);
@@ -165,6 +152,47 @@ export async function login(
 export async function logout(db: D1Database, token: string): Promise<void> {
 	const token_hash = await hashToken(token);
 	await db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(token_hash).run();
+}
+
+export async function recoverUserPassword(
+	db: D1Database,
+	input: { email: string; password: string; recoveryKey: string; expectedKey: string }
+): Promise<{ user: User; token: string }> {
+	if (!input.expectedKey) {
+		throw new Error('Password recovery is not enabled');
+	}
+	if (!(await recoveryKeysMatch(input.recoveryKey, input.expectedKey))) {
+		throw new Error('Recovery key is incorrect');
+	}
+
+	assertPasswordLength(input.password);
+
+	const user = await getUserByEmail(db, input.email);
+	if (!user) {
+		throw new Error('No account with that email');
+	}
+
+	await setUserPassword(db, user.id, input.password);
+	const result = await login(db, user.email, input.password);
+	if (!result) {
+		throw new Error('Password was saved but sign-in failed');
+	}
+	return result;
+}
+
+async function recoveryKeysMatch(provided: string, expected: string): Promise<boolean> {
+	const encoder = new TextEncoder();
+	const [left, right] = await Promise.all([
+		crypto.subtle.digest('SHA-256', encoder.encode(provided)),
+		crypto.subtle.digest('SHA-256', encoder.encode(expected))
+	]);
+	const a = new Uint8Array(left);
+	const b = new Uint8Array(right);
+	let mismatch = 0;
+	for (let i = 0; i < a.length; i++) {
+		mismatch |= a[i] ^ b[i];
+	}
+	return mismatch === 0;
 }
 
 export async function setUserPassword(

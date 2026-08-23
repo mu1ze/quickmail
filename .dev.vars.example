@@ -28,3 +28,6 @@ RESEND_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # Absolute origin used in Brrr phone-notification open links (optional).
 # PUBLIC_APP_URL=https://mail.example.com
+
+# Required to use /recover (set a password without signing in).
+# PASSWORD_RESET_KEY=choose-a-long-random-string

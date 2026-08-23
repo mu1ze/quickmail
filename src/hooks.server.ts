@@ -12,6 +12,7 @@ import { listAddressesForUser, listDomains } from '$lib/server/domains';
 
 const PUBLIC_PREFIXES = [
 	'/login',
+	'/recover',
 	'/setup',
 	'/api/auth',
 	'/api/setup',
@@ -169,9 +170,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 		return secureResponse(await resolve(event));
 	}
 
-	if (pathname === '/login') {
+	if (pathname === '/login' || pathname === '/recover') {
 		if (event.locals.user) {
-			throw redirect(303, '/inbox');
+			throw redirect(303, pathname === '/recover' ? '/settings' : '/inbox');
 		}
 		return secureResponse(await resolve(event));
 	}

@@ -15,6 +15,7 @@ declare global {
 		VAPID_PRIVATE_KEY?: string;
 		VAPID_SUBJECT?: string;
 		PUBLIC_APP_URL?: string;
+		PASSWORD_RESET_KEY?: string;
 	}
 }
 

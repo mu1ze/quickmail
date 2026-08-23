@@ -28,6 +28,8 @@ declare global {
 				VAPID_SUBJECT?: string;
 				/** Public origin used for Brrr notification open links. */
 				PUBLIC_APP_URL?: string;
+				/** Shared secret required by /recover. Set with wrangler secret put. */
+				PASSWORD_RESET_KEY?: string;
 			};
 		}
 		interface Locals {

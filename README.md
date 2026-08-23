@@ -166,21 +166,6 @@ Inbound mail only works on a **deployed** Worker (or `bun run preview`) —
 
 Send yourself a message from another account — it should land within seconds.
 
-### Existing account passwords
-
-Existing legacy password hashes remain valid and are upgraded automatically to the
-versioned PBKDF2 format after the next successful sign-in.
-
-If every operator is locked out (for example after a hash-format change), apply
-migration `0017_temp_password_recovery.sql` with `bun run db:migrate:remote`. That
-one-time update sets every current account password to `TestPassword123` and
-clears sessions, API keys, and login rate limits. Sign in, then change the
-password in **Settings** immediately. To reset later without another migration:
-
-```bash
-bun scripts/reset-admin-password.mjs --all 'your-new-password'
-```
-
 ### Desktop notifications (optional)
 
 QuickMail can push-notify users about new mail even with no tab open:
@@ -238,9 +223,17 @@ webhook at the tunnel — never repoint production.
 
 **Forgot the admin password:**
 
+Set a recovery secret, deploy, then open `/recover` (also linked from the sign-in page). Existing mail is kept.
+
+```bash
+bunx wrangler secret put PASSWORD_RESET_KEY
+bun run deploy
+```
+
+Or reset one account from the CLI:
+
 ```bash
 bun scripts/reset-admin-password.mjs you@example.com newpassword --local
-bun scripts/reset-admin-password.mjs --all newpassword
 ```
 
 ## API access
