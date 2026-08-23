@@ -13,6 +13,7 @@
 		THEME_OPTIONS,
 		type ThemePreference
 	} from '$lib/theme';
+	import SignatureEditor from '$lib/components/SignatureEditor.svelte';
 	import { MAX_EMAIL_SIGNATURE_LENGTH } from '$lib/email-signature';
 	import type { ApiTokenSummary, MailAddress } from '$lib/types';
 	import type { PageData } from './$types';
@@ -82,6 +83,8 @@
 	let signatureBusy = $state(false);
 	let signatureError = $state('');
 	let signatureSaved = $state(false);
+	let customizing = $state<Record<string, boolean>>({});
+	let mailboxDrafts = $state<Record<string, string>>({});
 
 	async function saveSignature(event: SubmitEvent) {
 		event.preventDefault();
@@ -113,6 +116,13 @@
 	// Server data until an edit happens, then whatever the API returned.
 	let edited = $state<MailAddress[] | null>(null);
 	const addresses = $derived(edited ?? data.addresses);
+	$effect(() => {
+		for (const address of addresses) {
+			if ((customizing[address.id] || address.signature) && !(address.id in mailboxDrafts)) {
+				mailboxDrafts[address.id] = address.signature ?? '';
+			}
+		}
+	});
 
 	let localPart = $state('');
 	let displayName = $state('');
@@ -426,17 +436,12 @@
 
 	<section class="surface-lg card">
 		<h2><Icon name="pencil-line" size={18} /> Signature</h2>
-		<p class="card-hint">Used when a mailbox has no signature of its own.</p>
+		<p class="card-hint">
+			Compiled into the HTML recipients actually see. A mailbox signature replaces this one.
+		</p>
 
 		<form class="signature-form" onsubmit={saveSignature}>
-			<textarea
-				id="email-signature"
-				bind:value={signature}
-				maxlength={MAX_EMAIL_SIGNATURE_LENGTH}
-				rows="3"
-				placeholder={'Best,\nEmmanuel'}
-				class="signature-input"
-			></textarea>
+			<SignatureEditor bind:value={signature} disabled={signatureBusy} placeholderName={data.userName} />
 
 			<div class="signature-actions">
 				<span class="character-count">{signature.length}/{MAX_EMAIL_SIGNATURE_LENGTH}</span>
@@ -453,8 +458,8 @@
 	<section class="surface-lg card">
 		<h2><Icon name="at-line" size={18} /> Addresses</h2>
 		<p class="card-hint">
-			The From name is what recipients see. A signature on an address replaces the account
-			signature for that mailbox. Leave either blank to use the account default.
+			The From name is what recipients see. Customize a mailbox to replace the account signature
+			for that address.
 		</p>
 
 		<ul class="address-list">
@@ -493,16 +498,26 @@
 							</button>
 						{/if}
 					</div>
-					<textarea
-						class="mailbox-signature"
-						rows="2"
-						maxlength={MAX_EMAIL_SIGNATURE_LENGTH}
-						value={address.signature ?? ''}
-						placeholder="Signature for this address"
-						aria-label="Signature for {address.address}"
-						disabled={savingId === address.id}
-						onchange={(event) => saveMailboxSignature(address.id, event.currentTarget.value)}
-					></textarea>
+					{#if customizing[address.id] || address.signature}
+						<SignatureEditor
+							bind:value={mailboxDrafts[address.id]}
+							compact
+							disabled={savingId === address.id}
+							placeholderName={address.label || data.userName}
+							onsave={(next) => saveMailboxSignature(address.id, next)}
+						/>
+					{:else}
+						<button
+							type="button"
+							class="btn-ghost customize"
+							onclick={() => {
+								mailboxDrafts[address.id] = address.signature ?? '';
+								customizing = { ...customizing, [address.id]: true };
+							}}
+						>
+							Customize signature
+						</button>
+					{/if}
 				</li>
 			{/each}
 		</ul>
@@ -967,6 +982,12 @@
 
 	.mailbox-signature::placeholder {
 		color: var(--color-muted);
+	}
+
+	.customize {
+		align-self: flex-start;
+		margin-top: 0.25rem;
+		font-size: 0.8125rem;
 	}
 
 	.address-domain {

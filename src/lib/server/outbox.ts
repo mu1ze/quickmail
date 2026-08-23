@@ -31,6 +31,10 @@ export type ComposeInput = {
 	references?: string | null;
 	replyToEmailId?: string | null;
 	attachments?: OutboundAttachmentInput[];
+	/** Public origin for hosted signature images. */
+	origin?: string;
+	/** Defaults to true for new mail and false for replies. */
+	includeSignature?: boolean;
 };
 
 /**
@@ -144,11 +148,15 @@ export async function sendAndStore(
 		throw new Error('Message body is required');
 	}
 
-	const { text, html } = appendEmailSignature({
-		text: bodyText,
-		html: bodyHtml,
-		signature: pickEmailSignature(from.signature, await getEmailSignature(env.DB, user.id))
-	});
+	const includeSignature = input.includeSignature ?? !input.replyToEmailId;
+	const { text, html } = includeSignature
+		? appendEmailSignature({
+				text: bodyText,
+				html: bodyHtml,
+				signature: pickEmailSignature(from.signature, await getEmailSignature(env.DB, user.id)),
+				origin: input.origin ?? ''
+			})
+		: { text: bodyText, html: bodyHtml };
 
 	const attachments = input.attachments ?? [];
 	const totalBytes = attachments.reduce(

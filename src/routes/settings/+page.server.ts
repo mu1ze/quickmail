@@ -34,6 +34,7 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 		},
 		brrr,
 		brrrSounds: BRRR_SOUND_OPTIONS,
-		isAdmin: locals.user?.is_admin ?? false
+		isAdmin: locals.user?.is_admin ?? false,
+		userName: locals.user?.name ?? ''
 	};
 };
