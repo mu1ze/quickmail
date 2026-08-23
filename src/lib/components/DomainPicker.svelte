@@ -111,7 +111,7 @@
 	}
 
 	.domain-check.round {
-		border-radius: 9999px;
+		border-radius: 6px;
 	}
 
 	.domain-card.selected .domain-check {
@@ -142,7 +142,7 @@
 
 	.chip {
 		padding: 0.0625rem 0.4375rem;
-		border-radius: 9999px;
+		border-radius: 6px;
 		font-size: 0.6875rem;
 		color: var(--color-text-secondary);
 		background: var(--color-surface-muted);

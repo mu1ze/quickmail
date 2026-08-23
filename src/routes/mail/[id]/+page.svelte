@@ -354,7 +354,7 @@
 		width: 100%;
 		margin-top: 1.5rem;
 		padding: 0.75rem 1rem;
-		border-radius: 9999px;
+		border-radius: 6px;
 		font-size: 0.875rem;
 		color: var(--color-text-secondary);
 		box-shadow: inset 0 0 0 1px var(--color-line);

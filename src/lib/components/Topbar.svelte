@@ -132,9 +132,9 @@
 		align-items: center;
 		gap: 0.75rem;
 		height: var(--topbar-height);
-		padding: 0 1.25rem;
+		padding: 0 1rem;
 		background: var(--color-surface);
-		box-shadow: inset 0 -1px 0 var(--color-line);
+		box-shadow: var(--shadow-header);
 	}
 
 	.nav-toggle {
@@ -155,15 +155,18 @@
 		max-width: 34rem;
 		height: 2.25rem;
 		padding: 0 0.75rem;
-		border-radius: 0.75rem;
-		background: var(--color-surface-muted);
+		border: 2px solid var(--color-line-strong);
+		border-radius: 10px;
+		background: var(--color-well);
 		color: var(--color-muted);
-		transition: box-shadow 0.15s, background 0.15s;
+		box-shadow: var(--mat-well);
+		transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 	}
 
 	.search:focus-within {
+		border-color: var(--color-accent);
 		background: var(--color-surface);
-		box-shadow: inset 0 0 0 1px var(--color-focus-line), 0 0 0 3px var(--color-focus-halo);
+		box-shadow: none;
 	}
 
 	.search input {
@@ -209,8 +212,8 @@
 		display: flex;
 		align-items: center;
 		gap: 0.625rem;
-		padding: 0.25rem 0.25rem 0.25rem 0.625rem;
-		border-radius: 9999px;
+		padding: 0.25rem 0.25rem 0.25rem 0.5rem;
+		border-radius: 11px;
 		transition: background 0.15s;
 	}
 
@@ -244,10 +247,10 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 2rem;
-		height: 2rem;
-		border-radius: 9999px;
-		font-size: 0.6875rem;
+		width: 1.875rem;
+		height: 1.875rem;
+		border-radius: 9px;
+		font-size: 0.625rem;
 		font-weight: 600;
 		color: var(--color-text);
 		background: var(--color-surface-hover);
@@ -265,10 +268,10 @@
 		right: 0;
 		z-index: 50;
 		min-width: 13rem;
-		padding: 0.375rem;
+		padding: 0.25rem;
 		background: var(--color-surface);
-		border-radius: 0.875rem;
-		box-shadow: var(--shadow-md);
+		border-radius: 14px;
+		box-shadow: var(--mat-float);
 	}
 
 	.menu-head {
@@ -297,9 +300,9 @@
 		gap: 0.5rem;
 		width: 100%;
 		margin-top: 0.125rem;
-		padding: 0.5rem 0.625rem;
-		border-radius: 0.5rem;
-		font-size: 0.8125rem;
+		padding: 0.4375rem 0.625rem;
+		border-radius: 9px;
+		font-size: 13px;
 		color: var(--color-text-secondary);
 		text-align: left;
 		transition: background 0.12s, color 0.12s;
@@ -339,8 +342,8 @@
 		}
 
 		.avatar {
-			width: 2.25rem;
-			height: 2.25rem;
+			width: 2rem;
+			height: 2rem;
 		}
 	}
 </style>

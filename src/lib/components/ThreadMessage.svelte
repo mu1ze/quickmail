@@ -121,7 +121,7 @@
 		flex-shrink: 0;
 		width: 2.25rem;
 		height: 2.25rem;
-		border-radius: 9999px;
+		border-radius: 9px;
 		font-size: 0.75rem;
 		font-weight: 600;
 		color: var(--color-text);

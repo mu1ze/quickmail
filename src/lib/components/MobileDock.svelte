@@ -88,9 +88,10 @@
 			grid-template-columns: 1fr 1fr auto 1fr 1fr;
 			align-items: end;
 			gap: 0.125rem;
-			padding: 0.375rem 0.5rem calc(0.375rem + env(safe-area-inset-bottom));
+			padding: 0.25rem 0.375rem calc(0.25rem + env(safe-area-inset-bottom));
 			background: var(--color-surface);
-			box-shadow: inset 0 1px 0 var(--color-line);
+			box-shadow: var(--mat-float);
+			border-radius: 14px 14px 0 0;
 		}
 	}
 
@@ -103,7 +104,7 @@
 		min-height: 2.75rem;
 		padding: 0.25rem 0.125rem;
 		border: none;
-		border-radius: 0.75rem;
+		border-radius: 9px;
 		color: var(--color-muted);
 		background: transparent;
 		cursor: pointer;
@@ -134,7 +135,7 @@
 		right: -0.55rem;
 		min-width: 1rem;
 		padding: 0.05rem 0.25rem;
-		border-radius: 9999px;
+		border-radius: 6px;
 		font-size: 0.5625rem;
 		font-weight: 700;
 		line-height: 1.2;
@@ -157,9 +158,9 @@
 		justify-content: center;
 		gap: 0.1875rem;
 		width: 3.25rem;
-		margin: -0.85rem 0.35rem 0;
+		margin: -0.75rem 0.35rem 0;
 		padding: 0.45rem 0 0.2rem;
-		border-radius: 1.125rem;
+		border-radius: 14px;
 		color: var(--color-on-accent);
 		background: var(--color-accent);
 		box-shadow: var(--shadow-sm);
@@ -172,8 +173,7 @@
 	.compose-label {
 		font-size: 0.5625rem;
 		font-weight: 700;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
+		letter-spacing: 0.02em;
 	}
 
 	@media (prefers-reduced-motion: reduce) {

@@ -93,7 +93,7 @@
 		align-items: center;
 		gap: 0.375rem;
 		padding: 0.375rem 0.75rem;
-		border-radius: 9999px;
+		border-radius: 6px;
 		font-size: 0.8125rem;
 		color: var(--color-muted);
 		background: var(--color-surface-muted);
@@ -110,7 +110,7 @@
 		align-items: center;
 		gap: 0.375rem;
 		padding: 0.375rem 0.625rem;
-		border-radius: 9999px;
+		border-radius: 6px;
 		font-size: 0.8125rem;
 		color: var(--color-text-secondary);
 		background: var(--color-surface-muted);

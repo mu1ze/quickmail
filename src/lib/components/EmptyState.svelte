@@ -36,9 +36,9 @@
 		width: 3.5rem;
 		height: 3.5rem;
 		margin-bottom: 1rem;
-		border-radius: 1rem;
-		background: var(--color-surface);
-		box-shadow: var(--shadow-sm);
+		border-radius: 14px;
+		background: var(--color-well);
+		box-shadow: var(--mat-well);
 		color: var(--color-muted);
 	}
 </style>

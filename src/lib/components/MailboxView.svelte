@@ -5,6 +5,7 @@
 	import Check from './Check.svelte';
 	import EmptyState from './EmptyState.svelte';
 	import DeliveryStatus from './DeliveryStatus.svelte';
+	import HoldToConfirm from '$lib/interior/HoldToConfirm.svelte';
 	import { formatRelativeDate } from '$lib/utils/date';
 	import type { MailboxFilters, MailboxPage, MailboxView, ThreadSummary } from '$lib/types';
 
@@ -299,13 +300,14 @@
 								<Icon name="refresh-line" size={15} /> Refresh
 							</button>
 							{#if view === 'trash'}
-								<button
-									type="button"
-									class="menu-item danger"
-									onclick={() => run('empty-trash', [])}
-								>
-									<Icon name="delete-bin-2-line" size={15} /> Empty trash
-								</button>
+								<div class="menu-hold">
+									<HoldToConfirm
+										label="Empty trash"
+										holdLabel="Keep holding"
+										confirmLabel="Emptied"
+										onConfirm={() => run('empty-trash', [])}
+									/>
+								</div>
 							{/if}
 						</div>
 					{/if}
@@ -535,9 +537,7 @@
 	.mailbox {
 		display: flex;
 		flex-direction: column;
-		background: var(--color-surface);
-		border-radius: 1rem;
-		box-shadow: var(--shadow-sm);
+		background: transparent;
 		overflow: hidden;
 	}
 
@@ -607,7 +607,7 @@
 		justify-content: center;
 		width: 1.875rem;
 		height: 1.875rem;
-		border-radius: 0.5rem;
+		border-radius: 9px;
 		color: var(--color-text-secondary);
 		transition: background 0.15s, color 0.15s;
 	}
@@ -636,10 +636,11 @@
 		gap: 0.3125rem;
 		height: 1.875rem;
 		padding: 0 0.6875rem;
-		border-radius: 9999px;
-		font-size: 0.8125rem;
+		border-radius: 9px;
+		font-size: 12.5px;
 		color: var(--color-text-secondary);
-		box-shadow: inset 0 0 0 1px var(--color-line);
+		background: var(--color-well);
+		box-shadow: var(--mat-well);
 		transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 	}
 
@@ -651,8 +652,8 @@
 	.pill-on {
 		color: var(--color-text);
 		font-weight: 500;
-		background: var(--color-surface-hover);
-		box-shadow: inset 0 0 0 1px transparent;
+		background: var(--color-surface);
+		box-shadow: var(--mat-panel);
 	}
 
 	.filter-count {
@@ -662,7 +663,7 @@
 		min-width: 1rem;
 		height: 1rem;
 		padding: 0 0.25rem;
-		border-radius: 9999px;
+		border-radius: 6px;
 		font-size: 0.625rem;
 		font-weight: 600;
 		color: var(--color-on-accent);
@@ -681,7 +682,7 @@
 		justify-content: center;
 		width: 1.75rem;
 		height: 1.75rem;
-		border-radius: 0.5rem;
+		border-radius: 9px;
 		color: var(--color-text-secondary);
 		transition: background 0.15s;
 	}
@@ -717,8 +718,8 @@
 		min-width: 11rem;
 		padding: 0.25rem;
 		background: var(--color-surface);
-		border-radius: 0.75rem;
-		box-shadow: var(--shadow-md);
+		border-radius: 14px;
+		box-shadow: var(--mat-float);
 	}
 
 	.menu-left {
@@ -749,6 +750,14 @@
 
 	.menu-item.danger:hover {
 		color: var(--color-danger);
+	}
+
+	.menu-hold {
+		padding: 0.25rem;
+	}
+
+	.menu-hold :global(.hold) {
+		width: 100%;
 	}
 
 	/* --- search note --- */
@@ -785,7 +794,7 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0 0.875rem;
-		background: var(--color-bg);
+		background: var(--color-well);
 		box-shadow: inset 0 -1px 0 var(--color-line);
 		transition: background 0.12s;
 	}
@@ -841,7 +850,7 @@
 		justify-content: center;
 		width: 2rem;
 		height: 2rem;
-		border-radius: 9999px;
+		border-radius: 9px;
 		font-size: 0.6875rem;
 		font-weight: 600;
 		color: var(--color-text-secondary);
@@ -929,7 +938,7 @@
 
 	.tag {
 		padding: 0.125rem 0.4375rem;
-		border-radius: 9999px;
+		border-radius: 6px;
 		font-size: 0.625rem;
 		font-weight: 500;
 		color: var(--color-muted);
@@ -1021,14 +1030,13 @@
 		}
 
 		.row {
-			padding: 0.35rem 0.5rem 0.35rem 0.375rem;
-			min-height: 4.25rem;
-			gap: 0.25rem;
+			padding: 0.125rem 0.5rem 0.125rem 0.25rem;
+			gap: 0.125rem;
 		}
 
 		.star {
-			width: 2.5rem;
-			height: 2.5rem;
+			width: 1.5rem;
+			height: 1.5rem;
 		}
 
 		.row-link {
@@ -1036,16 +1044,17 @@
 			grid-template-areas:
 				'avatar sender date'
 				'avatar body indicators';
-			gap: 0.2rem 0.5rem;
-			padding: 0.5rem 0.25rem 0.5rem 0;
+			gap: 0.05rem 0.375rem;
+			padding: 0.25rem 0 0.25rem 0.125rem;
+			min-width: 0;
 		}
 
 		.avatar {
 			grid-area: avatar;
 			align-self: center;
-			width: 2rem;
-			height: 2rem;
-			font-size: 0.6875rem;
+			width: 1.5rem;
+			height: 1.5rem;
+			font-size: 0.5625rem;
 		}
 
 		.sender {
@@ -1060,14 +1069,19 @@
 			grid-area: body;
 		}
 
+		.subject {
+			flex: 0 1 auto;
+			max-width: 55%;
+		}
+
 		.indicators {
 			grid-area: indicators;
 			justify-self: end;
 		}
 
 		.row :global(.check) {
-			width: 2.5rem;
-			height: 2.5rem;
+			width: 1.5rem;
+			height: 1.5rem;
 		}
 
 		.row-actions {

@@ -38,7 +38,7 @@
 		gap: 0.25rem;
 		flex-shrink: 0;
 		padding: 0.125rem 0.5rem;
-		border-radius: 9999px;
+		border-radius: 6px;
 		font-size: 0.6875rem;
 		font-weight: 500;
 		white-space: nowrap;

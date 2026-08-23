@@ -3,6 +3,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import RichTextEditor from '$lib/components/RichTextEditor.svelte';
 	import AttachmentPicker from '$lib/components/AttachmentPicker.svelte';
+	import LoadingButton from '$lib/interior/LoadingButton.svelte';
 	import { htmlToPlainText, isHtmlEmpty } from '$lib/utils/html';
 	import type { OutboundAttachmentInput } from '$lib/types';
 	import type { PageData } from './$types';
@@ -148,10 +149,15 @@
 					<Icon name="delete-bin-line" size={15} />
 				</button>
 			{/if}
-			<button type="submit" class="btn-primary" disabled={sending}>
-				<Icon name="send-plane-2-fill" size={16} />
-				{sending ? 'Sending…' : 'Send'}
-			</button>
+			<LoadingButton
+				type="submit"
+				tone="accent"
+				label="Send"
+				pendingLabel="Sending"
+				successLabel="Sent"
+				status={sending ? 'pending' : 'idle'}
+				disabled={sending}
+			/>
 		</div>
 	</header>
 
