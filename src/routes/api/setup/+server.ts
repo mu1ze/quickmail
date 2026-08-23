@@ -3,6 +3,7 @@ import {
 	bootstrapAdmin,
 	countUsers,
 	login,
+	MIN_PASSWORD_LENGTH,
 	sessionCookieOptions,
 	SESSION_COOKIE
 } from '$lib/server/auth';
@@ -60,8 +61,11 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
 	if (!body.localPart?.trim()) {
 		return json({ error: 'Choose an address' }, { status: 400 });
 	}
-	if (!body.password || body.password.length < 8) {
-		return json({ error: 'Password must be at least 8 characters' }, { status: 400 });
+	if (!body.password || body.password.length < MIN_PASSWORD_LENGTH) {
+		return json(
+			{ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` },
+			{ status: 400 }
+		);
 	}
 
 	try {

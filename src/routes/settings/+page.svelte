@@ -522,7 +522,7 @@
 				class="text-input"
 				bind:value={newPassword}
 				required
-				minlength="8"
+				minlength="12"
 				autocomplete="new-password"
 			/>
 
@@ -533,7 +533,7 @@
 				class="text-input"
 				bind:value={confirmPassword}
 				required
-				minlength="8"
+				minlength="12"
 				autocomplete="new-password"
 			/>
 

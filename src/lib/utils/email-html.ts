@@ -145,20 +145,45 @@ export function emailCss(rich: boolean): string {
 	return BASE_CSS + (rich ? RICH_CSS : SIMPLE_CSS);
 }
 
+const BLOCK_REMOTE_CSP =
+	"default-src 'none'; img-src data: blob:; media-src data: blob:; style-src 'unsafe-inline'; " +
+	"font-src data:; form-action 'none'; object-src 'none'; base-uri 'none'";
+
+export function hasRemoteContent(html: string): boolean {
+	return (
+		/(?:src|srcset|poster|background)\s*=\s*["']?\s*(?:https?:)?\/\//i.test(html) ||
+		/<link\b[^>]*\bhref\s*=\s*["']?\s*(?:https?:)?\/\//i.test(html) ||
+		/url\(\s*["']?\s*(?:https?:)?\/\//i.test(html) ||
+		/@import\s+(?:url\()?\s*["']?\s*(?:https?:)?\/\//i.test(html)
+	);
+}
+
+function remoteContentPolicy(): string {
+	return `<meta http-equiv="Content-Security-Policy" content="${BLOCK_REMOTE_CSP}">`;
+}
+
 /** Senders differ on whether the HTML part is a fragment or a whole document. */
 function isFullDocument(html: string): boolean {
 	return /<html[\s>]/i.test(html) || /<body[\s>]/i.test(html);
 }
 
-export function buildEmailDocument(html: string, options: { rich: boolean }): string {
+export function buildEmailDocument(
+	html: string,
+	options: { rich: boolean; allowRemote?: boolean }
+): string {
+	const policy = options.allowRemote ? '' : remoteContentPolicy();
 	// A complete document is left as the sender wrote it — nesting it inside
 	// another one drops its <head>, and with it any <style> the layout needs.
-	// Its stylesheet is added after load instead.
-	if (isFullDocument(html)) return html;
+	// Its stylesheet is added after load instead. Prefixing a meta policy causes
+	// the HTML parser to create the document head around it before it encounters
+	// any sender-controlled markup or remote resource.
+	if (isFullDocument(html)) {
+		return `${policy}${html}`;
+	}
 
 	// `base target=_blank` keeps links from trying to navigate the app, which the
 	// sandbox would block outright.
-	return `<!doctype html><html><head><meta charset="utf-8">
+	return `<!doctype html><html><head><meta charset="utf-8">${policy}
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <base target="_blank">
 <style>${emailCss(options.rich)}</style>

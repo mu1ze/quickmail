@@ -25,10 +25,36 @@ function isPublicPath(pathname: string): boolean {
 }
 
 function jsonError(error: string, status: number): Response {
-	return new Response(JSON.stringify({ error }), {
-		status,
-		headers: { 'Content-Type': 'application/json' }
-	});
+	return secureResponse(
+		new Response(JSON.stringify({ error }), {
+			status,
+			headers: { 'Content-Type': 'application/json' }
+		})
+	);
+}
+
+const CONTENT_SECURITY_POLICY = [
+	"default-src 'self'",
+	"script-src 'self' 'unsafe-inline'",
+	"style-src 'self' 'unsafe-inline' https:",
+	"img-src 'self' data: blob: https:",
+	"font-src 'self' data: https:",
+	"media-src 'self' data: blob: https:",
+	"connect-src 'self'",
+	"frame-src 'self' data: blob:",
+	"object-src 'none'",
+	"base-uri 'self'",
+	"form-action 'self'",
+	"frame-ancestors 'none'",
+	'upgrade-insecure-requests'
+].join('; ');
+
+function secureResponse(response: Response): Response {
+	response.headers.set('Content-Security-Policy', CONTENT_SECURITY_POLICY);
+	response.headers.set('X-Content-Type-Options', 'nosniff');
+	response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+	response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+	return response;
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
@@ -65,7 +91,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	// Webhooks authenticate with a signature, not a session.
 	if (pathname.startsWith('/api/webhooks/')) {
-		return resolve(event);
+		return secureResponse(await resolve(event));
 	}
 
 	if (db && event.locals.user) {
@@ -104,7 +130,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	if (pathname.startsWith('/api/')) {
 		if (isPublicPath(pathname)) {
-			return resolve(event);
+			return secureResponse(await resolve(event));
 		}
 		if (!event.locals.user || !event.locals.authMethod) {
 			return jsonError('Unauthorized', 401);
@@ -120,7 +146,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 			return jsonError(access.error, access.status);
 		}
 
-		return resolve(event);
+		return secureResponse(await resolve(event));
 	}
 
 	const needsSetup = db ? (await countUsers(db)) === 0 : false;
@@ -140,18 +166,18 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (!needsSetup && !event.locals.user) {
 			throw redirect(303, '/login');
 		}
-		return resolve(event);
+		return secureResponse(await resolve(event));
 	}
 
 	if (pathname === '/login') {
 		if (event.locals.user) {
 			throw redirect(303, '/inbox');
 		}
-		return resolve(event);
+		return secureResponse(await resolve(event));
 	}
 
 	if (isPublicPath(pathname)) {
-		return resolve(event);
+		return secureResponse(await resolve(event));
 	}
 
 	if (!event.locals.user) {
@@ -174,5 +200,5 @@ export const handle: Handle = async ({ event, resolve }) => {
 		throw redirect(303, '/inbox');
 	}
 
-	return resolve(event);
+	return secureResponse(await resolve(event));
 };

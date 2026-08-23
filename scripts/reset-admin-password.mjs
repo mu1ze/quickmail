@@ -8,7 +8,7 @@ import { webcrypto } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 const { subtle } = webcrypto;
-const PBKDF2_ITERATIONS = 100_000;
+const PBKDF2_ITERATIONS = 600_000;
 
 // Read the D1 name out of wrangler.jsonc so this keeps working if you rename it.
 const wranglerPath = new URL('../wrangler.jsonc', import.meta.url);
@@ -41,7 +41,7 @@ async function hashPassword(password) {
 			256
 		)
 	);
-	return `${toBase64(salt)}:${toBase64(hash)}`;
+	return `pbkdf2_sha256$${PBKDF2_ITERATIONS}$${toBase64(salt)}$${toBase64(hash)}`;
 }
 
 const [email, password] = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
@@ -54,7 +54,7 @@ function usage(message) {
 }
 
 if (!email?.includes('@')) usage('A valid login email is required.');
-if (!password || password.length < 8) usage('Password must be at least 8 characters.');
+if (!password || password.length < 12) usage('Password must be at least 12 characters.');
 
 const passwordHash = await hashPassword(password);
 const escape = (value) => value.replace(/'/g, "''");

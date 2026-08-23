@@ -4,11 +4,11 @@ import { assertPasswordLength, MIN_PASSWORD_LENGTH } from './auth';
 
 describe('password length', () => {
 	test('rejects short passwords', () => {
-		assert.throws(() => assertPasswordLength('short'), /at least 8/);
-		assert.equal(MIN_PASSWORD_LENGTH, 8);
+		assert.throws(() => assertPasswordLength('12345678901'), /at least 12/);
+		assert.equal(MIN_PASSWORD_LENGTH, 12);
 	});
 
-	test('accepts eight or more characters', () => {
-		assert.doesNotThrow(() => assertPasswordLength('12345678'));
+	test('accepts twelve or more characters', () => {
+		assert.doesNotThrow(() => assertPasswordLength('123456789012'));
 	});
 });
