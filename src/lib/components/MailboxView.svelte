@@ -60,7 +60,7 @@
 	);
 
 	/**
-	 * Who to show on the row. Sent and Drafts are about where a message went, so
+	 * Who to show on the card. Sent and Drafts are about where a message went, so
 	 * they name the recipient; everywhere else names the people in the thread.
 	 */
 	function people(thread: ThreadSummary): string {
@@ -81,7 +81,7 @@
 		return ((external ?? thread.participants[0])?.address[0] ?? '?').toUpperCase();
 	}
 
-	/** Rows carry the newest message; opening it opens the whole conversation. */
+	/** Cards carry the newest message; opening one opens the whole conversation. */
 	function href(thread: ThreadSummary): string {
 		return thread.is_draft ? `/compose?draft=${thread.latest_id}` : `/mail/${thread.latest_id}`;
 	}
@@ -160,14 +160,24 @@
 		if (items.length === 0) return;
 
 		const key = event.key;
-		if (key === 'j' || key === 'ArrowDown') {
+		if (key === 'j' || key === 'l' || key === 'ArrowRight') {
 			event.preventDefault();
-			focused = Math.min(items.length - 1, focused + 1);
+			moveFocus(1);
 			return;
 		}
-		if (key === 'k' || key === 'ArrowUp') {
+		if (key === 'k' || key === 'h' || key === 'ArrowLeft') {
 			event.preventDefault();
-			focused = Math.max(0, focused - 1);
+			moveFocus(-1);
+			return;
+		}
+		if (key === 'ArrowDown') {
+			event.preventDefault();
+			moveFocus(CARD_COLUMNS);
+			return;
+		}
+		if (key === 'ArrowUp') {
+			event.preventDefault();
+			moveFocus(-CARD_COLUMNS);
 			return;
 		}
 		if (key === 'x') {
@@ -251,6 +261,18 @@
 		mailbox.total === 0 ? 0 : (mailbox.page - 1) * mailbox.pageSize + 1
 	);
 	const rangeEnd = $derived(Math.min(mailbox.page * mailbox.pageSize, mailbox.total));
+
+	const CARD_COLUMNS = 3;
+
+	function moveFocus(delta: number) {
+		focused = Math.max(0, Math.min(items.length - 1, focused + delta));
+		queueMicrotask(() => {
+			document.querySelector<HTMLElement>('.card.focused')?.scrollIntoView({
+				block: 'nearest',
+				inline: 'nearest'
+			});
+		});
+	}
 </script>
 
 <svelte:window onkeydown={onListKeydown} />
@@ -559,68 +581,70 @@
 				title={filters.q ? 'No messages match that search' : meta.empty}
 			/>
 		{:else}
-			<ul>
+			<ul class="cards">
 				{#each items as thread, index (thread.thread_id)}
 					<li
-						class="row"
+						class="card"
 						class:unread={!thread.is_read}
 						class:checked={selected.includes(thread.latest_id)}
 						class:focused={index === focused}
 					>
-						<Check
-							label={`Select conversation with ${people(thread)}`}
-							checked={selected.includes(thread.latest_id)}
-							onchange={() => toggle(thread.latest_id)}
-						/>
+						<div class="card-bar">
+							<Check
+								label={`Select conversation with ${people(thread)}`}
+								checked={selected.includes(thread.latest_id)}
+								onchange={() => toggle(thread.latest_id)}
+							/>
 
-						<button
-							type="button"
-							class="star"
-							class:on={thread.is_starred}
-							aria-label={thread.is_starred ? 'Remove star' : 'Add star'}
-							onclick={() => toggleStar(thread)}
-						>
-							<Icon name={thread.is_starred ? 'star-fill' : 'star-line'} size={15} />
-						</button>
+							<button
+								type="button"
+								class="star"
+								class:on={thread.is_starred}
+								aria-label={thread.is_starred ? 'Remove star' : 'Add star'}
+								onclick={() => toggleStar(thread)}
+							>
+								<Icon name={thread.is_starred ? 'star-fill' : 'star-line'} size={14} />
+							</button>
+						</div>
 
-						<a class="row-link" href={href(thread)}>
-							<span class="avatar">{initial(thread)}</span>
-
-							<span class="sender" title={people(thread)}>
-								<span class="sender-names">{people(thread)}</span>
-								{#if thread.message_count > 1}
-									<span class="count">{thread.message_count}</span>
-								{/if}
-								{#if thread.is_draft}<span class="tag tag-draft">Draft</span>{/if}
+						<a class="card-link" href={href(thread)}>
+							<span class="card-who">
+								<span class="avatar">{initial(thread)}</span>
+								<span class="sender" title={people(thread)}>
+									<span class="sender-names">{people(thread)}</span>
+									{#if thread.message_count > 1}
+										<span class="count">{thread.message_count}</span>
+									{/if}
+									{#if thread.is_draft}<span class="tag tag-draft">Draft</span>{/if}
+								</span>
 							</span>
 
-							<span class="body">
-								<span class="subject">{thread.subject || '(no subject)'}</span>
-								{#if thread.preview}
-									<span class="preview">— {thread.preview}</span>
-								{/if}
+							<span class="subject">{thread.subject || '(no subject)'}</span>
+							<span class="preview">
+								{thread.preview || 'No preview'}
 							</span>
 
-							<span class="indicators">
-								{#if view === 'sent' && thread.status}
-									<DeliveryStatus status={thread.status} />
-								{/if}
-								{#if view === 'later' && thread.snoozed_until}
-									<Icon name="time-line" size={14} />
-								{/if}
-								{#if thread.has_attachments}
-									<Icon name="attachment-2" size={14} />
-								{/if}
-							</span>
-
-							<span class="date">
-								{view === 'later' && thread.snoozed_until
-									? formatSnoozeUntil(thread.snoozed_until)
-									: formatRelativeDate(thread.created_at)}
+							<span class="card-meta">
+								<span class="indicators">
+									{#if view === 'sent' && thread.status}
+										<DeliveryStatus status={thread.status} />
+									{/if}
+									{#if view === 'later' && thread.snoozed_until}
+										<Icon name="time-line" size={13} />
+									{/if}
+									{#if thread.has_attachments}
+										<Icon name="attachment-2" size={13} />
+									{/if}
+								</span>
+								<span class="date">
+									{view === 'later' && thread.snoozed_until
+										? formatSnoozeUntil(thread.snoozed_until)
+										: formatRelativeDate(thread.created_at)}
+								</span>
 							</span>
 						</a>
 
-						<span class="row-actions">
+						<span class="card-actions">
 							{#if view === 'trash'}
 								<button
 									type="button"
@@ -715,7 +739,6 @@
 		display: flex;
 		flex-direction: column;
 		background: transparent;
-		overflow: hidden;
 	}
 
 	/* --- toolbar --- */
@@ -961,41 +984,64 @@
 		color: var(--color-text);
 	}
 
-	/* --- rows --- */
+	/* --- cards --- */
 
-	/* Read rows sit back a shade; unread ones stay bright and bold. */
-	.row {
-		position: relative;
+	.list {
+		padding: 0.75rem 0.25rem 0.5rem;
+	}
+
+	.cards {
 		display: grid;
-		grid-template-columns: auto auto 1fr;
-		align-items: center;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 0.5rem;
-		padding: 0 0.875rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.card {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		height: 100%;
+		padding: 0.5rem 0.55rem 0.55rem;
+		border-radius: 14px;
 		background: var(--color-well);
-		box-shadow: inset 0 -1px 0 var(--color-line);
-		transition: background 0.12s;
+		box-shadow: var(--mat-well);
+		transition: background 0.12s, box-shadow 0.12s;
 	}
 
-	.row:last-child {
-		box-shadow: none;
-	}
-
-	.row.unread {
+	.card.unread {
 		background: var(--color-surface);
+		box-shadow: var(--mat-panel);
 	}
 
-	.row:hover,
-	.row.unread:hover {
+	.card:hover,
+	.card.unread:hover {
 		background: var(--color-surface-muted);
 	}
 
-	.row.checked,
-	.row.checked:hover {
+	.card.checked,
+	.card.checked:hover {
 		background: var(--color-accent-soft);
+		box-shadow: none;
 	}
 
-	.row.focused:not(.checked) {
-		box-shadow: inset 3px 0 0 var(--color-accent);
+	.card.focused:not(.checked) {
+		box-shadow: 0 0 0 2px var(--color-accent);
+	}
+
+	.card:has(.backdrop) {
+		z-index: 6;
+	}
+
+	.card-bar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.125rem;
+		margin: -0.125rem -0.125rem 0.25rem;
 	}
 
 	.snooze-wrap {
@@ -1020,29 +1066,38 @@
 		color: var(--color-star);
 	}
 
-	.row-link {
-		display: grid;
-		grid-template-columns: 2rem minmax(6rem, 11rem) minmax(0, 1fr) auto 4.5rem;
-		align-items: center;
-		gap: 0.75rem;
+	.card-link {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		gap: 0.25rem;
 		min-width: 0;
-		padding: 0.625rem 0;
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.card-who {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		min-width: 0;
 	}
 
 	.avatar {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 2rem;
-		height: 2rem;
-		border-radius: 9px;
-		font-size: 0.6875rem;
+		flex-shrink: 0;
+		width: 1.75rem;
+		height: 1.75rem;
+		border-radius: 8px;
+		font-size: 0.625rem;
 		font-weight: 600;
 		color: var(--color-text-secondary);
 		background: var(--color-surface-muted);
 	}
 
-	.row.unread .avatar {
+	.card.unread .avatar {
 		color: var(--color-text);
 		background: var(--color-surface-hover);
 	}
@@ -1050,22 +1105,20 @@
 	.sender {
 		display: flex;
 		align-items: center;
-		gap: 0.375rem;
+		gap: 0.25rem;
 		min-width: 0;
-		font-size: 0.875rem;
+		font-size: 0.75rem;
 		color: var(--color-text-secondary);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 		text-transform: capitalize;
 	}
 
-	.row.unread .sender {
+	.card.unread .sender {
 		font-weight: 600;
 		color: var(--color-text);
 	}
 
 	.sender-names {
+		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -1074,57 +1127,67 @@
 	/* How many messages the conversation holds. */
 	.count {
 		flex-shrink: 0;
-		font-size: 0.75rem;
+		font-size: 0.6875rem;
 		font-weight: 400;
 		color: var(--color-muted);
 	}
 
-	.row.unread .count {
+	.card.unread .count {
 		color: var(--color-text-secondary);
-	}
-
-	.body {
-		display: flex;
-		align-items: baseline;
-		gap: 0.375rem;
-		min-width: 0;
-		overflow: hidden;
-		white-space: nowrap;
 	}
 
 	.subject {
-		font-size: 0.875rem;
-		color: var(--color-text-secondary);
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
 		overflow: hidden;
-		text-overflow: ellipsis;
+		font-size: 0.8125rem;
+		line-height: 1.3;
+		color: var(--color-text-secondary);
+		word-break: break-word;
 	}
 
-	.row.unread .subject {
+	.card.unread .subject {
 		font-weight: 600;
 		color: var(--color-text);
 	}
 
 	.preview {
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 4;
+		line-clamp: 4;
 		flex: 1;
 		min-width: 0;
-		font-size: 0.8125rem;
-		color: var(--color-muted);
 		overflow: hidden;
-		text-overflow: ellipsis;
+		font-size: 0.75rem;
+		line-height: 1.35;
+		color: var(--color-muted);
+		word-break: break-word;
+	}
+
+	.card-meta {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.25rem;
+		margin-top: 0.25rem;
+		min-width: 0;
 	}
 
 	.indicators {
 		display: flex;
 		align-items: center;
-		gap: 0.375rem;
-		flex-shrink: 0;
+		gap: 0.25rem;
+		min-width: 0;
 		color: var(--color-muted);
 	}
 
 	.tag {
-		padding: 0.125rem 0.4375rem;
-		border-radius: 6px;
-		font-size: 0.625rem;
+		padding: 0.0625rem 0.3125rem;
+		border-radius: 5px;
+		font-size: 0.5625rem;
 		font-weight: 500;
 		color: var(--color-muted);
 		background: var(--color-surface-hover);
@@ -1137,48 +1200,49 @@
 	}
 
 	.date {
-		font-size: 0.75rem;
+		font-size: 0.6875rem;
 		color: var(--color-muted);
 		text-align: right;
 		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
-	.row.unread .date {
+	.card.unread .date {
 		font-weight: 500;
 		color: var(--color-text-secondary);
 	}
 
-	.row-actions {
+	.card-actions {
 		position: absolute;
-		top: 50%;
-		right: 0.875rem;
+		right: 0.4rem;
+		bottom: 0.4rem;
 		z-index: 5;
 		display: none;
 		align-items: center;
 		gap: 0.125rem;
-		padding-left: 1.5rem;
-		transform: translateY(-50%);
-		background: linear-gradient(to right, transparent, var(--color-surface-muted) 1.5rem);
+		padding: 0.2rem 0.2rem 0.2rem 1.25rem;
+		border-radius: 10px;
+		background: linear-gradient(to right, transparent, var(--color-surface-muted) 1.1rem);
 	}
 
-	.row:hover .row-actions {
+	.card:hover .card-actions {
 		display: flex;
 	}
 
 	.list-foot {
 		display: flex;
 		justify-content: flex-end;
-		padding: 0.625rem 0.875rem;
+		padding: 0.5rem 0.25rem 0.25rem;
 		font-size: 0.75rem;
 		color: var(--color-muted);
-		box-shadow: inset 0 1px 0 var(--color-line);
 	}
 
 	@media (max-width: 900px) {
 		.toolbar {
 			flex-wrap: wrap;
 			row-gap: 0.5rem;
-			padding: 0.5rem 0.625rem;
+			padding: 0.5rem 0.25rem;
 		}
 
 		.toolbar-left,
@@ -1214,62 +1278,72 @@
 			flex-wrap: wrap;
 		}
 
-		.row {
-			padding: 0.125rem 0.5rem 0.125rem 0.25rem;
-			gap: 0.125rem;
+		.list {
+			padding: 0.5rem 0 0;
+		}
+
+		.cards {
+			gap: 0.375rem;
+		}
+
+		.card {
+			padding: 0.375rem 0.4rem 0.45rem;
+			border-radius: 12px;
+		}
+
+		.card-bar {
+			margin: -0.1rem -0.05rem 0.2rem;
 		}
 
 		.star {
-			width: 1.5rem;
-			height: 1.5rem;
+			width: 1.375rem;
+			height: 1.375rem;
 		}
 
-		.row-link {
-			grid-template-columns: auto minmax(0, 1fr) auto;
-			grid-template-areas:
-				'avatar sender date'
-				'avatar body indicators';
-			gap: 0.05rem 0.375rem;
-			padding: 0.25rem 0 0.25rem 0.125rem;
-			min-width: 0;
+		.card-who {
+			gap: 0.25rem;
 		}
 
 		.avatar {
-			grid-area: avatar;
-			align-self: center;
-			width: 1.5rem;
-			height: 1.5rem;
-			font-size: 0.5625rem;
+			width: 1.25rem;
+			height: 1.25rem;
+			border-radius: 6px;
+			font-size: 0.5rem;
 		}
 
 		.sender {
-			grid-area: sender;
-		}
-
-		.date {
-			grid-area: date;
-		}
-
-		.body {
-			grid-area: body;
+			font-size: 0.6875rem;
 		}
 
 		.subject {
-			flex: 0 1 auto;
-			max-width: 55%;
+			font-size: 0.75rem;
 		}
 
-		.indicators {
-			grid-area: indicators;
-			justify-self: end;
+		.preview {
+			font-size: 0.6875rem;
+			-webkit-line-clamp: 3;
+			line-clamp: 3;
 		}
 
-		.row :global(.check) {
-			width: 1.5rem;
-			height: 1.5rem;
+		.date {
+			font-size: 0.625rem;
 		}
 
-		.row-actions {
+		.card :global(.check) {
+			width: 1.375rem;
+			height: 1.375rem;
+		}
+
+		.indicators :global(.status) {
+			padding: 0.0625rem;
+			gap: 0;
+		}
+
+		.indicators :global(.label) {
+			display: none;
+		}
+
+		.card-actions {
 			display: none !important;
 		}
 	}
