@@ -1021,14 +1021,17 @@
 		}
 
 		.row {
-			padding: 0.35rem 0.5rem 0.35rem 0.375rem;
-			min-height: 4.25rem;
-			gap: 0.25rem;
+			padding: 0.125rem 0.5rem 0.125rem 0.25rem;
+			gap: 0.125rem;
 		}
 
 		.star {
-			width: 2.5rem;
-			height: 2.5rem;
+			width: 1.5rem;
+			height: 1.5rem;
+		}
+
+		.star :global(i) {
+			font-size: 13px !important;
 		}
 
 		.row-link {
@@ -1036,16 +1039,17 @@
 			grid-template-areas:
 				'avatar sender date'
 				'avatar body indicators';
-			gap: 0.2rem 0.5rem;
-			padding: 0.5rem 0.25rem 0.5rem 0;
+			gap: 0.05rem 0.375rem;
+			padding: 0.25rem 0 0.25rem 0.125rem;
+			min-width: 0;
 		}
 
 		.avatar {
 			grid-area: avatar;
 			align-self: center;
-			width: 2rem;
-			height: 2rem;
-			font-size: 0.6875rem;
+			width: 1.5rem;
+			height: 1.5rem;
+			font-size: 0.5625rem;
 		}
 
 		.sender {
@@ -1060,14 +1064,23 @@
 			grid-area: body;
 		}
 
+		.subject {
+			flex: 0 1 auto;
+			max-width: 55%;
+		}
+
 		.indicators {
 			grid-area: indicators;
 			justify-self: end;
 		}
 
 		.row :global(.check) {
-			width: 2.5rem;
-			height: 2.5rem;
+			width: 1.5rem;
+			height: 1.5rem;
+		}
+
+		.row :global(.check i) {
+			font-size: 14px !important;
 		}
 
 		.row-actions {
