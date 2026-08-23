@@ -1,12 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { SESSION_COOKIE, SESSION_DAYS } from './constants';
-import {
-	createSessionToken,
-	hashPassword,
-	hashToken,
-	passwordNeedsRehash,
-	verifyPassword
-} from './crypto';
+import { createSessionToken, hashPassword, hashToken, verifyPassword } from './crypto';
 import type { User } from '$lib/types';
 
 type UserRow = {
@@ -28,8 +22,7 @@ function mapUser(row: UserRow): User {
 }
 
 export const MIN_PASSWORD_LENGTH = 12;
-const DUMMY_PASSWORD_HASH =
-	'pbkdf2_sha256$600000$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+const DUMMY_PASSWORD_HASH = 'AAAAAAAAAAAAAAAAAAAAAA==:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 
 export function assertPasswordLength(password: string): void {
 	if (password.length < MIN_PASSWORD_LENGTH) {
@@ -141,12 +134,6 @@ export async function login(
 
 	const valid = await verifyPassword(password, user.password_hash);
 	if (!valid) return null;
-	if (passwordNeedsRehash(user.password_hash)) {
-		await db
-			.prepare('UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?')
-			.bind(await hashPassword(password), user.id, user.password_hash)
-			.run();
-	}
 
 	const token = createSessionToken();
 	const token_hash = await hashToken(token);

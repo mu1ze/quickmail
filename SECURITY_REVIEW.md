@@ -79,9 +79,9 @@ without coordinated migration logic.
 passwords faster than with a contemporary work factor or memory-hard KDF. The
 eight-character minimum further increases the likelihood of guessable credentials.
 
-**Remediation.** New hashes use a versioned PBKDF2-SHA-256 format with 600,000
-iterations. Existing 100,000-iteration hashes remain verifiable and are upgraded after
-a successful login. New and changed passwords require at least 12 characters.
+**Remediation.** New and changed passwords require at least 12 characters. The
+Worker still stores PBKDF2-SHA-256 as `salt:hash` at 100,000 iterations — 600,000
+iterations exceeded typical Worker CPU limits and made sign-in fail.
 
 ### QM-05 — Browser security-header policy (Remediated)
 
