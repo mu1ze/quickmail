@@ -55,6 +55,7 @@ export const PATCH: RequestHandler = async ({ params, request, locals, platform 
 		isRead?: boolean;
 		isStarred?: boolean;
 		trashed?: boolean;
+		snoozedUntil?: string | null;
 		/** Set to limit the change to this one message instead of the thread. */
 		messageOnly?: boolean;
 	};
@@ -66,7 +67,8 @@ export const PATCH: RequestHandler = async ({ params, request, locals, platform 
 	const changed = await setEmailFlags(db, locals.user.id, ids, {
 		isRead: body.isRead,
 		isStarred: body.isStarred,
-		trashed: body.trashed
+		trashed: body.trashed,
+		snoozedUntil: body.snoozedUntil
 	});
 
 	if (changed === 0) {

@@ -77,7 +77,7 @@ export type MailAddress = {
 };
 
 /** The mailboxes the sidebar can show. Drafts/Trash are flags, not folders. */
-export type MailboxView = 'inbox' | 'starred' | 'drafts' | 'sent' | 'trash';
+export type MailboxView = 'inbox' | 'starred' | 'drafts' | 'sent' | 'later' | 'trash';
 
 export type MailboxCounts = {
 	inbox: number;
@@ -85,6 +85,7 @@ export type MailboxCounts = {
 	starred: number;
 	drafts: number;
 	sent: number;
+	later: number;
 	trash: number;
 };
 
@@ -115,6 +116,8 @@ export type EmailRow = {
 	is_read: number;
 	is_starred: number;
 	deleted_at: string | null;
+	/** When set and in the future, the conversation is hidden from the inbox. */
+	snoozed_until: string | null;
 	created_at: string;
 };
 
@@ -161,6 +164,8 @@ export type ThreadSummary = {
 	domain_id: string | null;
 	/** Delivery state of the newest message, when we sent it. */
 	status: DeliveryStatus | null;
+	/** Present when this conversation is waiting until a later time. */
+	snoozed_until: string | null;
 	created_at: string;
 };
 

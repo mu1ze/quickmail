@@ -3,7 +3,10 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import RichTextEditor from '$lib/components/RichTextEditor.svelte';
 	import AttachmentPicker from '$lib/components/AttachmentPicker.svelte';
+	import RecipientField from '$lib/components/RecipientField.svelte';
 	import LoadingButton from '$lib/interior/LoadingButton.svelte';
+	import { queueMailSend } from '$lib/pending-send';
+	import { isMod } from '$lib/shortcuts';
 	import { htmlToPlainText, isHtmlEmpty } from '$lib/utils/html';
 	import type { OutboundAttachmentInput } from '$lib/types';
 	import type { PageData } from './$types';
@@ -80,8 +83,9 @@
 		window.location.href = '/drafts';
 	}
 
-	async function submit(event: SubmitEvent) {
+	function submit(event: SubmitEvent) {
 		event.preventDefault();
+		if (sending) return;
 		if (isHtmlEmpty(html)) {
 			error = 'Write a message';
 			return;
@@ -89,36 +93,48 @@
 
 		sending = true;
 		error = '';
+		const payload = {
+			draftId: draftId ?? undefined,
+			fromAddressId,
+			to,
+			cc: cc.trim() || undefined,
+			bcc: bcc.trim() || undefined,
+			subject,
+			html,
+			text: htmlToPlainText(html),
+			attachments
+		};
 
-		try {
-			const res = await fetch('/api/mail', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					draftId: draftId ?? undefined,
-					fromAddressId,
-					to,
-					cc: cc.trim() || undefined,
-					bcc: bcc.trim() || undefined,
-					subject,
-					html,
-					text: htmlToPlainText(html),
-					attachments
-				})
-			});
-			const body = await res.json();
-			if (!res.ok) {
-				error = body.error ?? 'Failed to send';
-				return;
+		queueMailSend({
+			send: async () => {
+				const res = await fetch('/api/mail', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(payload)
+				});
+				const body = await res.json();
+				if (!res.ok) throw new Error(body.error ?? 'Failed to send');
+				window.location.href = '/sent';
+			},
+			undo: () => {
+				sending = false;
+			},
+			onError: (message) => {
+				error = message;
+				sending = false;
 			}
-			window.location.href = '/sent';
-		} catch {
-			error = 'Network error';
-		} finally {
-			sending = false;
-		}
+		});
 	}
 </script>
+
+<svelte:window
+	onkeydown={(event) => {
+		if (isMod(event) && event.key === 'Enter') {
+			event.preventDefault();
+			document.querySelector<HTMLFormElement>('.compose-page')?.requestSubmit();
+		}
+	}}
+/>
 
 <svelte:head>
 	<title>{draftId ? 'Draft' : 'Compose'} — Mail</title>
@@ -189,24 +205,17 @@
 
 		<div class="field-row">
 			<span class="field-label">To</span>
-			<input
-				id="to"
-				type="text"
-				bind:value={to}
-				required
-				placeholder="recipient@example.com"
-				class="field-input"
-			/>
+			<RecipientField id="to" bind:value={to} required placeholder="recipient@example.com" />
 		</div>
 
 		{#if showCopies}
 			<div class="field-row">
 				<span class="field-label">Cc</span>
-				<input type="text" bind:value={cc} placeholder="Comma separated" class="field-input" />
+				<RecipientField bind:value={cc} placeholder="Comma separated" />
 			</div>
 			<div class="field-row">
 				<span class="field-label">Bcc</span>
-				<input type="text" bind:value={bcc} placeholder="Comma separated" class="field-input" />
+				<RecipientField bind:value={bcc} placeholder="Comma separated" />
 			</div>
 		{/if}
 

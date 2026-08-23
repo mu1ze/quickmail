@@ -21,7 +21,7 @@
 	} = $props();
 
 	// Search applies to whichever mailbox is open; anywhere else it lands in Inbox.
-	const MAILBOXES = ['/inbox', '/sent', '/starred', '/drafts', '/trash'];
+	const MAILBOXES = ['/inbox', '/sent', '/starred', '/drafts', '/later', '/trash'];
 	const searchTarget = $derived(
 		MAILBOXES.find((path) => $page.url.pathname === path) ?? '/inbox'
 	);

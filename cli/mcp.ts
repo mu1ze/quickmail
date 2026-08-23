@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { QuickMailClient, QuickMailError, type MailboxView } from './client.ts';
 import { loadConfig } from './config.ts';
 
-const views = ['inbox', 'starred', 'drafts', 'sent', 'trash'] as const;
+const views = ['inbox', 'starred', 'drafts', 'sent', 'later', 'trash'] as const;
 
 function textResult(value: unknown, isError = false) {
 	return {

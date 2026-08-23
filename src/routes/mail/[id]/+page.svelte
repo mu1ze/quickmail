@@ -4,6 +4,10 @@
 	import RichTextEditor from '$lib/components/RichTextEditor.svelte';
 	import AttachmentPicker from '$lib/components/AttachmentPicker.svelte';
 	import ThreadMessage from '$lib/components/ThreadMessage.svelte';
+	import SnoozeMenu from '$lib/components/SnoozeMenu.svelte';
+	import { queueMailSend } from '$lib/pending-send';
+	import { isMod, isTypingTarget } from '$lib/shortcuts';
+	import { showUndo } from '$lib/undo';
 	import { htmlToPlainText, isHtmlEmpty } from '$lib/utils/html';
 	import type { OutboundAttachmentInput } from '$lib/types';
 	import type { PageData } from './$types';
@@ -15,13 +19,14 @@
 	let replyOpen = $state(false);
 	let sending = $state(false);
 	let error = $state('');
+	let snoozeOpen = $state(false);
 
 	const messages = $derived(data.messages);
 	const latest = $derived(messages[messages.length - 1]);
 	const starred = $derived(messages.some((message) => message.is_starred));
 
 	const backHref = $derived(
-		data.trashed ? '/trash' : latest?.direction === 'outbound' ? '/sent' : '/inbox'
+		data.trashed ? '/trash' : data.snoozedUntil ? '/later' : latest?.direction === 'outbound' ? '/sent' : '/inbox'
 	);
 
 	/**
@@ -52,9 +57,8 @@
 	const collapsedCount = $derived(messages.filter((message) => !opened.has(message.id)).length);
 
 	/** Flags apply to the conversation, not to the message that opened it. */
-	async function patch(body: Record<string, boolean>) {
-		if (!latest) return;
-		await fetch(`/api/mail/${latest.id}`, {
+	async function patch(id: string, body: Record<string, unknown>) {
+		await fetch(`/api/mail/${id}`, {
 			method: 'PATCH',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(body)
@@ -62,22 +66,29 @@
 	}
 
 	async function toggleStar() {
-		await patch({ isStarred: !starred });
+		if (!latest) return;
+		await patch(latest.id, { isStarred: !starred });
 		await invalidateAll();
 	}
 
 	async function markUnread() {
-		await patch({ isRead: false });
+		if (!latest) return;
+		await patch(latest.id, { isRead: false });
 		goto(backHref);
 	}
 
 	async function trash() {
-		await patch({ trashed: true });
-		goto(backHref);
+		const id = latest?.id;
+		if (!id) return;
+		const dest = backHref;
+		await patch(id, { trashed: true });
+		showUndo('Moved to trash', () => patch(id, { trashed: false }));
+		goto(dest);
 	}
 
 	async function restore() {
-		await patch({ trashed: false });
+		if (!latest) return;
+		await patch(latest.id, { trashed: false });
 		goto('/inbox');
 	}
 
@@ -87,42 +98,103 @@
 		goto('/trash');
 	}
 
-	/** Replies continue from the newest message, so the chain stays intact. */
-	async function sendReply(event: SubmitEvent) {
-		event.preventDefault();
-		if (!latest || isHtmlEmpty(replyHtml)) return;
+	async function snooze(until: string) {
+		const id = latest?.id;
+		if (!id) return;
+		snoozeOpen = false;
+		await patch(id, { snoozedUntil: until });
+		showUndo('Snoozed until later', () => patch(id, { snoozedUntil: null }));
+		goto('/inbox');
+	}
 
+	async function unsnooze() {
+		const id = latest?.id;
+		const until = data.snoozedUntil;
+		if (!id) return;
+		await patch(id, { snoozedUntil: null });
+		showUndo('Moved to inbox', () => (until ? patch(id, { snoozedUntil: until }) : Promise.resolve()));
+		goto('/inbox');
+	}
+
+	/** Replies continue from the newest message, so the chain stays intact. */
+	function sendReply(event: SubmitEvent) {
+		event.preventDefault();
+		queueReply();
+	}
+
+	function queueReply() {
+		if (!latest || isHtmlEmpty(replyHtml) || sending) return;
+		const id = latest.id;
+		const html = replyHtml;
+		const attachments = replyAttachments;
 		sending = true;
 		error = '';
-
-		try {
-			const res = await fetch(`/api/mail/${latest.id}`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					html: replyHtml,
-					text: htmlToPlainText(replyHtml),
-					attachments: replyAttachments
-				})
-			});
-			const body = await res.json();
-			if (!res.ok) {
-				error = body.error ?? 'Failed to send';
-				return;
+		queueMailSend({
+			send: async () => {
+				const res = await fetch(`/api/mail/${id}`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						html,
+						text: htmlToPlainText(html),
+						attachments
+					})
+				});
+				const body = await res.json();
+				if (!res.ok) throw new Error(body.error ?? 'Failed to send');
+				replyHtml = '';
+				replyAttachments = [];
+				replyOpen = false;
+				sending = false;
+				await invalidateAll();
+			},
+			undo: () => {
+				sending = false;
+			},
+			onError: (message) => {
+				error = message;
+				sending = false;
 			}
+		});
+	}
 
-			replyHtml = '';
-			replyAttachments = [];
-			replyOpen = false;
-			// The sent reply is now part of this conversation.
-			await invalidateAll();
-		} catch {
-			error = 'Network error';
-		} finally {
-			sending = false;
+	function onThreadKeydown(event: KeyboardEvent) {
+		if (isTypingTarget(event.target) || document.querySelector('[data-overlay]')) return;
+		if (isMod(event) && event.key === 'Enter') {
+			event.preventDefault();
+			if (replyOpen) queueReply();
+			return;
+		}
+		if (event.metaKey || event.ctrlKey || event.altKey) return;
+		if (event.key === 'r') {
+			event.preventDefault();
+			replyOpen = true;
+			return;
+		}
+		if (event.key === 'e' && !data.trashed) {
+			event.preventDefault();
+			void trash();
+			return;
+		}
+		if (event.key === 's') {
+			event.preventDefault();
+			void toggleStar();
+			return;
+		}
+		if (event.key === 'u') {
+			event.preventDefault();
+			void markUnread();
+			return;
+		}
+		if (event.key === 'b' && !data.trashed) {
+			event.preventDefault();
+			if (data.snoozedUntil) void unsnooze();
+			else snoozeOpen = !snoozeOpen;
 		}
 	}
 </script>
+
+<svelte:window onkeydown={onThreadKeydown} />
 
 <svelte:head>
 	<title>{data.subject} — Mail</title>
@@ -161,6 +233,31 @@
 				<button type="button" class="icon-btn" aria-label="Mark as unread" onclick={markUnread}>
 					<Icon name="mail-line" size={16} />
 				</button>
+				{#if data.snoozedUntil}
+					<button type="button" class="icon-btn" aria-label="Move to inbox" onclick={unsnooze}>
+						<Icon name="inbox-line" size={16} />
+					</button>
+				{:else}
+					<div class="snooze-wrap">
+						<button
+							type="button"
+							class="icon-btn"
+							aria-label="Snooze"
+							onclick={() => (snoozeOpen = !snoozeOpen)}
+						>
+							<Icon name="time-line" size={16} />
+						</button>
+						{#if snoozeOpen}
+							<button
+								type="button"
+								class="backdrop"
+								aria-label="Close snooze"
+								onclick={() => (snoozeOpen = false)}
+							></button>
+							<SnoozeMenu onPick={snooze} onClose={() => (snoozeOpen = false)} />
+						{/if}
+					</div>
+				{/if}
 				<button type="button" class="icon-btn" aria-label="Move to trash" onclick={trash}>
 					<Icon name="delete-bin-line" size={16} />
 				</button>
@@ -262,6 +359,16 @@
 
 	.toolbar-actions :global(.icon-btn.danger:hover) {
 		color: var(--color-danger);
+	}
+
+	.snooze-wrap {
+		position: relative;
+	}
+
+	.backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 20;
 	}
 
 	.mail-card {

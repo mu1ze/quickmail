@@ -138,13 +138,15 @@ export async function updateEmailStatusByProviderId(
 function viewFilter(view: MailboxView): string {
 	switch (view) {
 		case 'inbox':
-			return "e.deleted_at IS NULL AND e.direction = 'inbound'";
+			return "e.deleted_at IS NULL AND e.direction = 'inbound' AND (e.snoozed_until IS NULL OR e.snoozed_until <= datetime('now'))";
 		case 'sent':
 			return "e.deleted_at IS NULL AND e.direction = 'outbound' AND (e.status IS NULL OR e.status <> 'draft')";
 		case 'drafts':
 			return "e.deleted_at IS NULL AND e.status = 'draft'";
 		case 'starred':
 			return "e.deleted_at IS NULL AND e.is_starred = 1 AND (e.status IS NULL OR e.status <> 'draft')";
+		case 'later':
+			return "e.deleted_at IS NULL AND e.snoozed_until IS NOT NULL AND e.snoozed_until > datetime('now')";
 		case 'trash':
 			return 'e.deleted_at IS NOT NULL';
 	}
@@ -192,6 +194,7 @@ type ThreadMessageRow = {
 	has_attachments: number;
 	domain_id: string | null;
 	status: MailStatus | null;
+	snoozed_until: string | null;
 	created_at: string;
 };
 
@@ -278,7 +281,7 @@ export async function listMailbox(
 	const { results: messages } = await db
 		.prepare(
 			`SELECT m.id, COALESCE(m.thread_id, m.id) AS thread_id, m.direction, m.from_addr, m.to_addr,
-			        m.subject, m.is_read, m.is_starred, m.created_at, m.domain_id, m.status,
+			        m.subject, m.is_read, m.is_starred, m.created_at, m.domain_id, m.status, m.snoozed_until,
 			        substr(COALESCE(m.body_text, ''), 1, 4000) AS body_head,
 			        EXISTS(SELECT 1 FROM email_attachments a WHERE a.email_id = m.id) AS has_attachments
 			 FROM emails m
@@ -342,6 +345,12 @@ function toThreadSummary(messages: ThreadMessageRow[]): ThreadSummary {
 		has_attachments: messages.some((message) => message.has_attachments === 1),
 		domain_id: latest.domain_id,
 		status: latest.status === 'draft' ? null : latest.status,
+		snoozed_until:
+			messages
+				.map((message) => message.snoozed_until)
+				.filter((value): value is string => Boolean(value))
+				.sort()
+				.at(-1) ?? null,
 		created_at: latest.created_at
 	};
 }
@@ -424,11 +433,12 @@ export async function getMailboxCounts(
 	const row = await db
 		.prepare(
 			`SELECT
-				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND direction = 'inbound' THEN ${thread} END) AS inbox,
-				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND direction = 'inbound' AND is_read = 0 THEN ${thread} END) AS inbox_unread,
+				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND direction = 'inbound' AND (snoozed_until IS NULL OR snoozed_until <= datetime('now')) THEN ${thread} END) AS inbox,
+				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND direction = 'inbound' AND is_read = 0 AND (snoozed_until IS NULL OR snoozed_until <= datetime('now')) THEN ${thread} END) AS inbox_unread,
 				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND is_starred = 1 AND (status IS NULL OR status <> 'draft') THEN ${thread} END) AS starred,
 				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND status = 'draft' THEN ${thread} END) AS drafts,
 				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND direction = 'outbound' AND (status IS NULL OR status <> 'draft') THEN ${thread} END) AS sent,
+				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND snoozed_until IS NOT NULL AND snoozed_until > datetime('now') THEN ${thread} END) AS later,
 				COUNT(DISTINCT CASE WHEN deleted_at IS NOT NULL THEN ${thread} END) AS trash
 			 FROM emails WHERE ${scope}`
 		)
@@ -441,6 +451,7 @@ export async function getMailboxCounts(
 		starred: row?.starred ?? 0,
 		drafts: row?.drafts ?? 0,
 		sent: row?.sent ?? 0,
+		later: row?.later ?? 0,
 		trash: row?.trash ?? 0
 	};
 }
@@ -485,6 +496,8 @@ export type MailFlagUpdate = {
 	isRead?: boolean;
 	isStarred?: boolean;
 	trashed?: boolean;
+	/** SQLite datetime; `null` wakes a snoozed conversation. */
+	snoozedUntil?: string | null;
 };
 
 /** Applies list actions (read/unread, star, trash, restore) to a set of rows. */
@@ -509,6 +522,19 @@ export async function setEmailFlags(
 	}
 	if (update.trashed !== undefined) {
 		assignments.push(update.trashed ? "deleted_at = datetime('now')" : 'deleted_at = NULL');
+		if (update.trashed) {
+			assignments.push('snoozed_until = NULL');
+		}
+	}
+	if (update.snoozedUntil !== undefined) {
+		if (update.snoozedUntil) {
+			assignments.push('snoozed_until = ?');
+			bindings.push(update.snoozedUntil);
+			assignments.push('deleted_at = NULL');
+			assignments.push('is_read = 1');
+		} else {
+			assignments.push('snoozed_until = NULL');
+		}
 	}
 
 	if (assignments.length === 0) return 0;
@@ -784,6 +810,61 @@ export async function markThreadRead(
 		)
 		.bind(userId, email.thread_id ?? email.id)
 		.run();
+}
+
+export type RecentContact = {
+	address: string;
+	last_at: string;
+};
+
+/** People you've written to or heard from, for the composer typeahead. */
+export async function listRecentContacts(
+	db: D1Database,
+	userId: string,
+	query: string,
+	exclude: Set<string>
+): Promise<RecentContact[]> {
+	const { results: inbound } = await db
+		.prepare(
+			`SELECT from_addr AS address, created_at AS last_at
+			 FROM emails
+			 WHERE user_id = ? AND direction = 'inbound' AND deleted_at IS NULL
+			 ORDER BY datetime(created_at) DESC
+			 LIMIT 80`
+		)
+		.bind(userId)
+		.all<{ address: string; last_at: string }>();
+
+	const { results: outbound } = await db
+		.prepare(
+			`SELECT to_addr AS address, created_at AS last_at
+			 FROM emails
+			 WHERE user_id = ? AND direction = 'outbound' AND deleted_at IS NULL
+			   AND (status IS NULL OR status <> 'draft')
+			 ORDER BY datetime(created_at) DESC
+			 LIMIT 80`
+		)
+		.bind(userId)
+		.all<{ address: string; last_at: string }>();
+
+	const needle = query.trim().toLowerCase();
+	const best = new Map<string, RecentContact>();
+
+	for (const row of [...inbound, ...outbound]) {
+		for (const part of row.address.split(/[,;]+/)) {
+			const address = part.trim().toLowerCase();
+			if (!address.includes('@') || exclude.has(address)) continue;
+			if (needle && !address.includes(needle)) continue;
+			const existing = best.get(address);
+			if (!existing || existing.last_at < row.last_at) {
+				best.set(address, { address, last_at: row.last_at });
+			}
+		}
+	}
+
+	return [...best.values()]
+		.sort((a, b) => (a.last_at < b.last_at ? 1 : -1))
+		.slice(0, 8);
 }
 
 function truncate(value: string | null): string | null {
