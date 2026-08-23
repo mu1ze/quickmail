@@ -7,6 +7,7 @@
 	import {
 		readThemePreference,
 		setThemePreference,
+		THEME_CHANGE_EVENT,
 		THEME_OPTIONS,
 		type ThemePreference
 	} from '$lib/theme';
@@ -20,6 +21,11 @@
 	let theme = $state<ThemePreference>('system');
 	$effect(() => {
 		theme = readThemePreference();
+		const sync = () => {
+			theme = readThemePreference();
+		};
+		window.addEventListener(THEME_CHANGE_EVENT, sync);
+		return () => window.removeEventListener(THEME_CHANGE_EVENT, sync);
 	});
 
 	function chooseTheme(next: ThemePreference) {

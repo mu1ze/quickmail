@@ -22,6 +22,14 @@ export function resolveTheme(preference: ThemePreference): 'light' | 'dark' {
 	return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
+export const THEME_CHANGE_EVENT = 'mail:theme';
+
+const THEME_CYCLE: ThemePreference[] = ['light', 'dark', 'system'];
+
+export function nextThemePreference(current: ThemePreference): ThemePreference {
+	return THEME_CYCLE[(THEME_CYCLE.indexOf(current) + 1) % THEME_CYCLE.length];
+}
+
 /**
  * Stamps the resolved theme on <html>. The same thing happens in the inline
  * script in app.html so the first paint is already correct.
@@ -33,6 +41,13 @@ export function applyTheme(preference: ThemePreference): void {
 export function setThemePreference(preference: ThemePreference): void {
 	localStorage.setItem(THEME_STORAGE_KEY, preference);
 	applyTheme(preference);
+	window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, { detail: preference }));
+}
+
+function onStoredThemeChange(event: StorageEvent) {
+	if (event.key !== THEME_STORAGE_KEY) return;
+	applyTheme(readThemePreference());
+	window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT));
 }
 
 /** Follows the OS while the preference is "system". Returns an unsubscriber. */
@@ -43,5 +58,9 @@ export function watchSystemTheme(): () => void {
 	};
 
 	query.addEventListener('change', onChange);
-	return () => query.removeEventListener('change', onChange);
+	window.addEventListener('storage', onStoredThemeChange);
+	return () => {
+		query.removeEventListener('change', onChange);
+		window.removeEventListener('storage', onStoredThemeChange);
+	};
 }
