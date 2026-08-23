@@ -2,6 +2,7 @@ import type { D1Database } from '@cloudflare/workers-types';
 import type { Domain, MailAddress } from '$lib/types';
 import { parseMailboxSignature } from '$lib/email-signature';
 import type { EmailProvider, ProviderDomain } from './email-provider';
+import { userMayReceiveOnDomain } from './domain-permissions';
 
 type DomainRow = {
 	id: string;
@@ -335,14 +336,14 @@ export async function resolveInboundRoute(
 		// Honour the order the recipients arrived in, not SQLite's row order.
 		for (const candidate of candidates) {
 			const match = results.find((row) => row.address.toLowerCase() === candidate);
-			if (match) {
-				return {
-					userId: match.user_id,
-					domainId: match.domain_id,
-					address: match.address,
-					viaCatchall: false
-				};
-			}
+			if (!match) continue;
+			if (!(await userMayReceiveOnDomain(db, match.user_id, match.domain_id))) continue;
+			return {
+				userId: match.user_id,
+				domainId: match.domain_id,
+				address: match.address,
+				viaCatchall: false
+			};
 		}
 	}
 
@@ -356,6 +357,9 @@ export async function resolveInboundRoute(
 			.first<{ id: string; catchall_user_id: string | null }>();
 
 		if (domain?.catchall_user_id) {
+			if (!(await userMayReceiveOnDomain(db, domain.catchall_user_id, domain.id))) {
+				continue;
+			}
 			return {
 				userId: domain.catchall_user_id,
 				domainId: domain.id,

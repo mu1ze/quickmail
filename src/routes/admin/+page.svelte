@@ -1,6 +1,8 @@
 <script lang="ts">
 	import Icon from '$lib/components/Icon.svelte';
 	import AddressField from '$lib/components/AddressField.svelte';
+	import Check from '$lib/components/Check.svelte';
+	import type { DomainPermissionFlags } from '$lib/types';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -20,6 +22,22 @@
 
 	let connecting = $state<string | null>(null);
 	let domainError = $state('');
+	let permError = $state('');
+	let permBusy = $state('');
+	let domainPermissions = $state<Record<string, Record<string, DomainPermissionFlags>>>({});
+	let permsHydrated = $state(false);
+	$effect(() => {
+		if (!permsHydrated) {
+			domainPermissions = data.domainPermissions;
+			permsHydrated = true;
+		}
+	});
+
+	const FULL_FLAGS: DomainPermissionFlags = {
+		can_send: true,
+		can_receive: true,
+		can_create_address: true
+	};
 
 	const connectable = $derived(data.available.filter((domain) => !domain.connected));
 
@@ -102,6 +120,48 @@
 
 		const res = await fetch(`/api/domains/${domainId}`, { method: 'DELETE' });
 		if (res.ok) window.location.reload();
+	}
+
+	function flagsFor(userId: string, domainId: string): DomainPermissionFlags {
+		return domainPermissions[userId]?.[domainId] ?? FULL_FLAGS;
+	}
+
+	async function setDomainFlag(
+		userId: string,
+		domainId: string,
+		key: keyof DomainPermissionFlags,
+		value: boolean
+	) {
+		const next = { ...flagsFor(userId, domainId), [key]: value };
+		domainPermissions = {
+			...domainPermissions,
+			[userId]: { ...domainPermissions[userId], [domainId]: next }
+		};
+
+		permBusy = `${userId}:${domainId}`;
+		permError = '';
+		try {
+			const res = await fetch(`/api/admin/users/${userId}/domains`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ domainId, ...next })
+			});
+			const body = await res.json();
+			if (!res.ok) {
+				permError = body.error ?? 'Could not update domain access';
+				return;
+			}
+			if (body.permission) {
+				domainPermissions = {
+					...domainPermissions,
+					[userId]: { ...domainPermissions[userId], [domainId]: body.permission }
+				};
+			}
+		} catch {
+			permError = 'Network error';
+		} finally {
+			permBusy = '';
+		}
 	}
 </script>
 
@@ -259,25 +319,68 @@
 
 		<section class="surface-lg admin-card">
 			<h2><Icon name="group-line" size={18} /> {data.users.length} users</h2>
+			<p class="card-hint">
+				Throttle send, receive, and new addresses per domain. Full access until you turn something
+				off.
+			</p>
 			<ul class="user-list">
 				{#each data.users as user (user.id)}
-					<li class="user-row">
-						<div class="user-avatar">{(user.name[0] ?? '?').toUpperCase()}</div>
-						<div class="min-w-0 flex-1">
-							<p class="user-name">{user.name}</p>
-							<p class="user-email">
-								{data.addresses
-									.filter((address) => address.user_id === user.id)
-									.map((address) => address.address)
-									.join(', ') || user.email}
-							</p>
+					<li class="user-item">
+						<div class="user-row">
+							<div class="user-avatar">{(user.name[0] ?? '?').toUpperCase()}</div>
+							<div class="min-w-0 flex-1">
+								<p class="user-name">{user.name}</p>
+								<p class="user-email">
+									{data.addresses
+										.filter((address) => address.user_id === user.id)
+										.map((address) => address.address)
+										.join(', ') || user.email}
+								</p>
+							</div>
+							{#if user.is_admin}
+								<span class="admin-badge">Admin</span>
+							{/if}
 						</div>
+
 						{#if user.is_admin}
-							<span class="admin-badge">Admin</span>
+							<p class="user-perm-note">Admins can use every connected domain.</p>
+						{:else if data.domains.length > 0}
+							<ul class="perm-list">
+								{#each data.domains as domain (domain.id)}
+									<li class="perm-row">
+										<span class="perm-domain">{domain.name}</span>
+										<div class="perm-flags">
+											<Check
+												label="Send on {domain.name}"
+												caption="send"
+												checked={flagsFor(user.id, domain.id).can_send}
+												disabled={permBusy === `${user.id}:${domain.id}`}
+												onchange={(next) => setDomainFlag(user.id, domain.id, 'can_send', next)}
+											/>
+											<Check
+												label="Receive on {domain.name}"
+												caption="receive"
+												checked={flagsFor(user.id, domain.id).can_receive}
+												disabled={permBusy === `${user.id}:${domain.id}`}
+												onchange={(next) => setDomainFlag(user.id, domain.id, 'can_receive', next)}
+											/>
+											<Check
+												label="Add addresses on {domain.name}"
+												caption="addresses"
+												checked={flagsFor(user.id, domain.id).can_create_address}
+												disabled={permBusy === `${user.id}:${domain.id}`}
+												onchange={(next) =>
+													setDomainFlag(user.id, domain.id, 'can_create_address', next)}
+											/>
+										</div>
+									</li>
+								{/each}
+							</ul>
 						{/if}
 					</li>
 				{/each}
 			</ul>
+			{#if permError}<p class="error">{permError}</p>{/if}
 		</section>
 	</div>
 
@@ -499,6 +602,10 @@
 		margin-top: 1rem;
 	}
 
+	.user-item + .user-item {
+		box-shadow: inset 0 1px 0 var(--color-line);
+	}
+
 	.user-row {
 		display: flex;
 		align-items: center;
@@ -506,8 +613,34 @@
 		padding: 0.75rem 0;
 	}
 
-	.user-row + .user-row {
-		box-shadow: inset 0 1px 0 var(--color-line);
+	.user-perm-note {
+		padding: 0 0 0.75rem 3rem;
+		font-size: 0.75rem;
+		color: var(--color-muted);
+	}
+
+	.perm-list {
+		padding: 0 0 0.75rem 3rem;
+	}
+
+	.perm-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		padding: 0.375rem 0;
+	}
+
+	.perm-domain {
+		font-size: 0.8125rem;
+		color: var(--color-text-secondary);
+	}
+
+	.perm-flags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.375rem;
 	}
 
 	.user-avatar {

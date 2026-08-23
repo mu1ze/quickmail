@@ -38,6 +38,13 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 	// Admins can provision addresses for other users; everyone else gets their own.
 	const userId = locals.user.is_admin && body.userId ? body.userId : locals.user.id;
 
+	if (!locals.user.is_admin) {
+		const flags = locals.domainPermissions[body.domainId];
+		if (flags && !flags.can_create_address) {
+			return json({ error: 'You cannot add addresses on that domain' }, { status: 403 });
+		}
+	}
+
 	try {
 		const address = await createAddress(db, {
 			userId,

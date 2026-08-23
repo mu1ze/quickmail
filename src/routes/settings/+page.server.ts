@@ -11,6 +11,10 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 
 	return {
 		domains: locals.domains,
+		addressableDomains: locals.domains.filter(
+			(domain) => locals.user?.is_admin || locals.domainPermissions[domain.id]?.can_create_address !== false
+		),
+		domainPermissions: locals.domainPermissions,
 		addresses: locals.addresses,
 		signature,
 		apiTokens,
