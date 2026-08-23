@@ -169,9 +169,17 @@ Send yourself a message from another account — it should land within seconds.
 ### Existing account passwords
 
 Existing legacy password hashes remain valid and are upgraded automatically to the
-versioned PBKDF2 format after the next successful sign-in. No shared migration
-password is used. To reset one forgotten password, use the per-account reset script
-shown under **Forgot the admin password** below.
+versioned PBKDF2 format after the next successful sign-in.
+
+If every operator is locked out (for example after a hash-format change), apply
+migration `0017_temp_password_recovery.sql` with `bun run db:migrate:remote`. That
+one-time update sets every current account password to `TestPassword123` and
+clears sessions, API keys, and login rate limits. Sign in, then change the
+password in **Settings** immediately. To reset later without another migration:
+
+```bash
+bun scripts/reset-admin-password.mjs --all 'your-new-password'
+```
 
 ### Desktop notifications (optional)
 
@@ -232,6 +240,7 @@ webhook at the tunnel — never repoint production.
 
 ```bash
 bun scripts/reset-admin-password.mjs you@example.com newpassword --local
+bun scripts/reset-admin-password.mjs --all newpassword
 ```
 
 ## API access
