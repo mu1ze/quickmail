@@ -80,15 +80,6 @@
 	</form>
 
 	<div class="topbar-actions">
-		<a
-			href="/settings"
-			class="icon-btn"
-			aria-label="Settings"
-			class:active={$page.url.pathname === '/settings'}
-		>
-			<Icon name="settings-3-line" size={17} />
-		</a>
-
 		<div class="account">
 			<button
 				type="button"
@@ -204,11 +195,6 @@
 		align-items: center;
 		gap: 0.5rem;
 		margin-left: auto;
-	}
-
-	:global(.topbar .icon-btn.active) {
-		color: var(--color-text);
-		background: var(--color-surface-hover);
 	}
 
 	.account {

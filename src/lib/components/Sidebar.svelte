@@ -3,6 +3,7 @@
 	import Icon from './Icon.svelte';
 	import Logo from './Logo.svelte';
 	import DomainSwitcher from './DomainSwitcher.svelte';
+	import ThemeSwitcher from './ThemeSwitcher.svelte';
 	import type { Domain, MailboxCounts } from '$lib/types';
 
 	let {
@@ -119,6 +120,7 @@
 	</nav>
 
 	<div class="sidebar-foot">
+		<ThemeSwitcher collapsed={collapsed} />
 		<button
 			type="button"
 			class="collapse-btn"
@@ -282,10 +284,17 @@
 
 	.sidebar-foot {
 		display: flex;
-		align-items: center;
+		align-items: stretch;
 		gap: 0.5rem;
 		margin-top: auto;
 		padding-top: 0.75rem;
+		box-shadow: inset 0 1px 0 var(--color-line);
+	}
+
+	.sidebar.collapsed .sidebar-foot {
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
 	}
 
 	.collapse-btn {
@@ -294,12 +303,15 @@
 		justify-content: center;
 		flex-shrink: 0;
 		width: 1.875rem;
-		height: 1.875rem;
-		margin-left: auto;
+		min-height: 1.875rem;
 		border-radius: 0.5rem;
 		color: var(--color-muted);
 		background: var(--color-surface-muted);
 		transition: background 0.15s, color 0.15s;
+	}
+
+	.sidebar.collapsed .collapse-btn {
+		height: 1.875rem;
 	}
 
 	.collapse-btn:hover {
