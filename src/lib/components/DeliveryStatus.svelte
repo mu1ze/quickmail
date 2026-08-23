@@ -27,7 +27,7 @@
 {#if info}
 	<span class="status status-{info.tone}" title={detail ?? info.label}>
 		<Icon name={info.icon} size={12} />
-		{info.label}
+		<span class="label">{info.label}</span>
 	</span>
 {/if}
 

@@ -127,7 +127,7 @@ export type EmailSummary = {
 	from_addr: string;
 	to_addr: string;
 	subject: string;
-	/** First line of the body, shown next to the subject in the list. */
+	/** Opening lines of the body, shown on mailbox cards. */
 	preview: string;
 	is_read: boolean;
 	is_starred: boolean;
@@ -146,10 +146,10 @@ export type ThreadParticipant = {
 	self: boolean;
 };
 
-/** One row in a mailbox list: a whole conversation, not a single message. */
+/** One card in a mailbox grid: a whole conversation, not a single message. */
 export type ThreadSummary = {
 	thread_id: string;
-	/** Newest message in the conversation — what the row opens. */
+	/** Newest message in the conversation — what the card opens. */
 	latest_id: string;
 	/** The original subject, without the accumulated Re: prefixes. */
 	subject: string;

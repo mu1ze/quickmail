@@ -365,7 +365,7 @@ function displayNameFor(address: string): string {
 /** The newest message's own words — quoted history is dropped. */
 function buildPreview(bodyHead: string | null): string {
 	if (!bodyHead) return '';
-	return stripQuotedText(bodyHead).replace(/\s+/g, ' ').trim().slice(0, 180);
+	return stripQuotedText(bodyHead).replace(/\s+/g, ' ').trim().slice(0, 220);
 }
 
 /** Flat message list, used by the JSON API rather than the mailbox UI. */
