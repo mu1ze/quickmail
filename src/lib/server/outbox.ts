@@ -9,6 +9,7 @@ import {
 	getDomainByName,
 	listAddressesForUser
 } from './domains';
+import { getDomainPermissionFlags } from './domain-permissions';
 import { parseEmailAddress } from './email-address';
 import { getEmailSignature } from './email-signature';
 import { stripHtml } from './html';
@@ -49,6 +50,11 @@ export async function resolveFromAddress(
 		throw new Error('No sending address configured. Add one in Settings first.');
 	}
 
+	const permission = await getDomainPermissionFlags(db, user, address.domain_id);
+	if (!permission.can_send) {
+		throw new Error(`You cannot send mail from ${address.domain_name}`);
+	}
+
 	return address;
 }
 
@@ -71,7 +77,9 @@ export async function resolveReplyFromAddress(
 
 	const owned = await listAddressesForUser(db, user.id);
 	const exact = owned.find((address) => address.address.toLowerCase() === mailbox);
-	if (exact) return exact;
+	if (exact && (await getDomainPermissionFlags(db, user, exact.domain_id)).can_send) {
+		return exact;
+	}
 
 	const domainName = mailbox.split('@')[1];
 	const domain = domainName ? await getDomainByName(db, domainName) : null;
@@ -80,7 +88,12 @@ export async function resolveReplyFromAddress(
 		(domain.catchall_user_id === user.id ||
 			owned.some((address) => address.domain_id === domain.id));
 
-	if (domain && canSendOnDomain && mailbox.includes('@')) {
+	if (
+		domain &&
+		canSendOnDomain &&
+		mailbox.includes('@') &&
+		(await getDomainPermissionFlags(db, user, domain.id)).can_send
+	) {
 		return {
 			id: `reply:${mailbox}`,
 			user_id: user.id,
@@ -94,7 +107,19 @@ export async function resolveReplyFromAddress(
 		};
 	}
 
-	return getDefaultAddress(db, user.id);
+	for (const address of owned) {
+		if (address.is_default && (await getDomainPermissionFlags(db, user, address.domain_id)).can_send) {
+			return address;
+		}
+	}
+
+	for (const address of owned) {
+		if ((await getDomainPermissionFlags(db, user, address.domain_id)).can_send) {
+			return address;
+		}
+	}
+
+	return null;
 }
 
 /** Send through the configured provider, then record it in the Sent folder. */
@@ -106,6 +131,10 @@ export async function sendAndStore(
 ): Promise<{ emailId: string; providerId: string; from: MailAddress }> {
 	// resolveFromAddress scopes the lookup to this user, so ownership is implied.
 	const from = input.fromAddress ?? (await resolveFromAddress(env.DB, user, input.fromAddressId));
+	const permission = await getDomainPermissionFlags(env.DB, user, from.domain_id);
+	if (!permission.can_send) {
+		throw new Error(`You cannot send mail from ${from.domain_name}`);
+	}
 
 	const bodyHtml = input.html?.trim() || null;
 	const bodyText = input.text?.trim() || (bodyHtml ? stripHtml(bodyHtml) : '');

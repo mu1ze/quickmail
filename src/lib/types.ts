@@ -41,6 +41,13 @@ export type Domain = {
 	synced_at: string | null;
 };
 
+/** Per-user throttle on a connected domain. Missing row = all true. Admins ignore this. */
+export type DomainPermissionFlags = {
+	can_send: boolean;
+	can_receive: boolean;
+	can_create_address: boolean;
+};
+
 /** Which mail backend this deploy is configured to use. */
 export type EmailProviderKind = 'resend' | 'cloudflare';
 

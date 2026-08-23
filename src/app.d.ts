@@ -1,7 +1,7 @@
 import type { D1Database, ExecutionContext, R2Bucket } from '@cloudflare/workers-types';
 import type { ApiScope, AuthMethod } from '$lib/server/api-access';
 import type { CloudflareSendEmailBinding } from '$lib/server/providers/cloudflare-provider';
-import type { Domain, MailAddress, User } from '$lib/types';
+import type { Domain, DomainPermissionFlags, MailAddress, User } from '$lib/types';
 
 declare global {
 	namespace App {
@@ -37,6 +37,8 @@ declare global {
 			apiTokenId: string | null;
 			/** Connected domains, loaded once per request for the switcher. */
 			domains: Domain[];
+			/** Effective send/receive/address flags for each connected domain. */
+			domainPermissions: Record<string, DomainPermissionFlags>;
 			/** The signed-in user's sending identities. */
 			addresses: MailAddress[];
 			/** Active domain filter, or null for the combined inbox. */

@@ -12,6 +12,9 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 	const providerKind = safeEmailProviderKind(platform);
 	const base = {
 		domains: locals.domains,
+		addressableDomains: locals.domains.filter(
+			(domain) => locals.user?.is_admin || locals.domainPermissions[domain.id]?.can_create_address !== false
+		),
 		addresses: locals.addresses,
 		isAdmin: locals.user?.is_admin ?? false,
 		providerKind

@@ -216,6 +216,14 @@ export function authorizeApiRequest(input: {
 		};
 	}
 
+	if (isPrefix(input.pathname, '/api/settings/password')) {
+		return {
+			ok: false,
+			status: 403,
+			error: 'API keys cannot change passwords. Sign in with a browser session.'
+		};
+	}
+
 	const method = input.method.toUpperCase();
 	const rule = BEARER_ROUTES.find((entry) => entry.method === method && entry.match(input.pathname));
 	if (!rule) {

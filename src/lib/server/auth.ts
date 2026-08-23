@@ -21,6 +21,14 @@ function mapUser(row: UserRow): User {
 	};
 }
 
+export const MIN_PASSWORD_LENGTH = 8;
+
+export function assertPasswordLength(password: string): void {
+	if (password.length < MIN_PASSWORD_LENGTH) {
+		throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+	}
+}
+
 export async function countUsers(db: D1Database): Promise<number> {
 	const row = await db.prepare('SELECT COUNT(*) AS count FROM users').first<{ count: number }>();
 	return row?.count ?? 0;
@@ -44,6 +52,18 @@ export async function getUserById(db: D1Database, id: string): Promise<User | nu
 	return row ? mapUser(row) : null;
 }
 
+export async function getUserAuthById(
+	db: D1Database,
+	id: string
+): Promise<(User & { password_hash: string }) | null> {
+	const row = await db
+		.prepare('SELECT id, email, name, password_hash, is_admin, created_at FROM users WHERE id = ?')
+		.bind(id)
+		.first<UserRow & { password_hash: string }>();
+
+	return row ? { ...mapUser(row), password_hash: row.password_hash } : null;
+}
+
 export async function listUsers(db: D1Database): Promise<User[]> {
 	const { results } = await db
 		.prepare('SELECT id, email, name, is_admin, created_at FROM users ORDER BY created_at ASC')
@@ -63,6 +83,8 @@ export async function createUser(
 	if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
 		throw new Error('Enter a valid email address');
 	}
+
+	assertPasswordLength(input.password);
 
 	const existing = await getUserByEmail(db, email);
 	if (existing) {
@@ -131,9 +153,7 @@ export async function setUserPassword(
 	userId: string,
 	password: string
 ): Promise<void> {
-	if (password.length < 8) {
-		throw new Error('Password must be at least 8 characters');
-	}
+	assertPasswordLength(password);
 
 	const password_hash = await hashPassword(password);
 	const result = await db
@@ -149,6 +169,55 @@ export async function setUserPassword(
 	await db.batch([
 		db.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId),
 		db.prepare('DELETE FROM api_tokens WHERE user_id = ?').bind(userId)
+	]);
+}
+
+/**
+ * Signed-in password change. Other sessions and API keys are revoked; this
+ * browser session stays so the user is not bounced to /login.
+ */
+export async function changeOwnPassword(
+	db: D1Database,
+	input: {
+		userId: string;
+		currentPassword: string;
+		newPassword: string;
+		currentSessionToken: string;
+	}
+): Promise<void> {
+	assertPasswordLength(input.newPassword);
+
+	const user = await getUserAuthById(db, input.userId);
+	if (!user) {
+		throw new Error('User not found');
+	}
+
+	const valid = await verifyPassword(input.currentPassword, user.password_hash);
+	if (!valid) {
+		throw new Error('Current password is incorrect');
+	}
+
+	if (input.currentPassword === input.newPassword) {
+		throw new Error('Pick a different password');
+	}
+
+	const password_hash = await hashPassword(input.newPassword);
+	const currentHash = await hashToken(input.currentSessionToken);
+
+	const result = await db
+		.prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+		.bind(password_hash, input.userId)
+		.run();
+
+	if ((result.meta.changes ?? 0) === 0) {
+		throw new Error('User not found');
+	}
+
+	await db.batch([
+		db
+			.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?')
+			.bind(input.userId, currentHash),
+		db.prepare('DELETE FROM api_tokens WHERE user_id = ?').bind(input.userId)
 	]);
 }
 

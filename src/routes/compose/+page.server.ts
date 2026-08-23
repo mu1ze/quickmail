@@ -8,5 +8,9 @@ export const load: PageServerLoad = async ({ locals, platform, url }) => {
 	const draft =
 		draftId && db && locals.user ? await getDraft(db, locals.user.id, draftId) : null;
 
-	return { addresses: locals.addresses, draft };
+	const addresses = locals.addresses.filter(
+		(address) => locals.domainPermissions[address.domain_id]?.can_send !== false
+	);
+
+	return { addresses, draft };
 };

@@ -33,6 +33,49 @@
 		setThemePreference(next);
 	}
 
+	let currentPassword = $state('');
+	let newPassword = $state('');
+	let confirmPassword = $state('');
+	let passwordBusy = $state(false);
+	let passwordError = $state('');
+	let passwordSaved = $state(false);
+
+	async function changePassword(event: SubmitEvent) {
+		event.preventDefault();
+		passwordBusy = true;
+		passwordError = '';
+		passwordSaved = false;
+
+		if (newPassword !== confirmPassword) {
+			passwordError = 'New passwords do not match';
+			passwordBusy = false;
+			return;
+		}
+
+		try {
+			const res = await fetch('/api/settings/password', {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ currentPassword, newPassword })
+			});
+			const body = await res.json();
+			if (!res.ok) {
+				passwordError = body.error ?? 'Could not change password';
+				return;
+			}
+
+			currentPassword = '';
+			newPassword = '';
+			confirmPassword = '';
+			passwordSaved = true;
+			tokens = [];
+		} catch {
+			passwordError = 'Network error';
+		} finally {
+			passwordBusy = false;
+		}
+	}
+
 	let signature = $state(untrack(() => data.signature));
 	let signatureBusy = $state(false);
 	let signatureError = $state('');
@@ -191,12 +234,14 @@
 	}
 
 	$effect(() => {
-		if (!domainId && data.domains[0]) {
-			domainId = data.domains[0].id;
+		if (!domainId && data.addressableDomains[0]) {
+			domainId = data.addressableDomains[0].id;
 		}
 	});
 
-	const selectedDomain = $derived(data.domains.find((domain) => domain.id === domainId));
+	const selectedDomain = $derived(
+		data.addressableDomains.find((domain) => domain.id === domainId)
+	);
 
 	async function addAddress(event: SubmitEvent) {
 		event.preventDefault();
@@ -334,6 +379,60 @@
 		</div>
 	</section>
 
+	<section class="surface-lg card">
+		<h2><Icon name="lock-password-line" size={18} /> Password</h2>
+		<p class="card-hint">
+			Other signed-in devices will be signed out. API keys are revoked and must be created again.
+		</p>
+
+		<form class="password-form" onsubmit={changePassword}>
+			<label class="field-title" for="current-password">Current password</label>
+			<input
+				id="current-password"
+				type="password"
+				class="text-input"
+				bind:value={currentPassword}
+				required
+				autocomplete="current-password"
+			/>
+
+			<label class="field-title" for="new-password">New password</label>
+			<input
+				id="new-password"
+				type="password"
+				class="text-input"
+				bind:value={newPassword}
+				required
+				minlength="8"
+				autocomplete="new-password"
+			/>
+
+			<label class="field-title" for="confirm-password">Confirm new password</label>
+			<input
+				id="confirm-password"
+				type="password"
+				class="text-input"
+				bind:value={confirmPassword}
+				required
+				minlength="8"
+				autocomplete="new-password"
+			/>
+
+			<div class="password-actions">
+				<button
+					type="submit"
+					class="btn-primary"
+					disabled={passwordBusy || !currentPassword || !newPassword || !confirmPassword}
+				>
+					{passwordBusy ? 'Saving…' : 'Change password'}
+				</button>
+			</div>
+
+			{#if passwordError}<p class="error">{passwordError}</p>{/if}
+			{#if passwordSaved}<p class="saved">Password updated</p>{/if}
+		</form>
+	</section>
+
 	<DesktopNotifications configured={data.push.configured} publicKey={data.push.publicKey} />
 
 	<section class="surface-lg card">
@@ -419,29 +518,36 @@
 			{/each}
 		</ul>
 
-		<form class="add-form" onsubmit={addAddress}>
-			<div class="add-field">
-				<label class="field-title" for="new-display-name">From name</label>
-				<input
-					id="new-display-name"
-					type="text"
-					bind:value={displayName}
-					placeholder="Support"
-					class="name-add-input"
-					autocomplete="off"
-				/>
-				<AddressField
-					bind:localPart
-					bind:domainId
-					domains={data.domains}
-					placeholder="another"
-					label="Address"
-				/>
-			</div>
-			<button type="submit" class="btn-primary" disabled={busy || !localPart.trim()}>
-				{busy ? 'Adding…' : 'Add'}
-			</button>
-		</form>
+		{#if data.addressableDomains.length > 0}
+			<form class="add-form" onsubmit={addAddress}>
+				<div class="add-field">
+					<label class="field-title" for="new-display-name">From name</label>
+					<input
+						id="new-display-name"
+						type="text"
+						bind:value={displayName}
+						placeholder="Support"
+						class="name-add-input"
+						autocomplete="off"
+					/>
+					<AddressField
+						bind:localPart
+						bind:domainId
+						domains={data.addressableDomains}
+						placeholder="another"
+						label="Address"
+					/>
+				</div>
+				<button type="submit" class="btn-primary" disabled={busy || !localPart.trim()}>
+					{busy ? 'Adding…' : 'Add'}
+				</button>
+			</form>
+		{:else}
+			<p class="hint">
+				<Icon name="information-line" size={14} />
+				Your admin has not granted permission to add addresses.
+			</p>
+		{/if}
 
 		{#if selectedDomain && !selectedDomain.receiving_enabled}
 			<p class="hint">
@@ -460,8 +566,16 @@
 				<li class="domain-row">
 					<span class="domain-name">{domain.name}</span>
 					<span class="caps">
-						<span class="chip" class:chip-on={domain.sending_enabled}>send</span>
-						<span class="chip" class:chip-on={domain.receiving_enabled}>receive</span>
+						<span
+							class="chip"
+							class:chip-on={domain.sending_enabled &&
+								data.domainPermissions[domain.id]?.can_send !== false}>send</span
+						>
+						<span
+							class="chip"
+							class:chip-on={domain.receiving_enabled &&
+								data.domainPermissions[domain.id]?.can_receive !== false}>receive</span
+						>
 						<span class="chip" class:chip-ok={domain.status === 'verified'}>{domain.status}</span>
 					</span>
 				</li>
@@ -632,6 +746,37 @@
 
 	.signature-form {
 		margin-top: 1rem;
+	}
+
+	.password-form {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin-top: 1rem;
+	}
+
+	.password-form .field-title {
+		margin-top: 0.25rem;
+	}
+
+	.password-form .text-input {
+		width: 100%;
+		padding: 0.625rem 0.875rem;
+		border-radius: 0.625rem;
+		font-size: 0.875rem;
+		background: var(--color-surface-muted);
+		box-shadow: inset 0 0 0 1px var(--color-line);
+		outline: none;
+	}
+
+	.password-form .text-input:focus {
+		box-shadow: inset 0 0 0 1px var(--color-focus-line), 0 0 0 3px var(--color-focus-halo);
+	}
+
+	.password-actions {
+		display: flex;
+		justify-content: flex-end;
+		margin-top: 0.5rem;
 	}
 
 	.signature-input {

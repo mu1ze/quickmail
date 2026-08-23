@@ -4,11 +4,11 @@ import { authorizeApiRequest, authorizeMailAction } from './api-access';
 import { parseScopes } from './api-tokens';
 
 describe('API key access', () => {
-	test('sessions are unrestricted', () => {
+	test('sessions can change their own password', () => {
 		assert.deepEqual(
 			authorizeApiRequest({
-				pathname: '/api/apikeys',
-				method: 'POST',
+				pathname: '/api/settings/password',
+				method: 'PATCH',
 				authMethod: 'session',
 				scopes: []
 			}),
@@ -50,6 +50,15 @@ describe('API key access', () => {
 				method: 'GET',
 				authMethod: 'api_token',
 				scopes: ['mail:read', 'mail:send']
+			}).ok,
+			false
+		);
+		assert.equal(
+			authorizeApiRequest({
+				pathname: '/api/settings/password',
+				method: 'PATCH',
+				authMethod: 'api_token',
+				scopes: ['mail:read', 'mail:send', 'admin']
 			}).ok,
 			false
 		);

@@ -3,6 +3,11 @@ import { authorizeApiRequest } from '$lib/server/api-access';
 import { getUserByApiToken, readBearerToken } from '$lib/server/api-tokens';
 import { countUsers, getUserFromSession, readSessionToken } from '$lib/server/auth';
 import { DOMAIN_COOKIE } from '$lib/server/constants';
+import {
+	domainIsVisibleToUser,
+	listDomainPermissionRows,
+	permissionMapForUser
+} from '$lib/server/domain-permissions';
 import { listAddressesForUser, listDomains } from '$lib/server/domains';
 
 const PUBLIC_PREFIXES = [
@@ -32,6 +37,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.apiScopes = [];
 	event.locals.apiTokenId = null;
 	event.locals.domains = [];
+	event.locals.domainPermissions = {};
 	event.locals.addresses = [];
 	event.locals.activeDomainId = null;
 
@@ -62,20 +68,37 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	if (db && event.locals.user) {
-		const [domains, addresses] = await Promise.all([
+		const [allDomains, addresses, permissionRows] = await Promise.all([
 			listDomains(db),
-			listAddressesForUser(db, event.locals.user.id)
+			listAddressesForUser(db, event.locals.user.id),
+			event.locals.user.is_admin
+				? Promise.resolve(new Map())
+				: listDomainPermissionRows(db, event.locals.user.id)
 		]);
 
-		event.locals.domains = domains;
+		const domainPermissions = permissionMapForUser(
+			event.locals.user,
+			allDomains,
+			permissionRows
+		);
+		const ownedDomainIds = new Set(addresses.map((address) => address.domain_id));
+
+		event.locals.domainPermissions = domainPermissions;
 		event.locals.addresses = addresses;
+		event.locals.domains = event.locals.user.is_admin
+			? allDomains
+			: allDomains.filter((domain) =>
+					domainIsVisibleToUser(domain.id, domainPermissions[domain.id], ownedDomainIds)
+				);
 
 		// Scripts pass `?domain=`; the dashboard uses a cookie.
 		const requested = pathname.startsWith('/api/')
 			? event.url.searchParams.get('domain')
 			: event.cookies.get(DOMAIN_COOKIE);
 		event.locals.activeDomainId =
-			requested && domains.some((domain) => domain.id === requested) ? requested : null;
+			requested && event.locals.domains.some((domain) => domain.id === requested)
+				? requested
+				: null;
 	}
 
 	if (pathname.startsWith('/api/')) {

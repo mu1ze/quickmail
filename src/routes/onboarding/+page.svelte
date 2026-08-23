@@ -24,16 +24,19 @@
 
 	// Seed the picker with the first connected domain once data is available.
 	$effect(() => {
-		if (!addressDomainId && data.domains[0]) {
-			addressDomainId = data.domains[0].id;
+		if (!addressDomainId && data.addressableDomains[0]) {
+			addressDomainId = data.addressableDomains[0].id;
 		}
 	});
 
 	// Step 1 only appears for an admin who hasn't connected anything yet.
 	const needsDomain = $derived(data.domains.length === 0);
+	const canClaim = $derived(data.addressableDomains.length > 0);
 	const connectable = $derived(data.available.filter((domain) => !domain.connected));
 	const cleanLocal = $derived(localPart.trim().toLowerCase().replace(/@.*$/, ''));
-	const activeDomain = $derived(data.domains.find((domain) => domain.id === addressDomainId));
+	const activeDomain = $derived(
+		data.addressableDomains.find((domain) => domain.id === addressDomainId)
+	);
 
 	async function connectDomains() {
 		if (selected.length === 0) {
@@ -96,7 +99,9 @@
 	title={needsDomain ? 'Connect a domain' : 'Claim your address'}
 	subtitle={needsDomain
 		? onboardingSubtitle(data.providerKind)
-		: "Choose the address you'll send and receive mail from."}
+		: canClaim
+			? "Choose the address you'll send and receive mail from."
+			: 'Waiting on your admin'}
 	partner={needsDomain}
 	partnerKind={data.providerKind}
 	partnerCaption={`Mail + ${providerName(data.providerKind)}`}
@@ -146,9 +151,24 @@
 					: `Continue with ${selected.length || 'no'} domain${selected.length === 1 ? '' : 's'}`}
 			</button>
 		{/if}
+	{:else if !canClaim}
+		<div class="surface-lg notice">
+			<Icon name="time-line" size={18} />
+			<div>
+				<p class="notice-title">Waiting on your admin</p>
+				<p class="notice-body">
+					You don't have permission to claim an address on a connected domain yet. Ask an admin
+					to grant access.
+				</p>
+			</div>
+		</div>
 	{:else}
 		<form class="surface-lg address-card" onsubmit={claimAddress}>
-			<AddressField bind:localPart bind:domainId={addressDomainId} domains={data.domains} />
+			<AddressField
+				bind:localPart
+				bind:domainId={addressDomainId}
+				domains={data.addressableDomains}
+			/>
 
 			{#if cleanLocal && activeDomain}
 				<p class="preview">
