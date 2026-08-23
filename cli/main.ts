@@ -18,7 +18,8 @@ Usage:
 
 Mail:
   quickmail inbox [--page N] [--unread] [--domain ID]
-  quickmail search <query> [--view inbox|sent|drafts|starred|trash]
+  quickmail later [--page N]
+  quickmail search <query> [--view inbox|sent|drafts|starred|later|trash]
   quickmail read <thread-or-message-id>
   quickmail send --to <addr> --subject <text> [--body <text>] [--from <address-id>]
   quickmail reply <id> [--body <text>]
@@ -164,12 +165,13 @@ function mailboxView(value: string | undefined): MailboxView {
 		case 'starred':
 		case 'drafts':
 		case 'sent':
+		case 'later':
 		case 'trash':
 			return value;
 		case undefined:
 			return 'inbox';
 		default:
-			throw new Error('view must be inbox, sent, drafts, starred, or trash');
+			throw new Error('view must be inbox, sent, drafts, starred, later, or trash');
 	}
 }
 
@@ -217,6 +219,16 @@ async function run(argv: string[]): Promise<number> {
 				page: Number(flagString(flags, 'page')) || 1,
 				unread: flagBool(flags, 'unread'),
 				domain: flagString(flags, 'domain')
+			});
+			if (json) printJson(page);
+			else printThreads(page);
+			return 0;
+		}
+		case 'later': {
+			const client = await clientFromConfig();
+			const page = await client.listThreads({
+				view: 'later',
+				page: Number(flagString(flags, 'page')) || 1
 			});
 			if (json) printJson(page);
 			else printThreads(page);

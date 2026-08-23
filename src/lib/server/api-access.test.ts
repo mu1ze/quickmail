@@ -164,6 +164,27 @@ describe('API key access', () => {
 		assert.equal(parseScopes(['mail:write'], true), null);
 	});
 
+	test('a read key can look up recent contacts', () => {
+		assert.deepEqual(
+			authorizeApiRequest({
+				pathname: '/api/contacts',
+				method: 'GET',
+				authMethod: 'api_token',
+				scopes: ['mail:read']
+			}),
+			{ ok: true }
+		);
+		assert.equal(
+			authorizeApiRequest({
+				pathname: '/api/contacts',
+				method: 'GET',
+				authMethod: 'api_token',
+				scopes: ['mail:send']
+			}).ok,
+			false
+		);
+	});
+
 	test('POST /api/mail/actions is allowed for read or send keys', () => {
 		assert.deepEqual(
 			authorizeApiRequest({
@@ -239,6 +260,14 @@ describe('API key access', () => {
 		);
 		assert.deepEqual(
 			authorizeMailAction({ action: 'unstar', authMethod: 'api_token', scopes: ['mail:read'] }),
+			{ ok: true }
+		);
+		assert.deepEqual(
+			authorizeMailAction({ action: 'snooze', authMethod: 'api_token', scopes: ['mail:read'] }),
+			{ ok: true }
+		);
+		assert.deepEqual(
+			authorizeMailAction({ action: 'unsnooze', authMethod: 'api_token', scopes: ['mail:read'] }),
 			{ ok: true }
 		);
 

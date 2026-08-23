@@ -15,6 +15,7 @@ const WHOLE_MAILBOX: MailAction[] = ['read-all', 'empty-trash'];
 type ActionBody = {
 	action?: MailAction;
 	ids?: string[];
+	until?: string;
 };
 
 export const POST: RequestHandler = async ({ request, locals, platform }) => {
@@ -84,6 +85,17 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 			break;
 		case 'empty-trash':
 			affected = await emptyTrash(db, platform?.env.ATTACHMENTS, locals.user.id);
+			break;
+		case 'snooze': {
+			const until = typeof body.until === 'string' ? body.until.trim() : '';
+			if (!until) {
+				return json({ error: 'Snooze needs a time' }, { status: 400 });
+			}
+			affected = await setEmailFlags(db, locals.user.id, ids, { snoozedUntil: until });
+			break;
+		}
+		case 'unsnooze':
+			affected = await setEmailFlags(db, locals.user.id, ids, { snoozedUntil: null });
 			break;
 		default: {
 			const _never: never = action;

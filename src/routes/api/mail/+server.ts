@@ -28,6 +28,7 @@ function mailboxView(url: URL): MailboxView {
 		case 'starred':
 		case 'drafts':
 		case 'sent':
+		case 'later':
 		case 'trash':
 			return view;
 		default:

@@ -63,6 +63,11 @@ const BEARER_ROUTES: RouteRule[] = [
 	},
 	{
 		method: 'GET',
+		match: (pathname) => pathname === '/api/contacts',
+		scopes: ['mail:read']
+	},
+	{
+		method: 'GET',
 		match: (pathname) => pathname === '/api/addresses',
 		scopes: ['mail:read', 'mail:send', 'admin']
 	},
@@ -133,7 +138,9 @@ export const MAIL_ACTIONS = [
 	'restore',
 	'delete',
 	'read-all',
-	'empty-trash'
+	'empty-trash',
+	'snooze',
+	'unsnooze'
 ] as const;
 
 export type MailAction = (typeof MAIL_ACTIONS)[number];
@@ -169,6 +176,8 @@ export function authorizeMailAction(input: {
 		case 'unread':
 		case 'star':
 		case 'unstar':
+		case 'snooze':
+		case 'unsnooze':
 			if (!input.scopes.includes('mail:read')) {
 				return { ok: false, status: 403, error: 'This API key needs mail:read.' };
 			}

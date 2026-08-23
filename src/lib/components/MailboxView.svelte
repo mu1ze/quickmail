@@ -5,8 +5,12 @@
 	import Check from './Check.svelte';
 	import EmptyState from './EmptyState.svelte';
 	import DeliveryStatus from './DeliveryStatus.svelte';
+	import SnoozeMenu from './SnoozeMenu.svelte';
 	import HoldToConfirm from '$lib/interior/HoldToConfirm.svelte';
 	import { formatRelativeDate } from '$lib/utils/date';
+	import { formatSnoozeUntil } from '$lib/snooze';
+	import { isGoChordArmed, isTypingTarget } from '$lib/shortcuts';
+	import { showUndo } from '$lib/undo';
 	import type { MailboxFilters, MailboxPage, MailboxView, ThreadSummary } from '$lib/types';
 
 	let {
@@ -24,6 +28,7 @@
 		starred: { title: 'Starred', icon: 'star-line', empty: 'No starred messages' },
 		drafts: { title: 'Drafts', icon: 'draft-line', empty: 'No drafts saved' },
 		sent: { title: 'Sent', icon: 'send-plane-line', empty: 'Nothing sent yet' },
+		later: { title: 'Later', icon: 'time-line', empty: 'Nothing waiting' },
 		trash: { title: 'Trash', icon: 'delete-bin-line', empty: 'Trash is empty' }
 	};
 
@@ -36,10 +41,16 @@
 	let filterOpen = $state(false);
 	let moreOpen = $state(false);
 	let selectMenuOpen = $state(false);
+	let focused = $state(0);
+	let snoozeFor = $state<string | null>(null);
+	let bulkSnoozeOpen = $state(false);
 
 	$effect(() => {
 		items = mailbox.threads;
 		selected = [];
+		snoozeFor = null;
+		bulkSnoozeOpen = false;
+		if (focused >= mailbox.threads.length) focused = Math.max(0, mailbox.threads.length - 1);
 	});
 
 	const allSelected = $derived(items.length > 0 && selected.length === items.length);
@@ -91,21 +102,114 @@
 	}
 
 	/** One entry point for every list action, so the UI always refreshes after. */
-	async function run(action: string, ids: string[] = selected) {
+	async function run(
+		action: string,
+		ids: string[] = selected,
+		extra: Record<string, unknown> = {}
+	) {
 		if (busy) return;
 		busy = true;
+		const target = ids;
 		try {
 			await fetch('/api/mail/actions', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ action, ids })
+				body: JSON.stringify({ action, ids: target, ...extra })
 			});
 			selected = [];
+			snoozeFor = null;
+			bulkSnoozeOpen = false;
+			if (action === 'trash') {
+				const n = target.length;
+				showUndo(n === 1 ? 'Moved to trash' : `${n} moved to trash`, () =>
+					revert('restore', target)
+				);
+			} else if (action === 'snooze') {
+				showUndo('Snoozed until later', () => revert('unsnooze', target));
+			}
 			await invalidateAll();
 		} finally {
 			busy = false;
 			moreOpen = false;
 		}
+	}
+
+	async function revert(action: string, ids: string[]) {
+		await fetch('/api/mail/actions', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ action, ids })
+		});
+		await invalidateAll();
+	}
+
+	function focusedIds(): string[] {
+		if (selected.length > 0) return selected;
+		const thread = items[focused];
+		return thread ? [thread.latest_id] : [];
+	}
+
+	function onListKeydown(event: KeyboardEvent) {
+		if (
+			isTypingTarget(event.target) ||
+			isGoChordArmed() ||
+			document.querySelector('[data-overlay]')
+		) {
+			return;
+		}
+		if (items.length === 0) return;
+
+		const key = event.key;
+		if (key === 'j' || key === 'ArrowDown') {
+			event.preventDefault();
+			focused = Math.min(items.length - 1, focused + 1);
+			return;
+		}
+		if (key === 'k' || key === 'ArrowUp') {
+			event.preventDefault();
+			focused = Math.max(0, focused - 1);
+			return;
+		}
+		if (key === 'x') {
+			event.preventDefault();
+			const id = items[focused]?.latest_id;
+			if (id) toggle(id);
+			return;
+		}
+		if (key === 'Enter' || key === 'o') {
+			event.preventDefault();
+			const thread = items[focused];
+			if (thread) goto(href(thread));
+			return;
+		}
+		if (key === 'e' || key === '#') {
+			event.preventDefault();
+			const ids = focusedIds();
+			if (view === 'trash') void run('delete', ids);
+			else void run('trash', ids);
+			return;
+		}
+		if (key === 's') {
+			event.preventDefault();
+			const thread = items[focused];
+			if (thread) void toggleStar(thread);
+			return;
+		}
+		if (key === 'u') {
+			event.preventDefault();
+			const thread = items[focused];
+			if (thread) void run(thread.is_read ? 'unread' : 'read', focusedIds());
+			return;
+		}
+		if (key === 'b') {
+			event.preventDefault();
+			const id = items[focused]?.latest_id;
+			if (id) snoozeFor = snoozeFor === id ? null : id;
+		}
+	}
+
+	function snoozeIds(ids: string[], until: string) {
+		void run('snooze', ids, { until });
 	}
 
 	async function toggleStar(thread: ThreadSummary) {
@@ -148,6 +252,8 @@
 	);
 	const rangeEnd = $derived(Math.min(mailbox.page * mailbox.pageSize, mailbox.total));
 </script>
+
+<svelte:window onkeydown={onListKeydown} />
 
 <section class="mailbox">
 	<header class="toolbar">
@@ -257,10 +363,33 @@
 							<Icon name="delete-bin-2-line" size={16} />
 						</button>
 					{:else}
+						<div class="snooze-wrap">
+							<button
+								type="button"
+								class="tool-btn"
+								title="Snooze (b)"
+								disabled={busy}
+								onclick={() => (bulkSnoozeOpen = !bulkSnoozeOpen)}
+							>
+								<Icon name="time-line" size={16} />
+							</button>
+							{#if bulkSnoozeOpen}
+								<button
+									type="button"
+									class="backdrop"
+									aria-label="Close snooze"
+									onclick={() => (bulkSnoozeOpen = false)}
+								></button>
+								<SnoozeMenu
+									onPick={(until) => snoozeIds(selected, until)}
+									onClose={() => (bulkSnoozeOpen = false)}
+								/>
+							{/if}
+						</div>
 						<button
 							type="button"
 							class="tool-btn"
-							title="Move to trash"
+							title="Move to trash (e)"
 							disabled={busy}
 							onclick={() => run('trash')}
 						>
@@ -431,11 +560,12 @@
 			/>
 		{:else}
 			<ul>
-				{#each items as thread (thread.thread_id)}
+				{#each items as thread, index (thread.thread_id)}
 					<li
 						class="row"
 						class:unread={!thread.is_read}
 						class:checked={selected.includes(thread.latest_id)}
+						class:focused={index === focused}
 					>
 						<Check
 							label={`Select conversation with ${people(thread)}`}
@@ -475,12 +605,19 @@
 								{#if view === 'sent' && thread.status}
 									<DeliveryStatus status={thread.status} />
 								{/if}
+								{#if view === 'later' && thread.snoozed_until}
+									<Icon name="time-line" size={14} />
+								{/if}
 								{#if thread.has_attachments}
 									<Icon name="attachment-2" size={14} />
 								{/if}
 							</span>
 
-							<span class="date">{formatRelativeDate(thread.created_at)}</span>
+							<span class="date">
+								{view === 'later' && thread.snoozed_until
+									? formatSnoozeUntil(thread.snoozed_until)
+									: formatRelativeDate(thread.created_at)}
+							</span>
 						</a>
 
 						<span class="row-actions">
@@ -501,6 +638,23 @@
 								>
 									<Icon name="delete-bin-2-line" size={15} />
 								</button>
+							{:else if view === 'later'}
+								<button
+									type="button"
+									class="tool-btn"
+									title="Move to inbox"
+									onclick={() => run('unsnooze', [thread.latest_id])}
+								>
+									<Icon name="inbox-line" size={15} />
+								</button>
+								<button
+									type="button"
+									class="tool-btn"
+									title="Move to trash"
+									onclick={() => run('trash', [thread.latest_id])}
+								>
+									<Icon name="delete-bin-line" size={15} />
+								</button>
 							{:else}
 								<button
 									type="button"
@@ -510,10 +664,33 @@
 								>
 									<Icon name={thread.is_read ? 'mail-line' : 'mail-open-line'} size={15} />
 								</button>
+								<div class="snooze-wrap">
+									<button
+										type="button"
+										class="tool-btn"
+										title="Snooze (b)"
+										onclick={() =>
+											(snoozeFor = snoozeFor === thread.latest_id ? null : thread.latest_id)}
+									>
+										<Icon name="time-line" size={15} />
+									</button>
+									{#if snoozeFor === thread.latest_id}
+										<button
+											type="button"
+											class="backdrop"
+											aria-label="Close snooze"
+											onclick={() => (snoozeFor = null)}
+										></button>
+										<SnoozeMenu
+											onPick={(until) => snoozeIds([thread.latest_id], until)}
+											onClose={() => (snoozeFor = null)}
+										/>
+									{/if}
+								</div>
 								<button
 									type="button"
 									class="tool-btn"
-									title="Move to trash"
+									title="Move to trash (e)"
 									onclick={() => run('trash', [thread.latest_id])}
 								>
 									<Icon name="delete-bin-line" size={15} />
@@ -815,6 +992,14 @@
 	.row.checked,
 	.row.checked:hover {
 		background: var(--color-accent-soft);
+	}
+
+	.row.focused:not(.checked) {
+		box-shadow: inset 3px 0 0 var(--color-accent);
+	}
+
+	.snooze-wrap {
+		position: relative;
 	}
 
 	.star {

@@ -8,6 +8,7 @@ const EMPTY_COUNTS: MailboxCounts = {
 	starred: 0,
 	drafts: 0,
 	sent: 0,
+	later: 0,
 	trash: 0
 };
 

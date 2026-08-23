@@ -16,6 +16,7 @@ no servers to maintain.
 - **Multiple domains and users** — per-user addresses, admin catch-all, unrouted-mail view
 - **Delivery status** — delivered / bounced / complained tracking
 - **REST API, CLI, and MCP server** — send and read mail from scripts, the terminal, or AI agents
+- **Keyboard-first** — shortcuts, a command palette, snooze-to-later, and undo send, without extra chrome
 - Light and dark themes
 
 ## Quick start

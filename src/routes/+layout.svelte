@@ -1,12 +1,19 @@
 <script lang="ts">
 	import './layout.css';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import favicon from '$lib/assets/favicon.svg';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import Topbar from '$lib/components/Topbar.svelte';
 	import MobileDock from '$lib/components/MobileDock.svelte';
+	import CommandPalette from '$lib/components/CommandPalette.svelte';
+	import ShortcutSheet from '$lib/components/ShortcutSheet.svelte';
+	import UndoToast from '$lib/components/UndoToast.svelte';
 	import { disablePushForCurrentAccount } from '$lib/push-client';
+	import { bindPendingSendFlush } from '$lib/pending-send';
+	import { armGoChord, consumeGoChord, isMod, isTypingTarget } from '$lib/shortcuts';
 	import { watchSystemTheme } from '$lib/theme';
+	import { runUndo } from '$lib/undo';
 	import type { LayoutData } from './$types';
 
 	let { children, data }: { children: import('svelte').Snippet; data: LayoutData } = $props();
@@ -21,6 +28,8 @@
 	let collapsed = $state(false);
 	let mobileOpen = $state(false);
 	let searchInput = $state<HTMLInputElement | null>(null);
+	let paletteOpen = $state(false);
+	let sheetOpen = $state(false);
 
 	const composing = $derived($page.url.pathname.startsWith('/compose'));
 
@@ -52,8 +61,74 @@
 		return () => document.body.classList.remove('nav-open');
 	});
 
+	$effect(() => {
+		if (!showShell) return;
+		return bindPendingSendFlush();
+	});
+
+	const GO_DEST: Record<string, string> = {
+		i: '/inbox',
+		s: '/starred',
+		d: '/drafts',
+		t: '/sent',
+		b: '/later',
+		e: '/trash'
+	};
+
 	function onWindowKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape' && mobileOpen) mobileOpen = false;
+		if (!showShell) return;
+		if (isTypingTarget(event.target) || document.querySelector('[data-overlay]')) return;
+
+		if (isMod(event) && event.key.toLowerCase() === 'k') {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			paletteOpen = true;
+			return;
+		}
+
+		if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+		const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+		if (consumeGoChord()) {
+			const dest = GO_DEST[key];
+			if (dest) {
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				void goto(dest);
+			}
+			return;
+		}
+
+		if (key === 'c') {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			void goto('/compose');
+			return;
+		}
+		if (key === '/') {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			focusSearch();
+			return;
+		}
+		if (key === '?') {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			sheetOpen = true;
+			return;
+		}
+		if (key === 'g') {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			armGoChord();
+			return;
+		}
+		if (key === 'z') {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			void runUndo();
+		}
 	}
 
 	function focusSearch() {
@@ -84,7 +159,7 @@
 	/>
 </svelte:head>
 
-<svelte:window onkeydown={onWindowKeydown} />
+<svelte:window onkeydowncapture={onWindowKeydown} />
 
 {#if showShell}
 	<div class="app-shell" class:has-dock={!composing} data-collapsed={collapsed}>
@@ -120,6 +195,10 @@
 				onSearch={focusSearch}
 			/>
 		{/if}
+
+		<CommandPalette bind:open={paletteOpen} onSearch={focusSearch} />
+		<ShortcutSheet bind:open={sheetOpen} />
+		<UndoToast />
 	</div>
 {:else}
 	{@render children()}
