@@ -1,6 +1,13 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { createECDH } from 'node:crypto';
 import webpush from 'web-push';
+import {
+	buildBrrrNewMailPayload,
+	loadBrrrDestination,
+	readPublicAppOrigin,
+	resolveBrrrSound,
+	sendBrrrNotification
+} from './brrr';
 
 const MAX_ENDPOINT_LENGTH = 2048;
 const MAX_KEY_LENGTH = 512;
@@ -23,7 +30,10 @@ export type PushNotificationEnv = {
 	VAPID_PUBLIC_KEY?: string;
 	VAPID_PRIVATE_KEY?: string;
 	VAPID_SUBJECT?: string;
+	/** Absolute origin for Brrr `open_url`. Omitted when unset (email() has no request URL). */
+	PUBLIC_APP_URL?: string;
 	waitUntil?: (promise: Promise<void>) => void;
+	fetch?: typeof fetch;
 };
 
 type StoredPushSubscription = {
@@ -290,8 +300,8 @@ export function pushErrorStatus(error: unknown): number | null {
 }
 
 /**
- * Notify every browser registered to the recipient. Push failures never undo a
- * successfully stored email; expired endpoints are removed automatically.
+ * Notify the recipient's browsers (Web Push) and Brrr destination. Failures
+ * never undo a successfully stored email; expired push endpoints are removed.
  */
 export async function notifyNewMail(
 	env: PushNotificationEnv,
@@ -301,7 +311,7 @@ export async function notifyNewMail(
 		await deliverNewMailNotification(env, input);
 	} catch (error) {
 		console.error(
-			'Failed to deliver new-mail push notifications',
+			'Failed to deliver new-mail notifications',
 			error instanceof Error ? error.message : 'Unknown error'
 		);
 	}
@@ -321,6 +331,13 @@ export async function scheduleNewMailNotification(
 }
 
 async function deliverNewMailNotification(
+	env: PushNotificationEnv,
+	input: NewMailNotificationInput
+): Promise<void> {
+	await Promise.all([deliverWebPushNotification(env, input), deliverBrrrNotification(env, input)]);
+}
+
+async function deliverWebPushNotification(
 	env: PushNotificationEnv,
 	input: NewMailNotificationInput
 ): Promise<void> {
@@ -344,7 +361,7 @@ async function deliverNewMailNotification(
 						keys: { p256dh: subscription.p256dh, auth: subscription.auth }
 					},
 					payload,
-						{ TTL: 300, urgency: 'high', timeout: PUSH_REQUEST_TIMEOUT_MS }
+					{ TTL: 300, urgency: 'high', timeout: PUSH_REQUEST_TIMEOUT_MS }
 				);
 			} catch (error) {
 				const status = pushErrorStatus(error);
@@ -361,4 +378,36 @@ async function deliverNewMailNotification(
 	);
 
 	await removeDeadSubscriptions(env.DB, deadEndpoints);
+}
+
+async function deliverBrrrNotification(
+	env: PushNotificationEnv,
+	input: NewMailNotificationInput
+): Promise<void> {
+	const destination = await loadBrrrDestination(env.DB, input.userId);
+	if (!destination) return;
+
+	const payload = buildBrrrNewMailPayload({
+		subject: input.subject,
+		from: input.from,
+		emailId: input.emailId,
+		origin: readPublicAppOrigin(env.PUBLIC_APP_URL),
+		sound: resolveBrrrSound(input.from, destination.defaultSound, destination.senderSounds)
+	});
+
+	try {
+		const result = await sendBrrrNotification(
+			destination.webhookKey,
+			payload,
+			env.fetch ?? globalThis.fetch
+		);
+		if (!result.ok) {
+			console.error('Failed to send Brrr notification', result.status);
+		}
+	} catch (error) {
+		console.error(
+			'Failed to send Brrr notification',
+			error instanceof Error ? error.message : 'Unknown error'
+		);
+	}
 }

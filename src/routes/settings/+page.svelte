@@ -4,6 +4,7 @@
 	import Check from '$lib/components/Check.svelte';
 	import AddressField from '$lib/components/AddressField.svelte';
 	import DesktopNotifications from '$lib/components/DesktopNotifications.svelte';
+	import BrrrNotifications from '$lib/components/BrrrNotifications.svelte';
 	import {
 		readThemePreference,
 		setThemePreference,
@@ -434,6 +435,8 @@
 	</section>
 
 	<DesktopNotifications configured={data.push.configured} publicKey={data.push.publicKey} />
+
+	<BrrrNotifications initial={data.brrr} sounds={data.brrrSounds} />
 
 	<section class="surface-lg card">
 		<h2><Icon name="pencil-line" size={18} /> Signature</h2>

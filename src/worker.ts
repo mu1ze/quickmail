@@ -38,6 +38,7 @@ export default {
 			VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY,
 			VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY,
 			VAPID_SUBJECT: env.VAPID_SUBJECT,
+			PUBLIC_APP_URL: env.PUBLIC_APP_URL,
 			waitUntil: (promise) => ctx.waitUntil(promise)
 		};
 

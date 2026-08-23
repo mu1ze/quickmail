@@ -103,9 +103,24 @@ describe('VAPID configuration', () => {
 
 test('push delivery is handed to the runtime background scheduler', async () => {
 	let scheduled: Promise<void> | null = null;
+	const unusedPrepare = {
+		bind() {
+			return unusedPrepare;
+		},
+		async first() {
+			return null;
+		},
+		async all() {
+			return { results: [] };
+		}
+	};
 	await scheduleNewMailNotification(
 		{
-			DB: {} as D1Database,
+			DB: {
+				prepare() {
+					return unusedPrepare;
+				}
+			} as unknown as D1Database,
 			waitUntil: (promise) => (scheduled = promise)
 		},
 		{ emailId: 'mail-1', userId: 'user-1', from: 'sender@example.com', subject: 'Hello' }

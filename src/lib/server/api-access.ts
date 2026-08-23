@@ -224,6 +224,14 @@ export function authorizeApiRequest(input: {
 		};
 	}
 
+	if (isPrefix(input.pathname, '/api/settings/brrr')) {
+		return {
+			ok: false,
+			status: 403,
+			error: 'API keys cannot manage Brrr destinations. Sign in with a browser session.'
+		};
+	}
+
 	const method = input.method.toUpperCase();
 	const rule = BEARER_ROUTES.find((entry) => entry.method === method && entry.match(input.pathname));
 	if (!rule) {

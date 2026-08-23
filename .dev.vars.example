@@ -25,3 +25,6 @@ RESEND_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 # VAPID_PUBLIC_KEY=REPLACE_WITH_YOUR_VAPID_PUBLIC_KEY
 # VAPID_PRIVATE_KEY=REPLACE_WITH_YOUR_VAPID_PRIVATE_KEY
 # VAPID_SUBJECT=mailto:admin@example.com
+
+# Absolute origin used in Brrr phone-notification open links (optional).
+# PUBLIC_APP_URL=https://mail.example.com
