@@ -23,6 +23,7 @@ type ReplyBody = {
 	html?: string;
 	attachments?: OutboundAttachmentInput[];
 	includeSignature?: boolean;
+	signatureId?: string | null;
 };
 
 export const GET: RequestHandler = async ({ params, locals, platform }) => {
@@ -143,6 +144,7 @@ export const POST: RequestHandler = async ({ params, request, locals, platform, 
 				replyToEmailId: original.id,
 				attachments: body.attachments,
 				includeSignature: body.includeSignature,
+				signatureId: 'signatureId' in body ? body.signatureId : undefined,
 				origin: resolvePublicOrigin(platform?.env, url.origin)
 			}
 		);
