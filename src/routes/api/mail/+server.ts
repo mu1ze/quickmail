@@ -20,6 +20,7 @@ type SendMailBody = {
 	text?: string;
 	html?: string;
 	attachments?: OutboundAttachmentInput[];
+	signatureId?: string | null;
 };
 
 function mailboxView(url: URL): MailboxView {
@@ -95,7 +96,8 @@ export const POST: RequestHandler = async ({ request, locals, platform, url }) =
 				text: body.text,
 				html: body.html,
 				attachments: body.attachments,
-				origin: resolvePublicOrigin(platform?.env, url.origin)
+				origin: resolvePublicOrigin(platform?.env, url.origin),
+				signatureId: body.signatureId
 			}
 		);
 

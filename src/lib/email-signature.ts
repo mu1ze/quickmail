@@ -6,6 +6,16 @@ import {
 } from './signature-template';
 
 export const MAX_EMAIL_SIGNATURE_LENGTH = 4000;
+export const MAX_SAVED_SIGNATURES = 5;
+export const MAX_SIGNATURE_NAME_LENGTH = 40;
+
+export type SavedSignature = {
+	id: string;
+	name: string;
+	body: string;
+	is_default: boolean;
+	position: number;
+};
 
 export {
 	compileSignature,
@@ -85,4 +95,45 @@ export function appendEmailSignature(input: {
 		: null;
 
 	return { text, html };
+}
+
+export function parseSignatureName(value: string): string {
+	const name = value.trim().replace(/\s+/g, ' ').slice(0, MAX_SIGNATURE_NAME_LENGTH);
+	return name || 'Signature';
+}
+
+/** Which library entry to select in the composer for this From address. */
+export function defaultComposeSignatureId(
+	signatures: SavedSignature[],
+	mailboxSignatureId?: string | null
+): string {
+	if (mailboxSignatureId && signatures.some((signature) => signature.id === mailboxSignatureId)) {
+		return mailboxSignatureId;
+	}
+	return signatures.find((signature) => signature.is_default)?.id ?? signatures[0]?.id ?? '';
+}
+
+/**
+ * Resolve the body that should be appended.
+ * `selectedId` undefined = mailbox pin, then mailbox body, then account default.
+ * `selectedId` empty/null = omit. Otherwise the matching library entry.
+ */
+export function resolveSignatureBody(input: {
+	signatures: SavedSignature[];
+	selectedId?: string | null;
+	mailboxSignatureId?: string | null;
+	mailboxBody?: string | null;
+}): string {
+	const { signatures } = input;
+	if (input.selectedId !== undefined) {
+		if (!input.selectedId) return '';
+		return signatures.find((signature) => signature.id === input.selectedId)?.body ?? '';
+	}
+	if (input.mailboxSignatureId) {
+		const pinned = signatures.find((signature) => signature.id === input.mailboxSignatureId);
+		if (pinned) return pinned.body;
+	}
+	const fallback =
+		signatures.find((signature) => signature.is_default)?.body ?? signatures[0]?.body ?? '';
+	return pickEmailSignature(input.mailboxBody, fallback);
 }

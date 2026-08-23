@@ -25,6 +25,7 @@ type AddressRow = {
 	label: string | null;
 	is_default: number;
 	signature: string | null;
+	signature_id: string | null;
 	created_at: string;
 };
 
@@ -52,6 +53,7 @@ function mapAddress(row: AddressRow): MailAddress {
 		label: row.label,
 		is_default: row.is_default === 1,
 		signature: row.signature,
+		signature_id: row.signature_id ?? null,
 		created_at: row.created_at
 	};
 }
@@ -164,7 +166,7 @@ export async function syncDomains(db: D1Database, provider: EmailProvider): Prom
 /* -------------------------------------------------------------------------- */
 
 const ADDRESS_SELECT = `SELECT a.id, a.user_id, a.domain_id, d.name AS domain_name, a.address,
-	a.label, a.is_default, a.signature, a.created_at
+	a.label, a.is_default, a.signature, a.signature_id, a.created_at
 	FROM addresses a JOIN domains d ON d.id = a.domain_id`;
 
 export async function listAddressesForUser(
@@ -250,7 +252,7 @@ export async function updateAddress(
 	db: D1Database,
 	userId: string,
 	addressId: string,
-	patch: { label?: string | null; signature?: string | null }
+	patch: { label?: string | null; signature?: string | null; signatureId?: string | null }
 ): Promise<MailAddress> {
 	const current = await getAddressForUser(db, userId, addressId);
 	if (!current) {
@@ -259,13 +261,35 @@ export async function updateAddress(
 
 	const label = patch.label !== undefined ? patch.label?.trim() || null : current.label;
 	let signature = current.signature;
+	let signatureId = current.signature_id;
+	if (patch.signatureId !== undefined) {
+		if (patch.signatureId) {
+			const owned = await db
+				.prepare('SELECT id FROM signatures WHERE id = ? AND user_id = ?')
+				.bind(patch.signatureId, userId)
+				.first<{ id: string }>();
+			if (!owned) {
+				throw new Error('Signature not found');
+			}
+			signatureId = owned.id;
+			signature = null;
+		} else {
+			signatureId = null;
+			signature = null;
+		}
+	}
 	if (patch.signature !== undefined) {
 		signature = parseMailboxSignature(patch.signature ?? '');
+		if (patch.signatureId === undefined) {
+			signatureId = current.signature_id;
+		}
 	}
 
 	await db
-		.prepare('UPDATE addresses SET label = ?, signature = ? WHERE id = ? AND user_id = ?')
-		.bind(label, signature, addressId, userId)
+		.prepare(
+			'UPDATE addresses SET label = ?, signature = ?, signature_id = ? WHERE id = ? AND user_id = ?'
+		)
+		.bind(label, signature, signatureId, addressId, userId)
 		.run();
 
 	const saved = await getAddressForUser(db, userId, addressId);

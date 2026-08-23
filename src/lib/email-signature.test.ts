@@ -2,10 +2,14 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
 	appendEmailSignature,
+	defaultComposeSignatureId,
 	MAX_EMAIL_SIGNATURE_LENGTH,
+	MAX_SIGNATURE_NAME_LENGTH,
 	normalizeEmailSignature,
 	parseMailboxSignature,
-	pickEmailSignature
+	parseSignatureName,
+	pickEmailSignature,
+	resolveSignatureBody
 } from './email-signature';
 
 	describe('email signatures', () => {
@@ -112,5 +116,37 @@ import {
 		});
 		assert.match(result.html ?? '', new RegExp(`src="https://mail.example.com/s/${photoId}"`));
 		assert.match(result.html ?? '', /data-email-signature="true"/);
+	});
+
+	test('picks a named signature over the mailbox fallback', () => {
+		const signatures = [
+			{ id: 'sig-work', name: 'Work', body: 'Work sign-off', is_default: true, position: 0 },
+			{ id: 'sig-home', name: 'Home', body: 'Home sign-off', is_default: false, position: 1 }
+		];
+		assert.equal(
+			resolveSignatureBody({ signatures, selectedId: 'sig-home' }),
+			'Home sign-off'
+		);
+		assert.equal(resolveSignatureBody({ signatures, selectedId: '' }), '');
+		assert.equal(
+			resolveSignatureBody({
+				signatures,
+				mailboxSignatureId: 'sig-home',
+				mailboxBody: 'Legacy'
+			}),
+			'Home sign-off'
+		);
+		assert.equal(
+			resolveSignatureBody({ signatures, mailboxBody: 'Legacy' }),
+			'Legacy'
+		);
+		assert.equal(defaultComposeSignatureId(signatures, 'sig-home'), 'sig-home');
+		assert.equal(defaultComposeSignatureId(signatures), 'sig-work');
+	});
+
+	test('parses a signature name', () => {
+		assert.equal(parseSignatureName('  Work  '), 'Work');
+		assert.equal(parseSignatureName(''), 'Signature');
+		assert.equal(parseSignatureName('x'.repeat(80)).length, MAX_SIGNATURE_NAME_LENGTH);
 	});
 });
