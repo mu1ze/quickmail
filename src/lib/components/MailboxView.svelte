@@ -1005,7 +1005,6 @@
 		flex-direction: column;
 		min-width: 0;
 		height: 100%;
-		overflow: hidden;
 		padding: 0.5rem 0.55rem 0.55rem;
 		border-radius: 14px;
 		background: var(--color-well);
@@ -1035,7 +1034,6 @@
 
 	.card:has(.backdrop) {
 		z-index: 6;
-		overflow: visible;
 	}
 
 	.card-bar {
