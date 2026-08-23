@@ -304,7 +304,7 @@
 					type="text"
 					bind:value={password}
 					required
-					minlength="8"
+					minlength="12"
 					placeholder="Temporary password"
 					class="admin-input"
 				/>

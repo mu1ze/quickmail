@@ -44,8 +44,8 @@
 		event.preventDefault();
 		error = '';
 
-		if (password.length < 8) {
-			error = 'Password must be at least 8 characters';
+		if (password.length < 12) {
+			error = 'Password must be at least 12 characters';
 			return;
 		}
 		if (password !== confirm) {
@@ -165,7 +165,7 @@
 				type="password"
 				bind:value={password}
 				required
-				minlength="8"
+				minlength="12"
 				autocomplete="new-password"
 				class="text-input"
 			/>
@@ -176,7 +176,7 @@
 				type="password"
 				bind:value={confirm}
 				required
-				minlength="8"
+				minlength="12"
 				autocomplete="new-password"
 				class="text-input"
 			/>

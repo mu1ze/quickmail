@@ -166,6 +166,21 @@ Inbound mail only works on a **deployed** Worker (or `bun run preview`) —
 
 Send yourself a message from another account — it should land within seconds.
 
+### Upgrading existing accounts
+
+Security migration `0016_reset_existing_passwords.sql` moves existing accounts
+onto the versioned password format. After applying remote migrations, existing
+users sign in once with the temporary password `TestPassword123.` and immediately
+replace it under **Settings → Security**:
+
+```bash
+bun run db:migrate:remote
+```
+
+The migration revokes existing sessions and API keys. Recreate any required API
+keys after changing the temporary password. The shared password is public and is
+only intended to recover accounts during this one-time upgrade.
+
 ### Desktop notifications (optional)
 
 QuickMail can push-notify users about new mail even with no tab open:

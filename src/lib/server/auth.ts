@@ -1,6 +1,12 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { SESSION_COOKIE, SESSION_DAYS } from './constants';
-import { createSessionToken, hashPassword, hashToken, verifyPassword } from './crypto';
+import {
+	createSessionToken,
+	hashPassword,
+	hashToken,
+	passwordNeedsRehash,
+	verifyPassword
+} from './crypto';
 import type { User } from '$lib/types';
 
 type UserRow = {
@@ -21,7 +27,9 @@ function mapUser(row: UserRow): User {
 	};
 }
 
-export const MIN_PASSWORD_LENGTH = 8;
+export const MIN_PASSWORD_LENGTH = 12;
+const DUMMY_PASSWORD_HASH =
+	'pbkdf2_sha256$600000$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
 
 export function assertPasswordLength(password: string): void {
 	if (password.length < MIN_PASSWORD_LENGTH) {
@@ -124,10 +132,21 @@ export async function login(
 	password: string
 ): Promise<{ user: User; token: string } | null> {
 	const user = await getUserByEmail(db, email);
-	if (!user) return null;
+	if (!user) {
+		// Keep unknown-account failures in the same expensive code path so the
+		// response time does not disclose which login addresses exist.
+		await verifyPassword(password, DUMMY_PASSWORD_HASH);
+		return null;
+	}
 
 	const valid = await verifyPassword(password, user.password_hash);
 	if (!valid) return null;
+	if (passwordNeedsRehash(user.password_hash)) {
+		await db
+			.prepare('UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?')
+			.bind(await hashPassword(password), user.id, user.password_hash)
+			.run();
+	}
 
 	const token = createSessionToken();
 	const token_hash = await hashToken(token);
