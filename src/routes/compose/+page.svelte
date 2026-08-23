@@ -218,7 +218,7 @@
 	</div>
 
 	<div class="mt-4">
-		<RichTextEditor bind:html minHeight={320} />
+		<RichTextEditor bind:html minHeight={220} />
 	</div>
 
 	<div class="mt-4 px-1">
@@ -264,5 +264,36 @@
 	.field-static {
 		font-size: 0.9375rem;
 		color: var(--color-text-secondary);
+	}
+
+	@media (max-width: 900px) {
+		.compose-page {
+			padding-bottom: calc(4.75rem + env(safe-area-inset-bottom));
+		}
+
+		.compose-header {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 0.75rem;
+			margin-bottom: 1rem;
+		}
+
+		.compose-actions {
+			position: fixed;
+			right: 0;
+			bottom: 0;
+			left: 0;
+			z-index: 28;
+			justify-content: flex-end;
+			flex-wrap: wrap;
+			gap: 0.375rem;
+			padding: 0.625rem 0.75rem calc(0.625rem + env(safe-area-inset-bottom));
+			background: var(--color-surface);
+			box-shadow: inset 0 1px 0 var(--color-line);
+		}
+
+		.compose-actions .btn-ghost {
+			padding: 0.5rem 0.75rem;
+		}
 	}
 </style>

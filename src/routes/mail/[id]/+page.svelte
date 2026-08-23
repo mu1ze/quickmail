@@ -364,4 +364,39 @@
 	.reply-prompt:hover {
 		background: var(--color-surface-muted);
 	}
+
+	@media (max-width: 900px) {
+		.mail-toolbar {
+			margin-bottom: 0.875rem;
+			gap: 0.5rem;
+		}
+
+		.mail-card {
+			padding: 1rem 1rem 1.25rem;
+		}
+
+		.mail-card h1 {
+			font-size: 1.125rem;
+		}
+
+		.subject-row {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 0.25rem;
+		}
+
+		.reply-footer {
+			flex-direction: column;
+			align-items: stretch;
+		}
+
+		.reply-actions {
+			margin-left: 0;
+			justify-content: flex-end;
+		}
+
+		.reply-prompt {
+			min-height: 2.75rem;
+		}
+	}
 </style>

@@ -35,10 +35,11 @@
 	--shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(0, 0, 0, 0.04);
 	--shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06), 0 12px 32px rgba(0, 0, 0, 0.05);
 	--shadow-header: 0 1px 0 rgba(0, 0, 0, 0.05), 0 4px 16px rgba(0, 0, 0, 0.03);
-	--sidebar-width: 15.5rem;
-	--sidebar-width-collapsed: 4.25rem;
-	--topbar-height: 3.75rem;
-}
+		--sidebar-width: 15.5rem;
+		--sidebar-width-collapsed: 4.25rem;
+		--topbar-height: 3.75rem;
+		--mobile-dock-height: 4.25rem;
+	}
 
 /*
  * The inline script in app.html resolves the stored preference (light/dark/
@@ -227,7 +228,7 @@ body {
 	min-height: 100vh;
 	align-items: center;
 	justify-content: center;
-	padding: 2rem 1rem;
+	padding: max(2rem, env(safe-area-inset-top)) 1rem max(2rem, env(safe-area-inset-bottom));
 }
 
 .auth-card {
@@ -303,8 +304,26 @@ body {
 	}
 
 	.app-main {
-		padding: 1rem 1rem 2rem;
+		padding: 0.875rem 0.875rem 1.5rem;
 	}
+
+	.app-shell.has-dock .app-main {
+		padding-bottom: calc(1.25rem + var(--mobile-dock-height) + env(safe-area-inset-bottom));
+	}
+
+	.icon-btn {
+		width: 2.75rem;
+		height: 2.75rem;
+	}
+
+	.btn-primary,
+	.btn-ghost {
+		min-height: 2.75rem;
+	}
+}
+
+body.nav-open {
+	overflow: hidden;
 }
 
 .page-title {

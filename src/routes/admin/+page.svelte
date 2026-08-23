@@ -643,6 +643,22 @@
 		gap: 0.375rem;
 	}
 
+	@media (max-width: 640px) {
+		.user-perm-note,
+		.perm-list {
+			padding-left: 0;
+		}
+
+		.perm-row {
+			align-items: flex-start;
+			flex-direction: column;
+		}
+
+		.control-actions {
+			flex-wrap: wrap;
+		}
+	}
+
 	.user-avatar {
 		display: flex;
 		align-items: center;

@@ -47,6 +47,9 @@
 	function isActive(href: string): boolean {
 		return $page.url.pathname === href || $page.url.pathname.startsWith(`${href}/`);
 	}
+
+	// Phone drawer always shows labels, even if the desktop sidebar is collapsed.
+	const expanded = $derived(!collapsed || mobileOpen);
 </script>
 
 {#if mobileOpen}
@@ -60,15 +63,25 @@
 
 <aside class="sidebar" class:collapsed class:mobile-open={mobileOpen}>
 	<div class="sidebar-top">
-		<a href="/inbox" class="brand" title="Mail">
+		<a href="/inbox" class="brand" title="Mail" onclick={() => (mobileOpen = false)}>
 			<Logo size={30} />
-			{#if !collapsed}<span class="brand-name">Mail</span>{/if}
+			{#if expanded}<span class="brand-name">Mail</span>{/if}
 		</a>
+		{#if mobileOpen}
+			<button
+				type="button"
+				class="drawer-close"
+				aria-label="Close navigation"
+				onclick={() => (mobileOpen = false)}
+			>
+				<Icon name="close-line" size={18} />
+			</button>
+		{/if}
 	</div>
 
-	<a href="/compose" class="new-message" title="New message">
-		<Icon name="pencil-line" size={collapsed ? 18 : 16} />
-		{#if !collapsed}<span>New message</span>{/if}
+	<a href="/compose" class="new-message" title="New message" onclick={() => (mobileOpen = false)}>
+		<Icon name="pencil-line" size={expanded ? 16 : 18} />
+		{#if expanded}<span>New message</span>{/if}
 	</a>
 
 	<nav class="nav">
@@ -77,11 +90,11 @@
 				href={item.href}
 				class="nav-link"
 				class:active={isActive(item.href)}
-				title={collapsed ? item.label : undefined}
+				title={expanded ? undefined : item.label}
 				onclick={() => (mobileOpen = false)}
 			>
 				<Icon name={item.icon} size={17} />
-				{#if !collapsed}
+				{#if expanded}
 					<span class="nav-label">{item.label}</span>
 					{#if item.badge}
 						<span class="nav-badge">{item.badge}</span>
@@ -95,7 +108,7 @@
 		{/each}
 	</nav>
 
-	{#if !collapsed && domains.length > 0}
+	{#if expanded && domains.length > 1}
 		<div class="section">
 			<p class="section-title">Domains</p>
 			<div class="section-body">
@@ -110,17 +123,17 @@
 				href={item.href}
 				class="nav-link"
 				class:active={isActive(item.href)}
-				title={collapsed ? item.label : undefined}
+				title={expanded ? undefined : item.label}
 				onclick={() => (mobileOpen = false)}
 			>
 				<Icon name={item.icon} size={17} />
-				{#if !collapsed}<span class="nav-label">{item.label}</span>{/if}
+				{#if expanded}<span class="nav-label">{item.label}</span>{/if}
 			</a>
 		{/each}
 	</nav>
 
 	<div class="sidebar-foot">
-		<ThemeSwitcher collapsed={collapsed} />
+		<ThemeSwitcher collapsed={!expanded} />
 		<button
 			type="button"
 			class="collapse-btn"
@@ -219,6 +232,24 @@
 	.sidebar.collapsed .nav-link {
 		justify-content: center;
 		padding: 0;
+	}
+
+	.drawer-close {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.75rem;
+		height: 2.75rem;
+		margin: -0.5rem -0.25rem -0.5rem 0;
+		border: none;
+		border-radius: 0.625rem;
+		color: var(--color-text-secondary);
+		background: transparent;
+	}
+
+	.drawer-close:hover {
+		background: var(--color-surface-muted);
+		color: var(--color-text);
 	}
 
 	.nav-link:hover {
@@ -328,8 +359,37 @@
 
 	@media (max-width: 900px) {
 		.sidebar {
+			width: min(20.5rem, 88vw);
+			padding: calc(0.75rem + env(safe-area-inset-top)) 0.875rem
+				calc(0.75rem + env(safe-area-inset-bottom));
 			transform: translateX(-100%);
 			box-shadow: var(--shadow-md);
+		}
+
+		.sidebar.collapsed {
+			width: min(20.5rem, 88vw);
+			padding-left: 0.875rem;
+			padding-right: 0.875rem;
+		}
+
+		.sidebar.collapsed .nav-link {
+			justify-content: flex-start;
+			padding: 0 0.625rem;
+		}
+
+		.sidebar.collapsed .sidebar-foot {
+			flex-direction: row;
+			align-items: stretch;
+		}
+
+		.nav-link {
+			min-height: 2.75rem;
+			height: auto;
+			padding: 0.5rem 0.75rem;
+		}
+
+		.collapse-btn {
+			display: none;
 		}
 
 		.sidebar.mobile-open {
