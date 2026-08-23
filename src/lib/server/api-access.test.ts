@@ -16,6 +16,27 @@ describe('API key access', () => {
 		);
 	});
 
+	test('sessions can manage their Brrr destination', () => {
+		assert.deepEqual(
+			authorizeApiRequest({
+				pathname: '/api/settings/brrr',
+				method: 'PUT',
+				authMethod: 'session',
+				scopes: []
+			}),
+			{ ok: true }
+		);
+		assert.deepEqual(
+			authorizeApiRequest({
+				pathname: '/api/settings/brrr/test',
+				method: 'POST',
+				authMethod: 'session',
+				scopes: []
+			}),
+			{ ok: true }
+		);
+	});
+
 	test('a read key cannot send or manage keys', () => {
 		assert.equal(
 			authorizeApiRequest({
@@ -61,6 +82,37 @@ describe('API key access', () => {
 				scopes: ['mail:read', 'mail:send', 'admin']
 			}).ok,
 			false
+		);
+		assert.equal(
+			authorizeApiRequest({
+				pathname: '/api/settings/brrr',
+				method: 'GET',
+				authMethod: 'api_token',
+				scopes: ['mail:read', 'mail:send', 'admin']
+			}).ok,
+			false
+		);
+		assert.equal(
+			authorizeApiRequest({
+				pathname: '/api/settings/brrr',
+				method: 'PUT',
+				authMethod: 'api_token',
+				scopes: ['mail:read', 'mail:send', 'admin']
+			}).ok,
+			false
+		);
+		assert.deepEqual(
+			authorizeApiRequest({
+				pathname: '/api/settings/brrr/test',
+				method: 'POST',
+				authMethod: 'api_token',
+				scopes: ['mail:read', 'mail:send', 'admin']
+			}),
+			{
+				ok: false,
+				status: 403,
+				error: 'API keys cannot manage Brrr destinations. Sign in with a browser session.'
+			}
 		);
 	});
 

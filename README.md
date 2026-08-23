@@ -181,6 +181,22 @@ bun run deploy
 Users opt in under **Settings → Desktop notifications**. Don't rotate the key
 pair after users subscribe, or they'll have to re-enable.
 
+### Phone notifications (optional)
+
+Users can also paste a [Brrr](https://brrr.now) webhook in **Settings → Phone
+notifications**. New mail then POSTs a JSON alert to the user's own destination
+(default sound, plus optional per-sender sounds). No Brrr server secret is
+required.
+
+If you set `PUBLIC_APP_URL` to the public origin (for example
+`https://mail.example.com`), notification taps open the stored message. Without
+it, the alert still arrives but has no open link — Cloudflare's `email()`
+handler has no request URL to guess from.
+
+```bash
+bun run db:migrate:remote
+```
+
 ## Development
 
 ```bash

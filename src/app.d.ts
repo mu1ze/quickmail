@@ -26,6 +26,8 @@ declare global {
 				VAPID_PRIVATE_KEY?: string;
 				/** A mailto: or https: contact URI for Web Push. */
 				VAPID_SUBJECT?: string;
+				/** Public origin used for Brrr notification open links. */
+				PUBLIC_APP_URL?: string;
 			};
 		}
 		interface Locals {

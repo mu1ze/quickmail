@@ -21,7 +21,7 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"cf-typegen": "wrangler types",
 		"quickmail": "bun cli/main.ts",
-		"test": "bun test src/lib/email-signature.test.ts src/lib/push-client.test.ts src/lib/server/api-access.test.ts src/lib/server/api-tokens.test.ts src/lib/server/auth.test.ts src/lib/server/domain-permissions.test.ts src/lib/server/outbox.test.ts src/lib/server/push-notifications.test.ts src/lib/theme.test.ts cli/client.test.ts"
+		"test": "bun test src/lib/email-signature.test.ts src/lib/push-client.test.ts src/lib/server/api-access.test.ts src/lib/server/api-tokens.test.ts src/lib/server/auth.test.ts src/lib/server/brrr.test.ts src/lib/server/domain-permissions.test.ts src/lib/server/outbox.test.ts src/lib/server/push-notifications.test.ts src/lib/theme.test.ts cli/client.test.ts"
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "^4.20260601.1",
@@ -65,6 +65,9 @@
 			},
 			"RESEND_WEBHOOK_SECRET": {
 				"description": "Only for `EMAIL_PROVIDER=resend`: shown once when you create the webhook at [Resend webhooks](https://resend.com/webhooks). Keep the placeholder if using Cloudflare Email."
+			},
+			"PUBLIC_APP_URL": {
+				"description": "Optional public origin used in Brrr phone-notification open links, e.g. `https://mail.example.com`."
 			}
 		}
 	}
