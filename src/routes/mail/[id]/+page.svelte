@@ -5,10 +5,13 @@
 	import AttachmentPicker from '$lib/components/AttachmentPicker.svelte';
 	import ThreadMessage from '$lib/components/ThreadMessage.svelte';
 	import SnoozeMenu from '$lib/components/SnoozeMenu.svelte';
+	import SignaturePreview from '$lib/components/SignaturePreview.svelte';
 	import { queueMailSend } from '$lib/pending-send';
 	import { isMod, isTypingTarget } from '$lib/shortcuts';
 	import { showUndo } from '$lib/undo';
+	import { compileSignature, parseSignatureConfig, pickEmailSignature } from '$lib/email-signature';
 	import { htmlToPlainText, isHtmlEmpty } from '$lib/utils/html';
+	import { page } from '$app/stores';
 	import type { OutboundAttachmentInput } from '$lib/types';
 	import type { PageData } from './$types';
 
@@ -20,9 +23,19 @@
 	let sending = $state(false);
 	let error = $state('');
 	let snoozeOpen = $state(false);
+	let includeSignature = $state(false);
 
 	const messages = $derived(data.messages);
 	const latest = $derived(messages[messages.length - 1]);
+	const replyAddress = $derived(
+		data.addresses.find((address) => address.address === data.replyFrom) ?? null
+	);
+	const storedReplySignature = $derived(
+		pickEmailSignature(replyAddress?.signature, data.accountSignature)
+	);
+	const compiledReplySignature = $derived(
+		compileSignature(parseSignatureConfig(storedReplySignature), $page.url.origin)
+	);
 	const starred = $derived(messages.some((message) => message.is_starred));
 
 	const backHref = $derived(
@@ -137,7 +150,8 @@
 					body: JSON.stringify({
 						html,
 						text: htmlToPlainText(html),
-						attachments
+						attachments,
+						includeSignature
 					})
 				});
 				const body = await res.json();
@@ -313,9 +327,24 @@
 
 				<RichTextEditor bind:html={replyHtml} embedded minHeight={160} placeholder="Reply…" />
 
+				{#if includeSignature && compiledReplySignature.html}
+					<div class="signature-preview">
+						<SignaturePreview html={compiledReplySignature.html} />
+					</div>
+				{/if}
+
 				<div class="reply-footer">
 					<AttachmentPicker bind:attachments={replyAttachments} />
 					<div class="reply-actions">
+						{#if storedReplySignature}
+							<button
+								type="button"
+								class="btn-ghost"
+								onclick={() => (includeSignature = !includeSignature)}
+							>
+								{includeSignature ? 'Remove signature' : 'Add signature'}
+							</button>
+						{/if}
 						<button type="button" class="btn-ghost" onclick={() => (replyOpen = false)}>
 							Cancel
 						</button>
@@ -430,6 +459,10 @@
 	.reply-from strong {
 		font-weight: 500;
 		color: var(--color-text-secondary);
+	}
+
+	.signature-preview {
+		margin-top: 0.75rem;
 	}
 
 	.reply-footer {

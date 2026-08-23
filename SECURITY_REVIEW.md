@@ -132,7 +132,7 @@ misdeclared requests. Provider signatures are still checked before event process
 
 ## Suggested remediation order
 
-1. Apply migration `0015_login_rate_limits.sql` before deploying the new login route.
+1. Apply migration `0016_login_rate_limits.sql` before deploying the new login route.
 2. Regression-test the CSP against production mail templates and provider flows.
 3. Consider a Cloudflare WAF login/webhook rule as defense in depth.
 4. Consider WebAuthn/TOTP for administrator accounts.

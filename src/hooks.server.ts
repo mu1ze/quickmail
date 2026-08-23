@@ -16,7 +16,8 @@ const PUBLIC_PREFIXES = [
 	'/api/auth',
 	'/api/setup',
 	'/api/webhooks',
-	'/install.sh'
+	'/install.sh',
+	'/s'
 ];
 
 function isPublicPath(pathname: string): boolean {
