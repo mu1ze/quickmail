@@ -355,7 +355,6 @@ export function compileSignature(
 
 	const details = detailsHtml(sanitized);
 	const text = detailsText(sanitized);
-	if (!details) return { html: '', text: '' };
 
 	const photoUrl =
 		sanitized.layout === 'photo' && sanitized.photoId && origin
@@ -366,13 +365,19 @@ export function compileSignature(
 			? signatureAssetUrl(origin, sanitized.logoId)
 			: '';
 
+	// A photo/logo can stand on its own — an animated mark is a valid sign-off
+	// with no words. Only bail when there is neither an image nor any detail.
+	if (!details && !photoUrl && !logoUrl) return { html: '', text: '' };
+
 	if (photoUrl) {
 		const motion = buildImageAnimation(sanitized.animation, sanitized.photoId as string, sanitized.accent);
 		const classAttr = motion.className ? ` class="${motion.className}"` : '';
+		const detailsCell = details ? `<td valign="top">${details}</td>` : '';
+		const pad = details ? 'padding-right:14px;' : '';
 		const html =
 			motion.style +
 			wrapTable(
-				`<tr><td valign="top" style="padding-right:14px;"><img${classAttr} src="${escapeSignatureHtml(photoUrl)}" width="72" height="72" alt="" style="display:block;border:0;width:72px;height:72px;object-fit:cover;"></td><td valign="top">${details}</td></tr>`
+				`<tr><td valign="top" style="${pad}"><img${classAttr} src="${escapeSignatureHtml(photoUrl)}" width="72" height="72" alt="" style="display:block;border:0;width:72px;height:72px;object-fit:cover;"></td>${detailsCell}</tr>`
 			);
 		return { html, text };
 	}
@@ -380,10 +385,12 @@ export function compileSignature(
 	if (logoUrl) {
 		const motion = buildImageAnimation(sanitized.animation, sanitized.logoId as string, sanitized.accent);
 		const classAttr = motion.className ? ` class="${motion.className}"` : '';
+		const detailsRow = details ? `<tr><td>${details}</td></tr>` : '';
+		const pad = details ? 'padding-bottom:10px;' : '';
 		const html =
 			motion.style +
 			wrapTable(
-				`<tr><td style="padding-bottom:10px;"><img${classAttr} src="${escapeSignatureHtml(logoUrl)}" alt="" height="36" style="display:block;border:0;max-height:36px;height:36px;width:auto;"></td></tr><tr><td>${details}</td></tr>`
+				`<tr><td style="${pad}"><img${classAttr} src="${escapeSignatureHtml(logoUrl)}" alt="" height="36" style="display:block;border:0;max-height:36px;height:36px;width:auto;"></td></tr>${detailsRow}`
 			);
 		return { html, text };
 	}

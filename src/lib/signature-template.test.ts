@@ -163,6 +163,31 @@ describe('signature templates', () => {
 		assert.match(html, /drop-shadow\(0 0 6px #0b6e4f\)/);
 	});
 
+	test('renders an image-only signature (animated logo, no text)', () => {
+		const id = '2f1a0c8e-4b3d-4a9f-8c1e-0a7b6d5c4e3f';
+		const { html, text } = compileSignature(
+			{
+				version: 1,
+				layout: 'logo',
+				name: '',
+				title: '',
+				company: '',
+				phone: '',
+				website: '',
+				accent: '#111111',
+				photoId: null,
+				logoId: id,
+				animation: 'wave',
+				socials: [],
+				text: ''
+			},
+			'https://mail.example.com'
+		);
+		assert.match(html, new RegExp(`<img class="qm-sig-wave-${id.slice(0, 8)}"`));
+		assert.match(html, new RegExp(`src="https://mail.example.com/s/${id}"`));
+		assert.equal(text, '');
+	});
+
 	test('animation round-trips through serialize and parse', () => {
 		const stored = serializeSignatureConfig({
 			version: 1,
