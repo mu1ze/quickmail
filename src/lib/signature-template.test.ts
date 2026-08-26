@@ -29,6 +29,7 @@ describe('signature templates', () => {
 			accent: '#0b6e4f',
 			photoId: null,
 			logoId: null,
+			animation: 'none',
 			socials: [{ kind: 'linkedin', url: 'https://linkedin.com/in/ada' }],
 			text: ''
 		});
@@ -74,6 +75,7 @@ describe('signature templates', () => {
 			accent: '#123456',
 			photoId: null,
 			logoId: null,
+			animation: 'none',
 			socials: [],
 			text: ''
 		});
@@ -100,6 +102,7 @@ describe('signature templates', () => {
 				accent: '#111111',
 				photoId: id,
 				logoId: null,
+				animation: 'none',
 				socials: [],
 				text: ''
 			},
@@ -108,6 +111,86 @@ describe('signature templates', () => {
 		assert.match(html, new RegExp(`src="https://mail.example.com/s/${id}"`));
 		assert.match(html, /width="72"/);
 		assert.equal(signatureAssetUrl('https://mail.example.com/', id), `https://mail.example.com/s/${id}`);
+	});
+
+	test('animates the photo with scoped, reduced-motion-safe CSS', () => {
+		const id = '2f1a0c8e-4b3d-4a9f-8c1e-0a7b6d5c4e3f';
+		const { html } = compileSignature(
+			{
+				version: 1,
+				layout: 'photo',
+				name: 'Ada',
+				title: '',
+				company: '',
+				phone: '',
+				website: '',
+				accent: '#0b6e4f',
+				photoId: id,
+				logoId: null,
+				animation: 'float',
+				socials: [],
+				text: ''
+			},
+			'https://mail.example.com'
+		);
+		const cls = `qm-sig-float-${id.slice(0, 8)}`;
+		assert.match(html, /<style>@keyframes qm-sig-float-/);
+		assert.match(html, new RegExp(`<img class="${cls}"`));
+		assert.match(html, new RegExp(`\\.${cls}\\{animation:`));
+		assert.match(html, /prefers-reduced-motion:reduce/);
+	});
+
+	test('glow animation carries the sanitized accent into the drop-shadow', () => {
+		const id = '2f1a0c8e-4b3d-4a9f-8c1e-0a7b6d5c4e3f';
+		const { html } = compileSignature(
+			{
+				version: 1,
+				layout: 'logo',
+				name: 'Ada',
+				title: '',
+				company: '',
+				phone: '',
+				website: '',
+				accent: '#0b6e4f',
+				photoId: null,
+				logoId: id,
+				animation: 'glow',
+				socials: [],
+				text: ''
+			},
+			'https://mail.example.com'
+		);
+		assert.match(html, /drop-shadow\(0 0 6px #0b6e4f\)/);
+	});
+
+	test('animation round-trips through serialize and parse', () => {
+		const stored = serializeSignatureConfig({
+			version: 1,
+			layout: 'logo',
+			name: 'Ada',
+			title: '',
+			company: '',
+			phone: '',
+			website: '',
+			accent: '#111111',
+			photoId: null,
+			logoId: '2f1a0c8e-4b3d-4a9f-8c1e-0a7b6d5c4e3f',
+			animation: 'spin',
+			socials: [],
+			text: ''
+		});
+		assert.equal(parseSignatureConfig(stored).animation, 'spin');
+	});
+
+	test('unknown animation values fall back to none (no style block)', () => {
+		const id = '2f1a0c8e-4b3d-4a9f-8c1e-0a7b6d5c4e3f';
+		const config = parseSignatureConfig(
+			JSON.stringify({ version: 1, layout: 'logo', name: 'Ada', logoId: id, animation: 'explode' })
+		);
+		assert.equal(config.animation, 'none');
+		const { html } = compileSignature(config, 'https://mail.example.com');
+		assert.doesNotMatch(html, /<style/);
+		assert.doesNotMatch(html, /class="qm-sig/);
 	});
 
 	test('omits images when no origin is available', () => {
@@ -122,6 +205,7 @@ describe('signature templates', () => {
 			accent: '#111111',
 			photoId: '2f1a0c8e-4b3d-4a9f-8c1e-0a7b6d5c4e3f',
 			logoId: null,
+			animation: 'none',
 			socials: [],
 			text: ''
 		});
