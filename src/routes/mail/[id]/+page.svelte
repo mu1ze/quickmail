@@ -511,18 +511,12 @@
 		box-shadow: inset 0 0 0 1px var(--color-line);
 	}
 
-	.reply-to,
 	.reply-from {
-		margin: 0;
+		margin: 0 0 0.75rem;
 		font-size: 0.8125rem;
 		color: var(--color-muted);
 	}
 
-	.reply-from {
-		margin: 0 0 0.75rem;
-	}
-
-	.reply-to strong,
 	.reply-from strong {
 		font-weight: 500;
 		color: var(--color-text-secondary);
