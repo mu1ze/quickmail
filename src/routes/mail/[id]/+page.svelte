@@ -3,6 +3,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import RichTextEditor from '$lib/components/RichTextEditor.svelte';
 	import AttachmentPicker from '$lib/components/AttachmentPicker.svelte';
+	import RecipientField from '$lib/components/RecipientField.svelte';
 	import ThreadMessage from '$lib/components/ThreadMessage.svelte';
 	import SnoozeMenu from '$lib/components/SnoozeMenu.svelte';
 	import SignaturePreview from '$lib/components/SignaturePreview.svelte';
@@ -12,6 +13,7 @@
 	import { showUndo } from '$lib/undo';
 	import { compileSignature, parseSignatureConfig, resolveSignatureBody } from '$lib/email-signature';
 	import { htmlToPlainText, isHtmlEmpty } from '$lib/utils/html';
+	import { buildReplyRecipients, type ReplyRecipientMode } from '$lib/utils/recipients';
 	import { page } from '$app/stores';
 	import type { OutboundAttachmentInput } from '$lib/types';
 	import type { PageData } from './$types';
@@ -21,6 +23,10 @@
 	let replyHtml = $state('');
 	let replyAttachments = $state<OutboundAttachmentInput[]>([]);
 	let replyOpen = $state(false);
+	let replyMode = $state<ReplyRecipientMode>('reply');
+	let replyTo = $state('');
+	let replyCc = $state('');
+	let replyBcc = $state('');
 	let sending = $state(false);
 	let error = $state('');
 	let snoozeOpen = $state(false);
@@ -135,6 +141,23 @@
 		goto('/inbox');
 	}
 
+	function seedReply(mode: ReplyRecipientMode) {
+		if (!latest) return;
+		const recipients = buildReplyRecipients({
+			direction: latest.direction,
+			from: latest.from_addr,
+			to: latest.to_addr,
+			cc: latest.cc_addr,
+			self: data.replyFrom,
+			mode
+		});
+		replyMode = mode;
+		replyTo = recipients.to;
+		replyCc = recipients.cc;
+		replyBcc = '';
+		replyOpen = true;
+	}
+
 	/** Replies continue from the newest message, so the chain stays intact. */
 	function sendReply(event: SubmitEvent) {
 		event.preventDefault();
@@ -143,9 +166,16 @@
 
 	function queueReply() {
 		if (!latest || isHtmlEmpty(replyHtml) || sending) return;
+		if (!replyTo.trim()) {
+			error = 'Add at least one recipient';
+			return;
+		}
 		const id = latest.id;
 		const html = replyHtml;
 		const attachments = replyAttachments;
+		const to = replyTo;
+		const cc = replyCc;
+		const bcc = replyBcc;
 		sending = true;
 		error = '';
 		queueMailSend({
@@ -154,6 +184,9 @@
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
+						to,
+						cc: cc.trim() || undefined,
+						bcc: bcc.trim() || undefined,
 						html,
 						text: htmlToPlainText(html),
 						attachments,
@@ -165,6 +198,8 @@
 				if (!res.ok) throw new Error(body.error ?? 'Failed to send');
 				replyHtml = '';
 				replyAttachments = [];
+				replyCc = '';
+				replyBcc = '';
 				replyOpen = false;
 				sending = false;
 				await invalidateAll();
@@ -189,7 +224,12 @@
 		if (event.metaKey || event.ctrlKey || event.altKey) return;
 		if (event.key === 'r') {
 			event.preventDefault();
-			replyOpen = true;
+			seedReply('reply');
+			return;
+		}
+		if (event.key === 'a') {
+			event.preventDefault();
+			seedReply('replyAll');
 			return;
 		}
 		if (event.key === 'e' && !data.trashed) {
@@ -284,9 +324,13 @@
 				</button>
 			{/if}
 
-			<button type="button" class="btn-primary" onclick={() => (replyOpen = !replyOpen)}>
+			<button type="button" class="btn-ghost" onclick={() => seedReply('reply')}>
 				<Icon name="reply-line" size={16} />
-				{replyOpen ? 'Close' : 'Reply'}
+				Reply
+			</button>
+			<button type="button" class="btn-ghost" onclick={() => seedReply('replyAll')}>
+				<Icon name="reply-all-line" size={16} />
+				Reply all
 			</button>
 		</div>
 	</header>
@@ -317,12 +361,20 @@
 
 		{#if replyOpen}
 			<form class="reply-section" onsubmit={sendReply}>
-				<p class="reply-to">
-					Replying to
-					<strong>
-						{latest?.direction === 'inbound' ? latest.from_addr : latest?.to_addr}
-					</strong>
-				</p>
+				<div class="reply-fields">
+					<div class="field-row">
+						<span class="field-label">To</span>
+						<RecipientField id="reply-to" label="To" bind:value={replyTo} required placeholder="Add recipients" />
+					</div>
+					<div class="field-row">
+						<span class="field-label">Cc</span>
+						<RecipientField id="reply-cc" label="Cc" bind:value={replyCc} placeholder="People who should see this" />
+					</div>
+					<div class="field-row">
+						<span class="field-label">Bcc</span>
+						<RecipientField id="reply-bcc" label="Bcc" bind:value={replyBcc} placeholder="Hidden copies" />
+					</div>
+				</div>
 				{#if data.replyFrom}
 					<p class="reply-from">
 						From
@@ -366,7 +418,7 @@
 				{/if}
 			</form>
 		{:else}
-			<button type="button" class="reply-prompt" onclick={() => (replyOpen = true)}>
+			<button type="button" class="reply-prompt" onclick={() => seedReply('reply')}>
 				<Icon name="reply-line" size={15} />
 				Reply
 			</button>
@@ -385,6 +437,7 @@
 	.toolbar-actions {
 		display: flex;
 		align-items: center;
+		flex-wrap: wrap;
 		gap: 0.375rem;
 	}
 
@@ -450,6 +503,14 @@
 		box-shadow: inset 0 1px 0 var(--color-line);
 	}
 
+	.reply-fields {
+		overflow: hidden;
+		margin-bottom: 0.75rem;
+		border-radius: 12px;
+		background: var(--color-well);
+		box-shadow: inset 0 0 0 1px var(--color-line);
+	}
+
 	.reply-to,
 	.reply-from {
 		margin: 0;
@@ -458,7 +519,7 @@
 	}
 
 	.reply-from {
-		margin: 0.25rem 0 0.625rem;
+		margin: 0 0 0.75rem;
 	}
 
 	.reply-to strong,

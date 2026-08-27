@@ -38,6 +38,7 @@ export type ThreadMessage = {
 	from_addr: string;
 	to_addr: string;
 	cc_addr: string | null;
+	bcc_addr: string | null;
 	subject: string;
 	body_text: string | null;
 	body_html: string | null;

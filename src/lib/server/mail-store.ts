@@ -755,7 +755,7 @@ export async function listThreadMessages(
 
 	const { results } = await db
 		.prepare(
-			`SELECT e.id, e.direction, e.from_addr, e.to_addr, e.cc_addr, e.subject,
+			`SELECT e.id, e.direction, e.from_addr, e.to_addr, e.cc_addr, e.bcc_addr, e.subject,
 			        e.body_text, e.body_html, e.message_id, e.references_header,
 			        e.status, e.status_detail, e.is_read, e.is_starred, e.deleted_at, e.created_at
 			 FROM emails e

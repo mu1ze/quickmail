@@ -50,6 +50,7 @@ export const SHORTCUTS: Shortcut[] = [
 	{ keys: 'z', action: 'Undo', group: 'Act' },
 	{ keys: 'c', action: 'Compose', group: 'Write' },
 	{ keys: 'r', action: 'Reply', group: 'Write' },
+	{ keys: 'a', action: 'Reply all', group: 'Write' },
 	{ keys: '⌘Enter', action: 'Send', group: 'Write' },
 	{ keys: 'g i', action: 'Go to inbox', group: 'Jump' },
 	{ keys: 'g s', action: 'Go to starred', group: 'Jump' },

@@ -19,6 +19,9 @@ import type { OutboundAttachmentInput } from '$lib/types';
 
 type ReplyBody = {
 	fromAddressId?: string;
+	to?: string;
+	cc?: string;
+	bcc?: string;
 	text?: string;
 	html?: string;
 	attachments?: OutboundAttachmentInput[];
@@ -115,8 +118,10 @@ export const POST: RequestHandler = async ({ params, request, locals, platform, 
 	}
 
 	const subject = /^re:/i.test(original.subject) ? original.subject : `Re: ${original.subject}`;
-	// Replying to our own message continues the conversation with its recipient.
-	const to = original.direction === 'inbound' ? original.from_addr : original.to_addr;
+	// Default reply goes to the other party; the composer can add Cc/Bcc or switch to reply-all.
+	const to =
+		body.to?.trim() ||
+		(original.direction === 'inbound' ? original.from_addr : original.to_addr);
 
 	// Reply from the mailbox that received the original. Catch-all mail uses
 	// that exact recipient when the user can send on the domain.
@@ -134,6 +139,8 @@ export const POST: RequestHandler = async ({ params, request, locals, platform, 
 				fromAddressId: body.fromAddressId,
 				fromAddress,
 				to,
+				cc: body.cc,
+				bcc: body.bcc,
 				subject,
 				text: body.text,
 				html: body.html,

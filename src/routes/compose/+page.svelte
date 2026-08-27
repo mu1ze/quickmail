@@ -41,13 +41,14 @@
 	let subject = $state(draft?.subject ?? '');
 	let html = $state(draft?.body_html ?? '');
 	let attachments = $state<OutboundAttachmentInput[]>([]);
-	let showCopies = $state(Boolean(draft?.cc_addr || draft?.bcc_addr));
 	let error = $state('');
 	let sending = $state(false);
 	let savingDraft = $state(false);
 	let savedAt = $state('');
 
-	const isEmpty = $derived(!to.trim() && !subject.trim() && isHtmlEmpty(html));
+	const isEmpty = $derived(
+		!to.trim() && !cc.trim() && !bcc.trim() && !subject.trim() && isHtmlEmpty(html)
+	);
 	const selectedAddress = $derived(addresses.find((address) => address.id === fromAddressId));
 	let lastFromId = $state('');
 	let selectedSignatureId = $state('');
@@ -180,14 +181,6 @@
 		</div>
 
 		<div class="compose-actions">
-			<button
-				type="button"
-				class="btn-ghost"
-				onclick={() => (showCopies = !showCopies)}
-				aria-expanded={showCopies}
-			>
-				Cc/Bcc
-			</button>
 			<button type="button" class="btn-ghost" disabled={savingDraft || isEmpty} onclick={saveDraft}>
 				<Icon name="save-line" size={15} />
 				{savingDraft ? 'Saving…' : 'Save draft'}
@@ -237,19 +230,18 @@
 
 		<div class="field-row">
 			<span class="field-label">To</span>
-			<RecipientField id="to" bind:value={to} required placeholder="recipient@example.com" />
+			<RecipientField id="to" label="To" bind:value={to} required placeholder="Add recipients" />
 		</div>
 
-		{#if showCopies}
-			<div class="field-row">
-				<span class="field-label">Cc</span>
-				<RecipientField bind:value={cc} placeholder="Comma separated" />
-			</div>
-			<div class="field-row">
-				<span class="field-label">Bcc</span>
-				<RecipientField bind:value={bcc} placeholder="Comma separated" />
-			</div>
-		{/if}
+		<div class="field-row">
+			<span class="field-label">Cc</span>
+			<RecipientField id="cc" label="Cc" bind:value={cc} placeholder="People who should see this" />
+		</div>
+
+		<div class="field-row">
+			<span class="field-label">Bcc</span>
+			<RecipientField id="bcc" label="Bcc" bind:value={bcc} placeholder="Hidden copies" />
+		</div>
 
 		<div class="field-row">
 			<span class="field-label">Subject</span>
