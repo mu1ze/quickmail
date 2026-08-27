@@ -6,6 +6,7 @@
 		compileSignature,
 		parseSignatureConfig,
 		serializeSignatureConfig,
+		type SignatureAnimation,
 		type SignatureConfig,
 		type SignatureLayout,
 		type SignatureSocialKind
@@ -62,6 +63,15 @@
 		{ kind: 'x', label: 'X' },
 		{ kind: 'github', label: 'GitHub' },
 		{ kind: 'instagram', label: 'Instagram' }
+	];
+
+	const animations: { id: SignatureAnimation; label: string }[] = [
+		{ id: 'none', label: 'None' },
+		{ id: 'float', label: 'Float' },
+		{ id: 'pulse', label: 'Pulse' },
+		{ id: 'spin', label: 'Spin' },
+		{ id: 'wave', label: 'Wave' },
+		{ id: 'glow', label: 'Glow' }
 	];
 
 	async function upload(kind: 'photo' | 'logo', files: FileList | null) {
@@ -236,6 +246,27 @@
 				</label>
 			</div>
 			{#if uploadError}<p class="error">{uploadError}</p>{/if}
+
+			{#if (config.layout === 'photo' && config.photoId) || (config.layout === 'logo' && config.logoId)}
+				<div class="animation" role="radiogroup" aria-label="Image animation">
+					<span class="label">Animation</span>
+					<div class="animation-grid">
+						{#each animations as animation (animation.id)}
+							<button
+								type="button"
+								role="radio"
+								class="anim-card"
+								class:selected={config.animation === animation.id}
+								aria-checked={config.animation === animation.id}
+								{disabled}
+								onclick={() => patch({ animation: animation.id })}
+							>
+								{animation.label}
+							</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
 		{/if}
 
 		<div class="socials">
@@ -412,10 +443,34 @@
 	}
 
 	.socials,
+	.animation,
 	.preview-block {
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
+	}
+
+	.animation-grid {
+		display: grid;
+		grid-template-columns: repeat(6, minmax(0, 1fr));
+		gap: 0.4rem;
+	}
+
+	.anim-card {
+		padding: 0.45rem 0.4rem;
+		border-radius: 0.6rem;
+		font-size: 0.75rem;
+		font-weight: 600;
+		text-align: center;
+		box-shadow: inset 0 0 0 1px var(--color-line);
+	}
+
+	.anim-card:hover:not(:disabled) {
+		background: var(--color-surface-muted);
+	}
+
+	.anim-card.selected {
+		box-shadow: inset 0 0 0 2px var(--color-accent);
 	}
 
 	.label {
@@ -463,6 +518,10 @@
 		.layout-grid,
 		.fields {
 			grid-template-columns: 1fr;
+		}
+
+		.animation-grid {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
 		}
 	}
 </style>

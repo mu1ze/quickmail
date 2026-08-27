@@ -4,6 +4,14 @@ export type SignatureLayout = (typeof SIGNATURE_LAYOUTS)[number];
 export const SIGNATURE_SOCIALS = ['linkedin', 'x', 'github', 'instagram'] as const;
 export type SignatureSocialKind = (typeof SIGNATURE_SOCIALS)[number];
 
+/**
+ * Motion applied to the signature's photo/logo image. Kept to a small, curated
+ * set because the CSS is emitted verbatim into outbound mail — a fixed enum
+ * means no user string ever reaches a stylesheet.
+ */
+export const SIGNATURE_ANIMATIONS = ['none', 'float', 'pulse', 'spin', 'wave', 'glow'] as const;
+export type SignatureAnimation = (typeof SIGNATURE_ANIMATIONS)[number];
+
 export type SignatureSocial = {
 	kind: SignatureSocialKind;
 	url: string;
@@ -20,6 +28,8 @@ export type SignatureConfig = {
 	accent: string;
 	photoId: string | null;
 	logoId: string | null;
+	/** Motion applied to the photo/logo image (ignored by imageless layouts). */
+	animation: SignatureAnimation;
 	socials: SignatureSocial[];
 	/** Used when layout is `plain`. */
 	text: string;
@@ -52,6 +62,7 @@ export const EMPTY_SIGNATURE: SignatureConfig = {
 	accent: DEFAULT_SIGNATURE_ACCENT,
 	photoId: null,
 	logoId: null,
+	animation: 'none',
 	socials: [],
 	text: ''
 };
@@ -110,6 +121,10 @@ function isSocialKind(value: unknown): value is SignatureSocialKind {
 	return typeof value === 'string' && (SIGNATURE_SOCIALS as readonly string[]).includes(value);
 }
 
+function isAnimation(value: unknown): value is SignatureAnimation {
+	return typeof value === 'string' && (SIGNATURE_ANIMATIONS as readonly string[]).includes(value);
+}
+
 export function sanitizeSignatureConfig(input: Partial<SignatureConfig> | null | undefined): SignatureConfig {
 	const socials: SignatureSocial[] = [];
 	if (Array.isArray(input?.socials)) {
@@ -134,6 +149,7 @@ export function sanitizeSignatureConfig(input: Partial<SignatureConfig> | null |
 		accent: sanitizeAccent(input?.accent ?? ''),
 		photoId: sanitizeAssetId(input?.photoId),
 		logoId: sanitizeAssetId(input?.logoId),
+		animation: isAnimation(input?.animation) ? input.animation : 'none',
 		socials,
 		text: (input?.text ?? '').replace(/\r\n?/g, '\n').trimEnd().slice(0, MAX_SIGNATURE_TEXT_LENGTH).trim()
 	};
@@ -283,6 +299,48 @@ function wrapTable(inner: string): string {
 	return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;font-family:${fontStack()};"><tbody>${inner}</tbody></table>`;
 }
 
+/** Keyframe bodies per preset. `ACCENT` is swapped for the sanitized accent hex. */
+const ANIMATION_KEYFRAMES: Record<Exclude<SignatureAnimation, 'none'>, string> = {
+	float: '0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}',
+	pulse: '0%,100%{transform:scale(1)}50%{transform:scale(1.08)}',
+	spin: 'to{transform:rotate(360deg)}',
+	wave: '0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg)}',
+	glow: '0%,100%{filter:drop-shadow(0 0 0 rgba(0,0,0,0))}50%{filter:drop-shadow(0 0 6px ACCENT)}'
+};
+
+/** Timing/easing per preset, appended after the shared `NAME` animation name. */
+const ANIMATION_TIMING: Record<Exclude<SignatureAnimation, 'none'>, string> = {
+	float: '3s ease-in-out infinite',
+	pulse: '2.4s ease-in-out infinite',
+	spin: '6s linear infinite;transform-origin:center',
+	wave: '2.6s ease-in-out infinite;transform-origin:center',
+	glow: '2.8s ease-in-out infinite'
+};
+
+/**
+ * Motion for a signature image. Inputs are trusted: `animation` is a fixed enum,
+ * `assetId` is a validated UUID, and `accent` is a validated hex colour — so the
+ * emitted CSS carries no user-controlled strings. A `prefers-reduced-motion`
+ * guard keeps it still for readers who ask for that. Returns an empty style and
+ * class for `none` so imageless/static signatures are byte-for-byte unchanged.
+ */
+function buildImageAnimation(
+	animation: SignatureAnimation,
+	assetId: string,
+	accent: string
+): { style: string; className: string } {
+	if (animation === 'none') return { style: '', className: '' };
+	const className = `qm-sig-${animation}-${assetId.slice(0, 8)}`;
+	const keyframesName = `${className}-kf`;
+	const keyframes = ANIMATION_KEYFRAMES[animation].replaceAll('ACCENT', accent);
+	const timing = ANIMATION_TIMING[animation];
+	const style =
+		`<style>@keyframes ${keyframesName}{${keyframes}}` +
+		`.${className}{animation:${keyframesName} ${timing};will-change:transform}` +
+		`@media (prefers-reduced-motion:reduce){.${className}{animation:none}}</style>`;
+	return { style, className };
+}
+
 export function compileSignature(
 	config: SignatureConfig,
 	origin = ''
@@ -297,7 +355,6 @@ export function compileSignature(
 
 	const details = detailsHtml(sanitized);
 	const text = detailsText(sanitized);
-	if (!details) return { html: '', text: '' };
 
 	const photoUrl =
 		sanitized.layout === 'photo' && sanitized.photoId && origin
@@ -308,17 +365,33 @@ export function compileSignature(
 			? signatureAssetUrl(origin, sanitized.logoId)
 			: '';
 
+	// A photo/logo can stand on its own — an animated mark is a valid sign-off
+	// with no words. Only bail when there is neither an image nor any detail.
+	if (!details && !photoUrl && !logoUrl) return { html: '', text: '' };
+
 	if (photoUrl) {
-		const html = wrapTable(
-			`<tr><td valign="top" style="padding-right:14px;"><img src="${escapeSignatureHtml(photoUrl)}" width="72" height="72" alt="" style="display:block;border:0;width:72px;height:72px;object-fit:cover;"></td><td valign="top">${details}</td></tr>`
-		);
+		const motion = buildImageAnimation(sanitized.animation, sanitized.photoId as string, sanitized.accent);
+		const classAttr = motion.className ? ` class="${motion.className}"` : '';
+		const detailsCell = details ? `<td valign="top">${details}</td>` : '';
+		const pad = details ? 'padding-right:14px;' : '';
+		const html =
+			motion.style +
+			wrapTable(
+				`<tr><td valign="top" style="${pad}"><img${classAttr} src="${escapeSignatureHtml(photoUrl)}" width="72" height="72" alt="" style="display:block;border:0;width:72px;height:72px;object-fit:cover;"></td>${detailsCell}</tr>`
+			);
 		return { html, text };
 	}
 
 	if (logoUrl) {
-		const html = wrapTable(
-			`<tr><td style="padding-bottom:10px;"><img src="${escapeSignatureHtml(logoUrl)}" alt="" height="36" style="display:block;border:0;max-height:36px;height:36px;width:auto;"></td></tr><tr><td>${details}</td></tr>`
-		);
+		const motion = buildImageAnimation(sanitized.animation, sanitized.logoId as string, sanitized.accent);
+		const classAttr = motion.className ? ` class="${motion.className}"` : '';
+		const detailsRow = details ? `<tr><td>${details}</td></tr>` : '';
+		const pad = details ? 'padding-bottom:10px;' : '';
+		const html =
+			motion.style +
+			wrapTable(
+				`<tr><td style="${pad}"><img${classAttr} src="${escapeSignatureHtml(logoUrl)}" alt="" height="36" style="display:block;border:0;max-height:36px;height:36px;width:auto;"></td></tr>${detailsRow}`
+			);
 		return { html, text };
 	}
 
