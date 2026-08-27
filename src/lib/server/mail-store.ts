@@ -191,6 +191,7 @@ type ThreadMessageRow = {
 	body_head: string | null;
 	is_read: number;
 	is_starred: number;
+	is_pinned: number;
 	has_attachments: number;
 	domain_id: string | null;
 	status: MailStatus | null;
@@ -259,14 +260,14 @@ export async function listMailbox(
 
 	const { results: rows } = await db
 		.prepare(
-			`SELECT t.thread_id, MAX(datetime(m.created_at)) AS last_at
+			`SELECT t.thread_id, MAX(datetime(m.created_at)) AS last_at, MAX(m.is_pinned) AS pinned
 			 FROM (
 				SELECT DISTINCT COALESCE(e.thread_id, e.id) AS thread_id FROM emails e WHERE ${where}
 			 ) t
 			 JOIN emails m
 			   ON m.user_id = ? AND COALESCE(m.thread_id, m.id) = t.thread_id AND ${display}
 			 GROUP BY t.thread_id
-			 ORDER BY last_at DESC
+			 ORDER BY pinned DESC, last_at DESC
 			 LIMIT ? OFFSET ?`
 		)
 		.bind(...bindings, userId, pageSize, (page - 1) * pageSize)
@@ -281,7 +282,7 @@ export async function listMailbox(
 	const { results: messages } = await db
 		.prepare(
 			`SELECT m.id, COALESCE(m.thread_id, m.id) AS thread_id, m.direction, m.from_addr, m.to_addr,
-			        m.subject, m.is_read, m.is_starred, m.created_at, m.domain_id, m.status, m.snoozed_until,
+			        m.subject, m.is_read, m.is_starred, m.is_pinned, m.created_at, m.domain_id, m.status, m.snoozed_until,
 			        substr(COALESCE(m.body_text, ''), 1, 4000) AS body_head,
 			        EXISTS(SELECT 1 FROM email_attachments a WHERE a.email_id = m.id) AS has_attachments
 			 FROM emails m
@@ -341,6 +342,7 @@ function toThreadSummary(messages: ThreadMessageRow[]): ThreadSummary {
 		message_count: messages.length,
 		is_read: messages.every((message) => message.is_read === 1),
 		is_starred: messages.some((message) => message.is_starred === 1),
+		is_pinned: messages.some((message) => message.is_pinned === 1),
 		is_draft: latest.status === 'draft',
 		has_attachments: messages.some((message) => message.has_attachments === 1),
 		domain_id: latest.domain_id,
@@ -495,6 +497,7 @@ export async function expandToThreads(
 export type MailFlagUpdate = {
 	isRead?: boolean;
 	isStarred?: boolean;
+	isPinned?: boolean;
 	trashed?: boolean;
 	/** SQLite datetime; `null` wakes a snoozed conversation. */
 	snoozedUntil?: string | null;
@@ -519,6 +522,10 @@ export async function setEmailFlags(
 	if (update.isStarred !== undefined) {
 		assignments.push('is_starred = ?');
 		bindings.push(update.isStarred ? 1 : 0);
+	}
+	if (update.isPinned !== undefined) {
+		assignments.push('is_pinned = ?');
+		bindings.push(update.isPinned ? 1 : 0);
 	}
 	if (update.trashed !== undefined) {
 		assignments.push(update.trashed ? "deleted_at = datetime('now')" : 'deleted_at = NULL');
@@ -757,7 +764,7 @@ export async function listThreadMessages(
 		.prepare(
 			`SELECT e.id, e.direction, e.from_addr, e.to_addr, e.cc_addr, e.bcc_addr, e.subject,
 			        e.body_text, e.body_html, e.message_id, e.references_header,
-			        e.status, e.status_detail, e.is_read, e.is_starred, e.deleted_at, e.created_at
+			        e.status, e.status_detail, e.is_read, e.is_starred, e.is_pinned, e.deleted_at, e.created_at
 			 FROM emails e
 			 WHERE e.user_id = ?
 			 AND COALESCE(e.thread_id, e.id) = ?
@@ -767,9 +774,10 @@ export async function listThreadMessages(
 		)
 		.bind(userId, threadId)
 		.all<
-			Omit<ThreadMessage, 'attachments' | 'is_read' | 'is_starred'> & {
+			Omit<ThreadMessage, 'attachments' | 'is_read' | 'is_starred' | 'is_pinned'> & {
 				is_read: number;
 				is_starred: number;
+				is_pinned: number;
 			}
 		>();
 
@@ -793,6 +801,7 @@ export async function listThreadMessages(
 		...message,
 		is_read: message.is_read === 1,
 		is_starred: message.is_starred === 1,
+		is_pinned: message.is_pinned === 1,
 		attachments: files.filter((file) => file.email_id === message.id)
 	}));
 }

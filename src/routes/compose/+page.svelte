@@ -31,15 +31,16 @@
 	let chosenAddressId = $state('');
 	const fromAddressId = $derived(chosenAddressId || defaultAddressId);
 
-	// The draft seeds the form once; after that the fields own their values.
+	// The draft or forwarded original seeds the form once; after that the fields own their values.
 	const draft = untrack(() => data.draft);
+	const forward = untrack(() => data.forward);
 
 	let draftId = $state<string | null>(draft?.id ?? null);
 	let to = $state(draft?.to_addr ?? '');
 	let cc = $state(draft?.cc_addr ?? '');
 	let bcc = $state(draft?.bcc_addr ?? '');
-	let subject = $state(draft?.subject ?? '');
-	let html = $state(draft?.body_html ?? '');
+	let subject = $state(draft?.subject ?? forward?.subject ?? '');
+	let html = $state(draft?.body_html ?? forward?.html ?? '');
 	let attachments = $state<OutboundAttachmentInput[]>([]);
 	let error = $state('');
 	let sending = $state(false);
@@ -170,13 +171,13 @@
 />
 
 <svelte:head>
-	<title>{draftId ? 'Draft' : 'Compose'} — Mail</title>
+	<title>{draftId ? 'Draft' : forward ? 'Forward' : 'Compose'} — Mail</title>
 </svelte:head>
 
 <form class="compose-page" onsubmit={submit}>
 	<header class="compose-header">
 		<div class="compose-heading">
-			<h1 class="page-title">{draftId ? 'Draft' : 'New message'}</h1>
+			<h1 class="page-title">{draftId ? 'Draft' : forward ? 'Forward' : 'New message'}</h1>
 			{#if savedAt}<span class="saved">Saved {savedAt}</span>{/if}
 		</div>
 

@@ -140,7 +140,9 @@ export const MAIL_ACTIONS = [
 	'read-all',
 	'empty-trash',
 	'snooze',
-	'unsnooze'
+	'unsnooze',
+	'pin',
+	'unpin'
 ] as const;
 
 export type MailAction = (typeof MAIL_ACTIONS)[number];
@@ -176,6 +178,8 @@ export function authorizeMailAction(input: {
 		case 'unread':
 		case 'star':
 		case 'unstar':
+		case 'pin':
+		case 'unpin':
 		case 'snooze':
 		case 'unsnooze':
 			if (!input.scopes.includes('mail:read')) {

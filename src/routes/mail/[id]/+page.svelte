@@ -49,6 +49,7 @@
 		compileSignature(parseSignatureConfig(storedReplySignature), $page.url.origin)
 	);
 	const starred = $derived(messages.some((message) => message.is_starred));
+	const pinned = $derived(messages.some((message) => message.is_pinned));
 
 	const backHref = $derived(
 		data.trashed ? '/trash' : data.snoozedUntil ? '/later' : latest?.direction === 'outbound' ? '/sent' : '/inbox'
@@ -94,6 +95,17 @@
 		if (!latest) return;
 		await patch(latest.id, { isStarred: !starred });
 		await invalidateAll();
+	}
+
+	async function togglePin() {
+		if (!latest) return;
+		await patch(latest.id, { isPinned: !pinned });
+		await invalidateAll();
+	}
+
+	function forwardLatest() {
+		if (!latest) return;
+		void goto(`/compose?forward=${latest.id}`);
 	}
 
 	async function markUnread() {
@@ -242,6 +254,16 @@
 			void toggleStar();
 			return;
 		}
+		if (event.key === 'p') {
+			event.preventDefault();
+			void togglePin();
+			return;
+		}
+		if (event.key === 'f') {
+			event.preventDefault();
+			forwardLatest();
+			return;
+		}
 		if (event.key === 'u') {
 			event.preventDefault();
 			void markUnread();
@@ -272,10 +294,30 @@
 				type="button"
 				class="icon-btn"
 				class:starred
-				aria-label={starred ? 'Remove star' : 'Add star'}
+				aria-label={starred ? 'Remove flag' : 'Flag'}
+				title={starred ? 'Remove flag (s)' : 'Flag (s)'}
 				onclick={toggleStar}
 			>
-				<Icon name={starred ? 'star-fill' : 'star-line'} size={16} />
+				<Icon name={starred ? 'flag-fill' : 'flag-line'} size={16} />
+			</button>
+			<button
+				type="button"
+				class="icon-btn"
+				class:pinned
+				aria-label={pinned ? 'Unpin' : 'Pin to top'}
+				title={pinned ? 'Unpin (p)' : 'Pin to top (p)'}
+				onclick={togglePin}
+			>
+				<Icon name={pinned ? 'pushpin-2-fill' : 'pushpin-2-line'} size={16} />
+			</button>
+			<button
+				type="button"
+				class="icon-btn"
+				aria-label="Forward"
+				title="Forward (f)"
+				onclick={forwardLatest}
+			>
+				<Icon name="share-forward-line" size={16} />
 			</button>
 
 			{#if data.trashed}
@@ -443,6 +485,10 @@
 
 	.toolbar-actions :global(.icon-btn.starred) {
 		color: var(--color-star);
+	}
+
+	.toolbar-actions :global(.icon-btn.pinned) {
+		color: var(--color-accent);
 	}
 
 	.toolbar-actions :global(.icon-btn.danger:hover) {

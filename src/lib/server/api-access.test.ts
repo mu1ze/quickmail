@@ -263,6 +263,14 @@ describe('API key access', () => {
 			{ ok: true }
 		);
 		assert.deepEqual(
+			authorizeMailAction({ action: 'pin', authMethod: 'api_token', scopes: ['mail:read'] }),
+			{ ok: true }
+		);
+		assert.deepEqual(
+			authorizeMailAction({ action: 'unpin', authMethod: 'api_token', scopes: ['mail:read'] }),
+			{ ok: true }
+		);
+		assert.deepEqual(
 			authorizeMailAction({ action: 'snooze', authMethod: 'api_token', scopes: ['mail:read'] }),
 			{ ok: true }
 		);

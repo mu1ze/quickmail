@@ -97,6 +97,12 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 		case 'unsnooze':
 			affected = await setEmailFlags(db, locals.user.id, ids, { snoozedUntil: null });
 			break;
+		case 'pin':
+			affected = await setEmailFlags(db, locals.user.id, ids, { isPinned: true });
+			break;
+		case 'unpin':
+			affected = await setEmailFlags(db, locals.user.id, ids, { isPinned: false });
+			break;
 		default: {
 			const _never: never = action;
 			return _never;
