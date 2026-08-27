@@ -31,23 +31,25 @@
 	let chosenAddressId = $state('');
 	const fromAddressId = $derived(chosenAddressId || defaultAddressId);
 
-	// The draft seeds the form once; after that the fields own their values.
+	// The draft or forwarded original seeds the form once; after that the fields own their values.
 	const draft = untrack(() => data.draft);
+	const forward = untrack(() => data.forward);
 
 	let draftId = $state<string | null>(draft?.id ?? null);
 	let to = $state(draft?.to_addr ?? '');
 	let cc = $state(draft?.cc_addr ?? '');
 	let bcc = $state(draft?.bcc_addr ?? '');
-	let subject = $state(draft?.subject ?? '');
-	let html = $state(draft?.body_html ?? '');
+	let subject = $state(draft?.subject ?? forward?.subject ?? '');
+	let html = $state(draft?.body_html ?? forward?.html ?? '');
 	let attachments = $state<OutboundAttachmentInput[]>([]);
-	let showCopies = $state(Boolean(draft?.cc_addr || draft?.bcc_addr));
 	let error = $state('');
 	let sending = $state(false);
 	let savingDraft = $state(false);
 	let savedAt = $state('');
 
-	const isEmpty = $derived(!to.trim() && !subject.trim() && isHtmlEmpty(html));
+	const isEmpty = $derived(
+		!to.trim() && !cc.trim() && !bcc.trim() && !subject.trim() && isHtmlEmpty(html)
+	);
 	const selectedAddress = $derived(addresses.find((address) => address.id === fromAddressId));
 	let lastFromId = $state('');
 	let selectedSignatureId = $state('');
@@ -169,25 +171,17 @@
 />
 
 <svelte:head>
-	<title>{draftId ? 'Draft' : 'Compose'} — Mail</title>
+	<title>{draftId ? 'Draft' : forward ? 'Forward' : 'Compose'} — Mail</title>
 </svelte:head>
 
 <form class="compose-page" onsubmit={submit}>
 	<header class="compose-header">
 		<div class="compose-heading">
-			<h1 class="page-title">{draftId ? 'Draft' : 'New message'}</h1>
+			<h1 class="page-title">{draftId ? 'Draft' : forward ? 'Forward' : 'New message'}</h1>
 			{#if savedAt}<span class="saved">Saved {savedAt}</span>{/if}
 		</div>
 
 		<div class="compose-actions">
-			<button
-				type="button"
-				class="btn-ghost"
-				onclick={() => (showCopies = !showCopies)}
-				aria-expanded={showCopies}
-			>
-				Cc/Bcc
-			</button>
 			<button type="button" class="btn-ghost" disabled={savingDraft || isEmpty} onclick={saveDraft}>
 				<Icon name="save-line" size={15} />
 				{savingDraft ? 'Saving…' : 'Save draft'}
@@ -237,19 +231,18 @@
 
 		<div class="field-row">
 			<span class="field-label">To</span>
-			<RecipientField id="to" bind:value={to} required placeholder="recipient@example.com" />
+			<RecipientField id="to" label="To" bind:value={to} required placeholder="Add recipients" />
 		</div>
 
-		{#if showCopies}
-			<div class="field-row">
-				<span class="field-label">Cc</span>
-				<RecipientField bind:value={cc} placeholder="Comma separated" />
-			</div>
-			<div class="field-row">
-				<span class="field-label">Bcc</span>
-				<RecipientField bind:value={bcc} placeholder="Comma separated" />
-			</div>
-		{/if}
+		<div class="field-row">
+			<span class="field-label">Cc</span>
+			<RecipientField id="cc" label="Cc" bind:value={cc} placeholder="People who should see this" />
+		</div>
+
+		<div class="field-row">
+			<span class="field-label">Bcc</span>
+			<RecipientField id="bcc" label="Bcc" bind:value={bcc} placeholder="Hidden copies" />
+		</div>
 
 		<div class="field-row">
 			<span class="field-label">Subject</span>

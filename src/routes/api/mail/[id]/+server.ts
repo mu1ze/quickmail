@@ -19,6 +19,9 @@ import type { OutboundAttachmentInput } from '$lib/types';
 
 type ReplyBody = {
 	fromAddressId?: string;
+	to?: string;
+	cc?: string;
+	bcc?: string;
 	text?: string;
 	html?: string;
 	attachments?: OutboundAttachmentInput[];
@@ -57,6 +60,7 @@ export const PATCH: RequestHandler = async ({ params, request, locals, platform 
 	const body = (await request.json()) as {
 		isRead?: boolean;
 		isStarred?: boolean;
+		isPinned?: boolean;
 		trashed?: boolean;
 		snoozedUntil?: string | null;
 		/** Set to limit the change to this one message instead of the thread. */
@@ -70,6 +74,7 @@ export const PATCH: RequestHandler = async ({ params, request, locals, platform 
 	const changed = await setEmailFlags(db, locals.user.id, ids, {
 		isRead: body.isRead,
 		isStarred: body.isStarred,
+		isPinned: body.isPinned,
 		trashed: body.trashed,
 		snoozedUntil: body.snoozedUntil
 	});
@@ -115,8 +120,10 @@ export const POST: RequestHandler = async ({ params, request, locals, platform, 
 	}
 
 	const subject = /^re:/i.test(original.subject) ? original.subject : `Re: ${original.subject}`;
-	// Replying to our own message continues the conversation with its recipient.
-	const to = original.direction === 'inbound' ? original.from_addr : original.to_addr;
+	// Default reply goes to the other party; the composer can add Cc/Bcc or switch to reply-all.
+	const to =
+		body.to?.trim() ||
+		(original.direction === 'inbound' ? original.from_addr : original.to_addr);
 
 	// Reply from the mailbox that received the original. Catch-all mail uses
 	// that exact recipient when the user can send on the domain.
@@ -134,6 +141,8 @@ export const POST: RequestHandler = async ({ params, request, locals, platform, 
 				fromAddressId: body.fromAddressId,
 				fromAddress,
 				to,
+				cc: body.cc,
+				bcc: body.bcc,
 				subject,
 				text: body.text,
 				html: body.html,

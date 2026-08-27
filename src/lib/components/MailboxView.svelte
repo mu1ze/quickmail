@@ -11,6 +11,12 @@
 	import { formatSnoozeUntil } from '$lib/snooze';
 	import { isGoChordArmed, isTypingTarget } from '$lib/shortcuts';
 	import { showUndo } from '$lib/undo';
+	import {
+		readMailboxLayout,
+		setMailboxLayout,
+		watchMailboxLayout,
+		type MailboxLayout
+	} from '$lib/mailbox-layout';
 	import type { MailboxFilters, MailboxPage, MailboxView, ThreadSummary } from '$lib/types';
 
 	let {
@@ -44,6 +50,14 @@
 	let focused = $state(0);
 	let snoozeFor = $state<string | null>(null);
 	let bulkSnoozeOpen = $state(false);
+	let layout = $state<MailboxLayout>('cards');
+
+	$effect(() => {
+		layout = readMailboxLayout();
+		return watchMailboxLayout((next) => {
+			layout = next;
+		});
+	});
 
 	$effect(() => {
 		items = mailbox.threads;
@@ -172,12 +186,12 @@
 		}
 		if (key === 'ArrowDown') {
 			event.preventDefault();
-			moveFocus(cardColumns());
+			moveFocus(layout === 'list' ? 1 : cardColumns());
 			return;
 		}
 		if (key === 'ArrowUp') {
 			event.preventDefault();
-			moveFocus(-cardColumns());
+			moveFocus(layout === 'list' ? -1 : -cardColumns());
 			return;
 		}
 		if (key === 'x') {
@@ -203,6 +217,18 @@
 			event.preventDefault();
 			const thread = items[focused];
 			if (thread) void toggleStar(thread);
+			return;
+		}
+		if (key === 'p') {
+			event.preventDefault();
+			const thread = items[focused];
+			if (thread) void togglePin(thread);
+			return;
+		}
+		if (key === 'f') {
+			event.preventDefault();
+			const thread = items[focused];
+			if (thread && !thread.is_draft) goto(`/compose?forward=${thread.latest_id}`);
 			return;
 		}
 		if (key === 'u') {
@@ -234,6 +260,25 @@
 			body: JSON.stringify({ isStarred })
 		});
 		await invalidateAll();
+	}
+
+	async function togglePin(thread: ThreadSummary) {
+		const isPinned = !thread.is_pinned;
+		items = items.map((row) =>
+			row.thread_id === thread.thread_id ? { ...row, is_pinned: isPinned } : row
+		);
+
+		await fetch(`/api/mail/${thread.latest_id}`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ isPinned })
+		});
+		await invalidateAll();
+	}
+
+	function chooseLayout(next: MailboxLayout) {
+		layout = next;
+		setMailboxLayout(next);
 	}
 
 	/** Builds a URL for this mailbox with some query params changed. */
@@ -322,7 +367,10 @@
 							Read
 						</button>
 						<button type="button" class="menu-item" onclick={() => selectWhere((e) => e.is_starred)}>
-							Starred
+							Flagged
+						</button>
+						<button type="button" class="menu-item" onclick={() => selectWhere((e) => e.is_pinned)}>
+							Pinned
 						</button>
 					</div>
 				{/if}
@@ -353,20 +401,38 @@
 					<button
 						type="button"
 						class="tool-btn"
-						title="Star"
+						title="Flag"
 						disabled={busy}
 						onclick={() => run('star')}
 					>
-						<Icon name="star-line" size={16} />
+						<Icon name="flag-line" size={16} />
 					</button>
 					<button
 						type="button"
 						class="tool-btn"
-						title="Remove star"
+						title="Remove flag"
 						disabled={busy}
 						onclick={() => run('unstar')}
 					>
-						<Icon name="star-off-line" size={16} />
+						<Icon name="flag-off-line" size={16} />
+					</button>
+					<button
+						type="button"
+						class="tool-btn"
+						title="Pin to top"
+						disabled={busy}
+						onclick={() => run('pin')}
+					>
+						<Icon name="pushpin-2-line" size={16} />
+					</button>
+					<button
+						type="button"
+						class="tool-btn"
+						title="Unpin"
+						disabled={busy}
+						onclick={() => run('unpin')}
+					>
+						<Icon name="unpin-line" size={16} />
 					</button>
 
 					{#if view === 'trash'}
@@ -548,6 +614,33 @@
 				{/if}
 			</div>
 
+			<div class="layout-toggle" role="radiogroup" aria-label="Mailbox layout">
+				<button
+					type="button"
+					class="tool-btn"
+					class:on={layout === 'cards'}
+					role="radio"
+					aria-checked={layout === 'cards'}
+					aria-label="Card view"
+					title="Card view"
+					onclick={() => chooseLayout('cards')}
+				>
+					<Icon name="layout-grid-line" size={16} />
+				</button>
+				<button
+					type="button"
+					class="tool-btn"
+					class:on={layout === 'list'}
+					role="radio"
+					aria-checked={layout === 'list'}
+					aria-label="List view"
+					title="List view"
+					onclick={() => chooseLayout('list')}
+				>
+					<Icon name="list-unordered" size={16} />
+				</button>
+			</div>
+
 			<div class="pager">
 				<a
 					class="pager-btn"
@@ -585,13 +678,14 @@
 				title={filters.q ? 'No messages match that search' : meta.empty}
 			/>
 		{:else}
-			<ul class="cards">
+			<ul class="cards" class:layout-list={layout === 'list'}>
 				{#each items as thread, index (thread.thread_id)}
 					<li
 						class="card"
 						class:unread={!thread.is_read}
 						class:checked={selected.includes(thread.latest_id)}
 						class:focused={index === focused}
+						class:pinned={thread.is_pinned}
 					>
 						<div class="card-bar">
 							<Check
@@ -600,15 +694,28 @@
 								onchange={() => toggle(thread.latest_id)}
 							/>
 
-							<button
-								type="button"
-								class="star"
-								class:on={thread.is_starred}
-								aria-label={thread.is_starred ? 'Remove star' : 'Add star'}
-								onclick={() => toggleStar(thread)}
-							>
-								<Icon name={thread.is_starred ? 'star-fill' : 'star-line'} size={14} />
-							</button>
+							<div class="marks">
+								<button
+									type="button"
+									class="star"
+									class:on={thread.is_starred}
+									aria-label={thread.is_starred ? 'Remove flag' : 'Flag'}
+									title={thread.is_starred ? 'Remove flag' : 'Flag'}
+									onclick={() => toggleStar(thread)}
+								>
+									<Icon name={thread.is_starred ? 'flag-fill' : 'flag-line'} size={14} />
+								</button>
+								<button
+									type="button"
+									class="star pin"
+									class:on={thread.is_pinned}
+									aria-label={thread.is_pinned ? 'Unpin' : 'Pin to top'}
+									title={thread.is_pinned ? 'Unpin' : 'Pin to top'}
+									onclick={() => togglePin(thread)}
+								>
+									<Icon name={thread.is_pinned ? 'pushpin-2-fill' : 'pushpin-2-line'} size={14} />
+								</button>
+							</div>
 						</div>
 
 						<a class="card-link" href={href(thread)}>
@@ -684,6 +791,16 @@
 									<Icon name="delete-bin-line" size={15} />
 								</button>
 							{:else}
+								{#if !thread.is_draft}
+									<button
+										type="button"
+										class="tool-btn"
+										title="Forward (f)"
+										onclick={() => goto(`/compose?forward=${thread.latest_id}`)}
+									>
+										<Icon name="share-forward-line" size={15} />
+									</button>
+								{/if}
 								<button
 									type="button"
 									class="tool-btn"
@@ -827,6 +944,22 @@
 
 	.tool-btn.danger:hover {
 		color: var(--color-danger);
+	}
+
+	.tool-btn.on {
+		color: var(--color-text);
+		background: var(--color-surface);
+		box-shadow: var(--mat-panel);
+	}
+
+	.layout-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.125rem;
+		padding: 0.125rem;
+		border-radius: 11px;
+		background: var(--color-well);
+		box-shadow: var(--mat-well);
 	}
 
 	.more,
@@ -1003,6 +1136,12 @@
 		list-style: none;
 	}
 
+	.cards.layout-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+	}
+
 	.card {
 		position: relative;
 		display: flex;
@@ -1034,6 +1173,14 @@
 
 	.card.focused:not(.checked) {
 		box-shadow: 0 0 0 2px var(--color-accent);
+	}
+
+	.card.pinned {
+		box-shadow: inset 2px 0 0 var(--color-accent);
+	}
+
+	.card.pinned.focused:not(.checked) {
+		box-shadow: 0 0 0 2px var(--color-accent), inset 2px 0 0 var(--color-accent);
 	}
 
 	.card:has(.backdrop) {
@@ -1068,6 +1215,75 @@
 
 	.star.on {
 		color: var(--color-star);
+	}
+
+	.star.pin.on {
+		color: var(--color-accent);
+	}
+
+	.marks {
+		display: flex;
+		align-items: center;
+		margin-left: auto;
+	}
+
+	.cards.layout-list .card {
+		flex-direction: row;
+		align-items: center;
+		height: auto;
+		min-height: 2.75rem;
+		padding: 0.35rem 0.5rem;
+		border-radius: 10px;
+		gap: 0.5rem;
+	}
+
+	.cards.layout-list .card-bar {
+		margin: 0;
+		flex-shrink: 0;
+	}
+
+	.cards.layout-list .card-link {
+		flex-direction: row;
+		align-items: center;
+		gap: 0.75rem;
+		flex: 1;
+	}
+
+	.cards.layout-list .card-who {
+		width: 10.5rem;
+		flex-shrink: 0;
+	}
+
+	.cards.layout-list .subject {
+		width: 28%;
+		flex-shrink: 0;
+		-webkit-line-clamp: 1;
+		line-clamp: 1;
+	}
+
+	.cards.layout-list .preview {
+		-webkit-line-clamp: 1;
+		line-clamp: 1;
+		flex: 1;
+	}
+
+	.cards.layout-list .card-meta {
+		margin-top: 0;
+		flex-shrink: 0;
+		width: auto;
+	}
+
+	.cards.layout-list .card-actions {
+		position: static;
+		display: flex;
+		padding: 0;
+		background: none;
+		opacity: 0;
+	}
+
+	.cards.layout-list .card:hover .card-actions,
+	.cards.layout-list .card.focused .card-actions {
+		opacity: 1;
 	}
 
 	.card-link {
@@ -1289,6 +1505,22 @@
 		.cards {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 			gap: 0.5rem;
+		}
+
+		.cards.layout-list {
+			display: flex;
+		}
+
+		.cards.layout-list .card-who {
+			width: 7.5rem;
+		}
+
+		.cards.layout-list .subject {
+			width: 34%;
+		}
+
+		.cards.layout-list .card-actions {
+			opacity: 1;
 		}
 
 		.card {

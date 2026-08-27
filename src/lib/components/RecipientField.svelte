@@ -3,12 +3,14 @@
 		value = $bindable(''),
 		placeholder = 'name@example.com',
 		required = false,
-		id = undefined
+		id = undefined,
+		label = undefined
 	}: {
 		value: string;
 		placeholder?: string;
 		required?: boolean;
 		id?: string;
+		label?: string;
 	} = $props();
 
 	let open = $state(false);
@@ -77,6 +79,7 @@
 		{value}
 		{placeholder}
 		{required}
+		aria-label={label ?? id}
 		autocomplete="off"
 		autocapitalize="none"
 		spellcheck="false"

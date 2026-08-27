@@ -21,7 +21,7 @@ Mail:
   quickmail later [--page N]
   quickmail search <query> [--view inbox|sent|drafts|starred|later|trash]
   quickmail read <thread-or-message-id>
-  quickmail send --to <addr> --subject <text> [--body <text>] [--from <address-id>]
+  quickmail send --to <addr> --subject <text> [--cc <addr>] [--bcc <addr>] [--body <text>] [--from <address-id>]
   quickmail reply <id> [--body <text>]
   quickmail attachments <id>
   quickmail download <email-id> <attachment-id> [--out file]

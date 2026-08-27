@@ -117,6 +117,7 @@ export type EmailRow = {
 	status_detail: string | null;
 	is_read: number;
 	is_starred: number;
+	is_pinned: number;
 	deleted_at: string | null;
 	/** When set and in the future, the conversation is hidden from the inbox. */
 	snoozed_until: string | null;
@@ -161,6 +162,7 @@ export type ThreadSummary = {
 	/** False when any message in the conversation is unread. */
 	is_read: boolean;
 	is_starred: boolean;
+	is_pinned: boolean;
 	is_draft: boolean;
 	has_attachments: boolean;
 	domain_id: string | null;
@@ -193,6 +195,7 @@ export type ThreadMessage = {
 	from_addr: string;
 	to_addr: string;
 	cc_addr: string | null;
+	bcc_addr: string | null;
 	subject: string;
 	body_text: string | null;
 	body_html: string | null;
@@ -202,6 +205,7 @@ export type ThreadMessage = {
 	status_detail: string | null;
 	is_read: boolean;
 	is_starred: boolean;
+	is_pinned: boolean;
 	deleted_at: string | null;
 	created_at: string;
 	attachments: EmailAttachmentMeta[];

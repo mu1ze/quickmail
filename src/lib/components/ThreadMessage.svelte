@@ -36,9 +36,15 @@
 			<div class="avatar" class:self={outbound}>{outbound ? 'me' : initial}</div>
 
 			<button type="button" class="who" onclick={onToggle}>
-				<p class="name">
-					{sender}
-					<span class="direction">to {message.to_addr}</span>
+				<p class="name">{sender}</p>
+				<p class="route">
+					<span>to {message.to_addr}</span>
+					{#if message.cc_addr}
+						<span>cc {message.cc_addr}</span>
+					{/if}
+					{#if outbound && message.bcc_addr}
+						<span>bcc {message.bcc_addr}</span>
+					{/if}
 				</p>
 				<p class="when">{formatFullDate(message.created_at)}</p>
 			</button>
@@ -154,10 +160,14 @@
 		white-space: nowrap;
 	}
 
-	.direction {
-		margin-left: 0.375rem;
-		font-weight: 400;
+	.route {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.125rem 0.75rem;
+		margin-top: 0.125rem;
+		font-size: 0.75rem;
 		color: var(--color-muted);
+		overflow: hidden;
 	}
 
 	.when {
