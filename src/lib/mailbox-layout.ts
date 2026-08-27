@@ -3,14 +3,13 @@ export type MailboxLayout = 'cards' | 'list';
 export const MAILBOX_LAYOUT_KEY = 'mail:layout';
 export const MAILBOX_LAYOUT_EVENT = 'mail:layout';
 
-function isLayout(value: string | null): value is MailboxLayout {
-	return value === 'cards' || value === 'list';
+export function parseMailboxLayout(value: string | null | undefined): MailboxLayout {
+	return value === 'list' ? 'list' : 'cards';
 }
 
 export function readMailboxLayout(): MailboxLayout {
 	if (typeof localStorage === 'undefined') return 'cards';
-	const stored = localStorage.getItem(MAILBOX_LAYOUT_KEY);
-	return isLayout(stored) ? stored : 'cards';
+	return parseMailboxLayout(localStorage.getItem(MAILBOX_LAYOUT_KEY));
 }
 
 export function setMailboxLayout(layout: MailboxLayout): void {

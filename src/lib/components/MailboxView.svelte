@@ -367,7 +367,7 @@
 							Read
 						</button>
 						<button type="button" class="menu-item" onclick={() => selectWhere((e) => e.is_starred)}>
-							Starred
+							Flagged
 						</button>
 						<button type="button" class="menu-item" onclick={() => selectWhere((e) => e.is_pinned)}>
 							Pinned
@@ -401,20 +401,20 @@
 					<button
 						type="button"
 						class="tool-btn"
-						title="Star"
+						title="Flag"
 						disabled={busy}
 						onclick={() => run('star')}
 					>
-						<Icon name="star-line" size={16} />
+						<Icon name="flag-line" size={16} />
 					</button>
 					<button
 						type="button"
 						class="tool-btn"
-						title="Remove star"
+						title="Remove flag"
 						disabled={busy}
 						onclick={() => run('unstar')}
 					>
-						<Icon name="star-off-line" size={16} />
+						<Icon name="flag-off-line" size={16} />
 					</button>
 					<button
 						type="button"
@@ -621,6 +621,7 @@
 					class:on={layout === 'cards'}
 					role="radio"
 					aria-checked={layout === 'cards'}
+					aria-label="Card view"
 					title="Card view"
 					onclick={() => chooseLayout('cards')}
 				>
@@ -632,6 +633,7 @@
 					class:on={layout === 'list'}
 					role="radio"
 					aria-checked={layout === 'list'}
+					aria-label="List view"
 					title="List view"
 					onclick={() => chooseLayout('list')}
 				>
@@ -1171,6 +1173,14 @@
 
 	.card.focused:not(.checked) {
 		box-shadow: 0 0 0 2px var(--color-accent);
+	}
+
+	.card.pinned {
+		box-shadow: inset 2px 0 0 var(--color-accent);
+	}
+
+	.card.pinned.focused:not(.checked) {
+		box-shadow: 0 0 0 2px var(--color-accent), inset 2px 0 0 var(--color-accent);
 	}
 
 	.card:has(.backdrop) {

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
+	import { setMailboxLayout } from '$lib/mailbox-layout';
 	import Icon from './Icon.svelte';
 
 	let {
@@ -74,6 +75,18 @@
 			hint: 'g e',
 			icon: 'delete-bin-line',
 			run: () => goto('/trash')
+		},
+		{
+			id: 'layout-list',
+			label: 'Use list view',
+			icon: 'list-unordered',
+			run: () => setMailboxLayout('list')
+		},
+		{
+			id: 'layout-cards',
+			label: 'Use card view',
+			icon: 'layout-grid-line',
+			run: () => setMailboxLayout('cards')
 		},
 		{
 			id: 'settings',
