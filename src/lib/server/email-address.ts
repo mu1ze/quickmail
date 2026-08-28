@@ -9,6 +9,24 @@ export function parseEmailAddress(value: string): string {
 	return (emailMatch?.[0] ?? trimmed).toLowerCase().trim();
 }
 
+/**
+ * Address to store and display for inbound mail.
+ *
+ * Cloudflare Email Workers set `message.from` to the SMTP envelope sender
+ * (MAIL FROM / Return-Path). Providers like Paystack put a VERP bounce mailbox
+ * there (`bounces+id-user=domain@em.example.com`) while the RFC 5322 From
+ * header carries the address people expect. Prefer the header; fall back to
+ * the envelope when From is missing.
+ */
+export function visibleInboundFrom(
+	envelopeFrom: string | null | undefined,
+	headerFrom: string | null | undefined
+): string {
+	const header = parseEmailAddress(headerFrom ?? '');
+	if (header.includes('@')) return header;
+	return parseEmailAddress(envelopeFrom ?? '');
+}
+
 export function parseEmailAddresses(
 	value: string | string[] | null | undefined
 ): string[] {
