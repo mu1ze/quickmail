@@ -3,12 +3,13 @@ import PostalMime, { type Address, type Attachment } from 'postal-mime';
 import { insertAttachmentBytes } from './attachments';
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_EMAIL } from './constants';
 import { recordUnroutedEmail, resolveInboundRoute } from './domains';
-import { collectInboundRecipients, parseEmailAddress } from './email-address';
+import { collectInboundRecipients, parseEmailAddress, visibleInboundFrom } from './email-address';
 import { emailExistsByProviderId, insertEmail } from './mail-store';
 import { scheduleNewMailNotification, type PushNotificationEnv } from './push-notifications';
 import { normalizeMessageId } from './send-mail';
 
 export type CloudflareInboundMessage = {
+	/** SMTP envelope MAIL FROM (Return-Path), not the RFC 5322 From header. */
 	readonly from: string;
 	readonly to: string;
 	readonly headers: Headers;
@@ -39,7 +40,10 @@ export async function handleCloudflareInbound(
 		bcc: mailboxAddresses(parsed.bcc)
 	});
 
-	const from = parseEmailAddress(message.from || mailboxAddresses(parsed.from)[0] || '');
+	const from = visibleInboundFrom(
+		message.from,
+		mailboxAddresses(parsed.from)[0] ?? message.headers.get('from')
+	);
 	const subject = parsed.subject?.trim() || message.headers.get('subject')?.trim() || '(no subject)';
 	const messageId =
 		normalizeMessageId(parsed.messageId ?? message.headers.get('message-id')) ?? null;
