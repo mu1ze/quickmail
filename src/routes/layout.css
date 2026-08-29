@@ -45,7 +45,7 @@
 	--sidebar-width: 15.25rem;
 	--sidebar-width-collapsed: 4.25rem;
 	--topbar-height: 3.25rem;
-	--mobile-dock-height: 4.25rem;
+	--mobile-dock-height: 4.5rem;
 	--radius-panel: 20px;
 	--gutter: 12px;
 }
@@ -339,6 +339,15 @@ textarea:focus-visible {
 
 	.app-shell.has-dock .app-main {
 		padding-bottom: calc(1rem + var(--mobile-dock-height) + env(safe-area-inset-bottom));
+	}
+
+	.app-shell.mailbox-mobile .app-main {
+		padding: 0;
+		padding-bottom: calc(4.75rem + env(safe-area-inset-bottom));
+	}
+
+	.app-shell.mailbox-mobile .app-content {
+		background: var(--color-surface);
 	}
 
 	.icon-btn {

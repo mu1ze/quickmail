@@ -14,7 +14,11 @@
 	import { armGoChord, consumeGoChord, isMod, isTypingTarget } from '$lib/shortcuts';
 	import { watchSystemTheme } from '$lib/theme';
 	import { runUndo } from '$lib/undo';
+	import { setShellContext } from '$lib/shell-context';
+	import { requestSearchFocus } from '$lib/search-focus';
 	import type { LayoutData } from './$types';
+
+	const MAILBOX_ROUTES = ['/inbox', '/starred', '/drafts', '/sent', '/later', '/trash'];
 
 	let { children, data }: { children: import('svelte').Snippet; data: LayoutData } = $props();
 
@@ -32,6 +36,7 @@
 	let sheetOpen = $state(false);
 
 	const composing = $derived($page.url.pathname.startsWith('/compose'));
+	const mailboxRoute = $derived(MAILBOX_ROUTES.includes($page.url.pathname));
 
 	// app.html already applied the theme; this keeps "System" live afterwards.
 	$effect(() => watchSystemTheme());
@@ -109,7 +114,7 @@
 		if (key === '/') {
 			event.preventDefault();
 			event.stopImmediatePropagation();
-			focusSearch();
+			handleDockSearch();
 			return;
 		}
 		if (key === '?') {
@@ -131,11 +136,22 @@
 		}
 	}
 
-	function focusSearch() {
+	function focusSearchField() {
 		mobileOpen = false;
 		searchInput?.focus();
 		searchInput?.scrollIntoView({ block: 'nearest' });
 	}
+
+	function handleDockSearch() {
+		mobileOpen = false;
+		if (mailboxRoute) requestSearchFocus();
+		else focusSearchField();
+	}
+
+	setShellContext({
+		openNav: () => (mobileOpen = true),
+		focusSearch: handleDockSearch
+	});
 
 	async function logout() {
 		try {
@@ -162,7 +178,12 @@
 <svelte:window onkeydowncapture={onWindowKeydown} />
 
 {#if showShell}
-	<div class="app-shell" class:has-dock={!composing} data-collapsed={collapsed}>
+	<div
+		class="app-shell"
+		class:has-dock={!composing}
+		class:mailbox-mobile={mailboxRoute}
+		data-collapsed={collapsed}
+	>
 		<Sidebar
 			counts={data.counts}
 			domains={data.domains}
@@ -173,14 +194,16 @@
 		/>
 
 		<div class="app-content">
-			<Topbar
-				userName={data.user!.name}
-				userEmail={data.user!.email}
-				addresses={data.addresses}
-				bind:searchInput
-				onToggleNav={() => (mobileOpen = !mobileOpen)}
-				onLogout={logout}
-			/>
+			{#if !mailboxRoute}
+				<Topbar
+					userName={data.user!.name}
+					userEmail={data.user!.email}
+					addresses={data.addresses}
+					bind:searchInput
+					onToggleNav={() => (mobileOpen = !mobileOpen)}
+					onLogout={logout}
+				/>
+			{/if}
 
 			<main class="app-main" class:app-main-narrow={narrow}>
 				{@render children()}
@@ -189,14 +212,13 @@
 
 		{#if !composing}
 			<MobileDock
-				inboxUnread={data.counts.inbox_unread}
 				menuOpen={mobileOpen}
 				onOpenMenu={() => (mobileOpen = !mobileOpen)}
-				onSearch={focusSearch}
+				onSearch={handleDockSearch}
 			/>
 		{/if}
 
-		<CommandPalette bind:open={paletteOpen} onSearch={focusSearch} />
+		<CommandPalette bind:open={paletteOpen} onSearch={focusSearchField} />
 		<ShortcutSheet bind:open={sheetOpen} />
 		<UndoToast />
 	</div>

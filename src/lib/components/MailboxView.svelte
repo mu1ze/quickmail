@@ -11,13 +11,26 @@
 	import { formatSnoozeUntil } from '$lib/snooze';
 	import { isGoChordArmed, isTypingTarget } from '$lib/shortcuts';
 	import { showUndo } from '$lib/undo';
+	import { getShellContext } from '$lib/shell-context';
+	import { onSearchFocus } from '$lib/search-focus';
 	import {
 		readMailboxLayout,
 		setMailboxLayout,
 		watchMailboxLayout,
 		type MailboxLayout
 	} from '$lib/mailbox-layout';
-	import type { MailboxFilters, MailboxPage, MailboxView, ThreadSummary } from '$lib/types';
+	import type { MailboxCounts, MailboxFilters, MailboxPage, MailboxView, ThreadSummary } from '$lib/types';
+
+	const shell = getShellContext();
+
+	const AVATAR_PALETTE = [
+		{ bg: '#8b5cf6', fg: '#ffffff' },
+		{ bg: '#eab308', fg: '#1c1917' },
+		{ bg: '#0a66c2', fg: '#ffffff' },
+		{ bg: '#ec4899', fg: '#ffffff' },
+		{ bg: '#14b8a6', fg: '#ffffff' },
+		{ bg: '#f97316', fg: '#ffffff' }
+	];
 
 	let {
 		view,
@@ -51,6 +64,44 @@
 	let snoozeFor = $state<string | null>(null);
 	let bulkSnoozeOpen = $state(false);
 	let layout = $state<MailboxLayout>('cards');
+	let selectMode = $state(false);
+	let searchOpen = $state(false);
+	let searchQuery = $state('');
+	let searchInput = $state<HTMLInputElement | null>(null);
+
+	const counts = $derived(($currentPage.data.counts ?? {}) as MailboxCounts);
+
+	$effect(() => {
+		return onSearchFocus(() => {
+			searchOpen = true;
+			queueMicrotask(() => searchInput?.focus());
+		});
+	});
+
+	const activeFilterCount = $derived(
+		[filters.unreadOnly, filters.starredOnly, filters.attachmentsOnly].filter(Boolean).length
+	);
+
+	const subtitle = $derived.by(() => {
+		const parts: string[] = [];
+		if (activeFilterCount > 0 || filters.unreadOnly) {
+			if (filters.unreadOnly) parts.push('Unread');
+			if (filters.starredOnly) parts.push('Starred');
+			if (filters.attachmentsOnly) parts.push('Attachments');
+		} else {
+			parts.push('All Mail');
+		}
+		if (view === 'inbox' && counts.drafts > 0) {
+			parts.push(`${counts.drafts} Unsent Message${counts.drafts === 1 ? '' : 's'}`);
+		} else if (mailbox.total > 0) {
+			parts.push(`${mailbox.total} message${mailbox.total === 1 ? '' : 's'}`);
+		}
+		return parts.join(' · ');
+	});
+
+	$effect(() => {
+		searchQuery = filters.q ?? '';
+	});
 
 	$effect(() => {
 		layout = readMailboxLayout();
@@ -69,9 +120,6 @@
 
 	const allSelected = $derived(items.length > 0 && selected.length === items.length);
 	const someSelected = $derived(selected.length > 0);
-	const activeFilterCount = $derived(
-		[filters.unreadOnly, filters.starredOnly, filters.attachmentsOnly].filter(Boolean).length
-	);
 
 	/**
 	 * Who to show on the card. Sent and Drafts are about where a message went, so
@@ -93,6 +141,40 @@
 	function initial(thread: ThreadSummary): string {
 		const external = thread.participants.find((participant) => !participant.self);
 		return ((external ?? thread.participants[0])?.address[0] ?? '?').toUpperCase();
+	}
+
+	function avatarSeed(thread: ThreadSummary): string {
+		const external = thread.participants.find((participant) => !participant.self);
+		return (external ?? thread.participants[0])?.address ?? thread.thread_id;
+	}
+
+	function avatarStyle(thread: ThreadSummary): string {
+		const seed = avatarSeed(thread);
+		let hash = 0;
+		for (let i = 0; i < seed.length; i++) hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+		const color = AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
+		return `--avatar-bg:${color.bg};--avatar-fg:${color.fg}`;
+	}
+
+	function toggleSelectMode() {
+		if (selectMode) {
+			selectMode = false;
+			selected = [];
+		} else {
+			selectMode = true;
+		}
+	}
+
+	function submitSearch(event: SubmitEvent) {
+		event.preventDefault();
+		searchOpen = false;
+		apply({ q: searchQuery.trim() || null });
+	}
+
+	function clearSearch() {
+		searchQuery = '';
+		searchOpen = false;
+		if (filters.q) apply({ q: null });
 	}
 
 	/** Cards carry the newest message; opening one opens the whole conversation. */
@@ -327,6 +409,142 @@
 <svelte:window onkeydown={onListKeydown} />
 
 <section class="mailbox">
+	<header class="ios-header">
+		<button type="button" class="ios-back" aria-label="Open menu" onclick={() => shell?.openNav()}>
+			<Icon name="arrow-left-s-line" size={22} />
+		</button>
+
+		<div class="ios-title-block">
+			<h1 class="ios-title">{meta.title}</h1>
+			<p class="ios-subtitle">{subtitle}</p>
+		</div>
+
+		<div class="ios-actions">
+			{#if selectMode || someSelected}
+				<button type="button" class="ios-select" onclick={toggleSelectMode}>Cancel</button>
+			{:else}
+				<button type="button" class="ios-select" onclick={toggleSelectMode}>Select</button>
+			{/if}
+
+			<div class="ios-more">
+				<button
+					type="button"
+					class="ios-icon-btn"
+					aria-label="Mailbox actions"
+					aria-expanded={moreOpen}
+					onclick={() => (moreOpen = !moreOpen)}
+				>
+					<Icon name="more-2-fill" size={18} />
+				</button>
+
+				{#if moreOpen}
+					<button
+						type="button"
+						class="backdrop"
+						aria-label="Close menu"
+						onclick={() => (moreOpen = false)}
+					></button>
+					<div class="menu menu-right" role="menu">
+						<button type="button" class="menu-item" onclick={() => run('read-all', [])}>
+							<Icon name="mail-open-line" size={15} /> Mark all as read
+						</button>
+						<button type="button" class="menu-item" onclick={() => invalidateAll()}>
+							<Icon name="refresh-line" size={15} /> Refresh
+						</button>
+						{#if view === 'trash'}
+							<div class="menu-hold">
+								<HoldToConfirm
+									label="Empty trash"
+									holdLabel="Keep holding"
+									confirmLabel="Emptied"
+									onConfirm={() => run('empty-trash', [])}
+								/>
+							</div>
+						{/if}
+					</div>
+				{/if}
+			</div>
+		</div>
+	</header>
+
+	{#if selectMode && someSelected}
+		<div class="ios-bulk-bar">
+			<span class="ios-bulk-count">{selected.length} selected</span>
+			<div class="ios-bulk-actions">
+				<button type="button" class="ios-icon-btn" title="Mark as read" disabled={busy} onclick={() => run('read')}>
+					<Icon name="mail-open-line" size={18} />
+				</button>
+				<button type="button" class="ios-icon-btn" title="Flag" disabled={busy} onclick={() => run('star')}>
+					<Icon name="flag-line" size={18} />
+				</button>
+				<button type="button" class="ios-icon-btn" title="Move to trash" disabled={busy} onclick={() => run('trash')}>
+					<Icon name="delete-bin-line" size={18} />
+				</button>
+			</div>
+		</div>
+	{/if}
+
+	<div class="ios-filters">
+		<div class="ios-filter-icons">
+			<button
+				type="button"
+				class="ios-filter-icon"
+				class:active={filters.unreadOnly}
+				aria-label="Unread"
+				onclick={() => apply({ unread: filters.unreadOnly ? null : '1' })}
+			>
+				<Icon name="user-line" size={18} />
+			</button>
+			<button
+				type="button"
+				class="ios-filter-icon"
+				class:active={filters.starredOnly}
+				aria-label="Starred"
+				onclick={() => apply({ starred: filters.starredOnly ? null : '1' })}
+			>
+				<Icon name="shopping-cart-line" size={18} />
+			</button>
+			<button
+				type="button"
+				class="ios-filter-icon"
+				class:active={filters.attachmentsOnly}
+				aria-label="Has attachments"
+				onclick={() => apply({ attachments: filters.attachmentsOnly ? null : '1' })}
+			>
+				<Icon name="chat-3-line" size={18} />
+			</button>
+			<a class="ios-filter-icon" aria-label="Later" href="/later">
+				<Icon name="megaphone-line" size={18} />
+			</a>
+		</div>
+		<button
+			type="button"
+			class="ios-filter-pill"
+			class:active={activeFilterCount === 0 && !filters.q}
+			onclick={() => apply({ unread: null, starred: null, attachments: null, q: null })}
+		>
+			<Icon name="mail-line" size={16} />
+			All Mail
+		</button>
+	</div>
+
+	{#if searchOpen || filters.q}
+		<form class="ios-search" role="search" onsubmit={submitSearch}>
+			<Icon name="search-line" size={16} />
+			<input
+				type="search"
+				bind:this={searchInput}
+				bind:value={searchQuery}
+				placeholder="Search"
+				aria-label="Search messages"
+				enterkeyhint="search"
+			/>
+			<button type="button" class="ios-search-close" aria-label="Close search" onclick={clearSearch}>
+				<Icon name="close-line" size={16} />
+			</button>
+		</form>
+	{/if}
+
 	<header class="toolbar">
 		<div class="toolbar-left">
 			<div class="select-all">
@@ -678,7 +896,7 @@
 				title={filters.q ? 'No messages match that search' : meta.empty}
 			/>
 		{:else}
-			<ul class="cards" class:layout-list={layout === 'list'}>
+			<ul class="cards" class:layout-list={layout === 'list'} class:ios-list={true}>
 				{#each items as thread, index (thread.thread_id)}
 					<li
 						class="card"
@@ -686,7 +904,10 @@
 						class:checked={selected.includes(thread.latest_id)}
 						class:focused={index === focused}
 						class:pinned={thread.is_pinned}
+						class:select-mode={selectMode}
 					>
+						<span class="ios-unread-dot" class:visible={!thread.is_read} aria-hidden="true"></span>
+
 						<div class="card-bar">
 							<Check
 								label={`Select conversation with ${people(thread)}`}
@@ -719,41 +940,64 @@
 						</div>
 
 						<a class="card-link" href={href(thread)}>
-							<span class="card-who">
-								<span class="avatar">{initial(thread)}</span>
-								<span class="sender" title={people(thread)}>
-									<span class="sender-names">{people(thread)}</span>
-									{#if thread.message_count > 1}
-										<span class="count">{thread.message_count}</span>
-									{/if}
-									{#if thread.is_draft}<span class="tag tag-draft">Draft</span>{/if}
-								</span>
-							</span>
+							<span class="avatar" style={avatarStyle(thread)}>{initial(thread)}</span>
 
-							<span class="subject">{thread.subject || '(no subject)'}</span>
-							<span class="preview">
-								{thread.preview || 'No preview'}
-							</span>
-
-							<span class="card-meta">
-								<span class="indicators">
-									{#if view === 'sent' && thread.status}
-										<DeliveryStatus status={thread.status} />
-									{/if}
-									{#if view === 'later' && thread.snoozed_until}
-										<Icon name="time-line" size={13} />
-									{/if}
-									{#if thread.has_attachments}
-										<Icon name="attachment-2" size={13} />
-									{/if}
+							<span class="card-body">
+								<span class="card-top-row">
+									<span class="sender" title={people(thread)}>
+										<span class="sender-names">{people(thread)}</span>
+										{#if thread.message_count > 1}
+											<span class="count">{thread.message_count}</span>
+										{/if}
+										{#if thread.is_draft}<span class="tag tag-draft">Draft</span>{/if}
+									</span>
+									<span class="date">
+										{view === 'later' && thread.snoozed_until
+											? formatSnoozeUntil(thread.snoozed_until)
+											: formatRelativeDate(thread.created_at)}
+									</span>
 								</span>
-								<span class="date">
-									{view === 'later' && thread.snoozed_until
-										? formatSnoozeUntil(thread.snoozed_until)
-										: formatRelativeDate(thread.created_at)}
+
+								<span class="subject">{thread.subject || '(no subject)'}</span>
+								<span class="preview">
+									{thread.preview || 'No preview'}
+								</span>
+
+								<span class="card-meta">
+									<span class="indicators">
+										{#if view === 'sent' && thread.status}
+											<DeliveryStatus status={thread.status} />
+										{/if}
+										{#if view === 'later' && thread.snoozed_until}
+											<Icon name="time-line" size={13} />
+										{/if}
+										{#if thread.has_attachments}
+											<Icon name="attachment-2" size={13} />
+										{/if}
+									</span>
 								</span>
 							</span>
 						</a>
+
+						{#if selectMode}
+							<button
+								type="button"
+								class="ios-select-toggle"
+								aria-label={selected.includes(thread.latest_id) ? 'Deselect' : 'Select'}
+								aria-pressed={selected.includes(thread.latest_id)}
+								onclick={() => toggle(thread.latest_id)}
+							>
+								<span class="ios-select-circle" class:checked={selected.includes(thread.latest_id)}>
+									{#if selected.includes(thread.latest_id)}
+										<Icon name="check-line" size={14} />
+									{/if}
+								</span>
+							</button>
+						{:else}
+							<span class="ios-chevron" aria-hidden="true">
+								<Icon name="arrow-right-s-line" size={18} />
+							</span>
+						{/if}
 
 						<span class="card-actions">
 							{#if view === 'trash'}
@@ -860,6 +1104,22 @@
 		display: flex;
 		flex-direction: column;
 		background: transparent;
+		min-height: 100%;
+	}
+
+	/* --- iOS mobile header (hidden on desktop) --- */
+
+	.ios-header,
+	.ios-filters,
+	.ios-search,
+	.ios-bulk-bar {
+		display: none;
+	}
+
+	.ios-unread-dot,
+	.ios-chevron,
+	.ios-select-toggle {
+		display: none;
 	}
 
 	/* --- toolbar --- */
@@ -1249,7 +1509,20 @@
 		flex: 1;
 	}
 
-	.cards.layout-list .card-who {
+	.cards.layout-list .avatar {
+		align-self: center;
+	}
+
+	.cards.layout-list .card-body {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.cards.layout-list .card-top-row {
+		display: contents;
+	}
+
+	.cards.layout-list .sender {
 		width: 10.5rem;
 		flex-shrink: 0;
 	}
@@ -1296,11 +1569,35 @@
 		text-decoration: none;
 	}
 
-	.card-who {
-		display: flex;
-		align-items: center;
+	.cards:not(.layout-list) .card-link {
+		flex-direction: row;
+		align-items: flex-start;
 		gap: 0.375rem;
+	}
+
+	.cards:not(.layout-list) .card-body {
+		flex: 1;
 		min-width: 0;
+	}
+
+	.card-body {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		gap: 0.25rem;
+		min-width: 0;
+	}
+
+	.card-top-row {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 0.5rem;
+		min-width: 0;
+	}
+
+	.cards.layout-list .date {
+		margin-left: auto;
 	}
 
 	.avatar {
@@ -1313,8 +1610,8 @@
 		border-radius: 8px;
 		font-size: 0.625rem;
 		font-weight: 600;
-		color: var(--color-text-secondary);
-		background: var(--color-surface-muted);
+		color: var(--avatar-fg, var(--color-text-secondary));
+		background: var(--avatar-bg, var(--color-surface-muted));
 	}
 
 	.card.unread .avatar {
@@ -1459,129 +1756,359 @@
 	}
 
 	@media (max-width: 900px) {
-		.toolbar {
-			flex-wrap: wrap;
-			row-gap: 0.5rem;
-			padding: 0.5rem 0.25rem;
-		}
-
-		.toolbar-left,
-		.toolbar-right {
-			width: 100%;
-			justify-content: space-between;
-		}
-
-		.toolbar-right {
-			padding-bottom: 0.125rem;
-			overflow-x: auto;
-			-webkit-overflow-scrolling: touch;
-		}
-
-		.title {
-			font-size: 1rem;
-		}
-
-		.tool-btn,
-		.pager-btn,
-		.caret {
-			width: 2.75rem;
-			height: 2.75rem;
-			min-width: 2.75rem;
-		}
-
-		.pill {
-			height: 2.5rem;
-			padding: 0 0.875rem;
-		}
-
-		.bulk-actions {
-			flex-wrap: wrap;
-		}
-
-		.list {
-			padding: 0.5rem 0 0;
-		}
-
-		.cards {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-			gap: 0.5rem;
-		}
-
-		.cards.layout-list {
-			display: flex;
-		}
-
-		.cards.layout-list .card-who {
-			width: 7.5rem;
-		}
-
-		.cards.layout-list .subject {
-			width: 34%;
-		}
-
-		.cards.layout-list .card-actions {
-			opacity: 1;
-		}
-
-		.card {
-			padding: 0.5rem 0.55rem 0.55rem;
-			border-radius: 12px;
-		}
-
-		.card-bar {
-			margin: -0.1rem -0.05rem 0.2rem;
-		}
-
-		.star {
-			width: 1.375rem;
-			height: 1.375rem;
-		}
-
-		.card-who {
-			gap: 0.25rem;
-		}
-
-		.avatar {
-			width: 1.25rem;
-			height: 1.25rem;
-			border-radius: 6px;
-			font-size: 0.5rem;
-		}
-
-		.sender {
-			font-size: 0.6875rem;
-		}
-
-		.subject {
-			font-size: 0.75rem;
-		}
-
-		.preview {
-			font-size: 0.75rem;
-			-webkit-line-clamp: 4;
-			line-clamp: 4;
-		}
-
-		.date {
-			font-size: 0.625rem;
-		}
-
-		.card :global(.check) {
-			width: 1.375rem;
-			height: 1.375rem;
-		}
-
-		.indicators :global(.status) {
-			padding: 0.0625rem;
-			gap: 0;
-		}
-
-		.indicators :global(.label) {
+		.toolbar,
+		.list-foot {
 			display: none;
 		}
 
-		.card-actions {
+		.ios-header {
+			display: grid;
+			grid-template-columns: auto 1fr auto;
+			align-items: center;
+			gap: 0.5rem;
+			padding: max(0.625rem, env(safe-area-inset-top)) 0.875rem 0.625rem;
+		}
+
+		.ios-back,
+		.ios-icon-btn {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: 2.25rem;
+			height: 2.25rem;
+			border: none;
+			border-radius: 999px;
+			color: var(--color-text);
+			background: transparent;
+		}
+
+		.ios-title-block {
+			min-width: 0;
+			text-align: center;
+		}
+
+		.ios-title {
+			font-size: 1.0625rem;
+			font-weight: 700;
+			letter-spacing: -0.02em;
+			line-height: 1.2;
+		}
+
+		.ios-subtitle {
+			margin-top: 0.125rem;
+			font-size: 0.8125rem;
+			color: var(--color-muted);
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+
+		.ios-actions {
+			display: flex;
+			align-items: center;
+			gap: 0.25rem;
+		}
+
+		.ios-select {
+			height: 2rem;
+			padding: 0 0.75rem;
+			border: none;
+			border-radius: 999px;
+			font-size: 0.9375rem;
+			font-weight: 500;
+			color: var(--color-text);
+			background: var(--color-well);
+		}
+
+		.ios-more {
+			position: relative;
+		}
+
+		.ios-bulk-bar {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 0.75rem;
+			padding: 0.5rem 0.875rem;
+			box-shadow: inset 0 -1px 0 var(--color-line);
+		}
+
+		.ios-bulk-count {
+			font-size: 0.875rem;
+			font-weight: 500;
+		}
+
+		.ios-bulk-actions {
+			display: flex;
+			align-items: center;
+			gap: 0.125rem;
+		}
+
+		.ios-filters {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 0.75rem;
+			padding: 0.375rem 0.875rem 0.625rem;
+		}
+
+		.ios-filter-icons {
+			display: flex;
+			align-items: center;
+			gap: 0.625rem;
+		}
+
+		.ios-filter-icon {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: 2.125rem;
+			height: 2.125rem;
+			border: none;
+			border-radius: 999px;
+			color: var(--color-muted);
+			background: var(--color-well);
+			text-decoration: none;
+		}
+
+		.ios-filter-icon.active {
+			color: var(--color-text);
+			background: var(--color-surface-muted);
+		}
+
+		.ios-filter-pill {
+			display: inline-flex;
+			align-items: center;
+			gap: 0.375rem;
+			height: 2.125rem;
+			padding: 0 0.875rem;
+			border: none;
+			border-radius: 999px;
+			font-size: 0.875rem;
+			font-weight: 500;
+			color: var(--color-on-accent);
+			background: #3a3a3c;
+			white-space: nowrap;
+		}
+
+		:root[data-theme='dark'] .ios-filter-pill {
+			background: #636366;
+		}
+
+		.ios-filter-pill:not(.active) {
+			opacity: 0.72;
+		}
+
+		.ios-search {
+			display: flex;
+			align-items: center;
+			gap: 0.5rem;
+			margin: 0 0.875rem 0.625rem;
+			padding: 0 0.75rem;
+			height: 2.5rem;
+			border-radius: 12px;
+			color: var(--color-muted);
+			background: var(--color-well);
+		}
+
+		.ios-search input {
+			flex: 1;
+			min-width: 0;
+			border: none;
+			font-size: 1rem;
+			color: var(--color-text);
+			background: transparent;
+			outline: none;
+		}
+
+		.ios-search-close {
+			display: flex;
+			align-items: center;
+			color: var(--color-muted);
+		}
+
+		.search-note {
+			margin: 0 0.875rem 0.5rem;
+			padding: 0.625rem 0.75rem;
+			border-radius: 12px;
+		}
+
+		.list {
+			padding: 0;
+		}
+
+		.cards,
+		.cards.layout-list,
+		.cards.ios-list {
+			display: flex;
+			flex-direction: column;
+			gap: 0;
+		}
+
+		.card {
+			display: grid;
+			grid-template-columns: auto 1fr auto;
+			align-items: center;
+			gap: 0.625rem;
+			min-height: 5.5rem;
+			padding: 0.75rem 0.875rem;
+			border-radius: 0;
+			background: var(--color-surface);
+			box-shadow: inset 0 -1px 0 var(--color-line);
+		}
+
+		.card.unread,
+		.card:hover,
+		.card.unread:hover,
+		.card.checked,
+		.card.checked:hover {
+			background: var(--color-surface);
+			box-shadow: inset 0 -1px 0 var(--color-line);
+		}
+
+		.card.checked {
+			background: var(--color-accent-soft);
+		}
+
+		.card.focused:not(.checked) {
+			box-shadow: inset 0 -1px 0 var(--color-line), inset 3px 0 0 #007aff;
+		}
+
+		.card.pinned {
+			box-shadow: inset 0 -1px 0 var(--color-line), inset 3px 0 0 var(--color-accent);
+		}
+
+		.ios-unread-dot {
+			display: block;
+			width: 0.625rem;
+			height: 0.625rem;
+			border-radius: 999px;
+			background: transparent;
+			flex-shrink: 0;
+		}
+
+		.ios-unread-dot.visible {
+			background: #007aff;
+		}
+
+		.card-bar,
+		.card-actions,
+		.card-meta {
 			display: none !important;
+		}
+
+		.card-link {
+			display: grid;
+			grid-template-columns: auto 1fr;
+			align-items: start;
+			gap: 0.75rem;
+			flex: 1;
+			min-width: 0;
+		}
+
+		.avatar {
+			width: 2.75rem;
+			height: 2.75rem;
+			border-radius: 0.75rem;
+			font-size: 1.0625rem;
+			font-weight: 600;
+		}
+
+		.card.unread .avatar {
+			color: var(--avatar-fg, #ffffff);
+			background: var(--avatar-bg, var(--color-surface-muted));
+		}
+
+		.card-body {
+			gap: 0.125rem;
+		}
+
+		.card-top-row {
+			display: flex;
+			align-items: baseline;
+			justify-content: space-between;
+			gap: 0.5rem;
+		}
+
+		.sender {
+			font-size: 1rem;
+			font-weight: 400;
+			color: var(--color-text);
+			text-transform: none;
+		}
+
+		.card.unread .sender {
+			font-weight: 700;
+		}
+
+		.subject {
+			font-size: 0.9375rem;
+			line-height: 1.25;
+			-webkit-line-clamp: 1;
+			line-clamp: 1;
+			color: var(--color-text);
+		}
+
+		.card.unread .subject {
+			font-weight: 400;
+		}
+
+		.preview {
+			font-size: 0.9375rem;
+			line-height: 1.35;
+			-webkit-line-clamp: 2;
+			line-clamp: 2;
+			color: var(--color-muted);
+		}
+
+		.date {
+			flex-shrink: 0;
+			font-size: 0.9375rem;
+			color: var(--color-muted);
+		}
+
+		.card.unread .date {
+			font-weight: 400;
+			color: var(--color-muted);
+		}
+
+		.ios-chevron,
+		.ios-select-toggle {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			flex-shrink: 0;
+			color: var(--color-muted);
+		}
+
+		.ios-select-toggle {
+			border: none;
+			background: transparent;
+			padding: 0;
+		}
+
+		.ios-select-circle {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: 1.375rem;
+			height: 1.375rem;
+			border: 2px solid var(--color-line-strong);
+			border-radius: 999px;
+			color: var(--color-on-accent);
+		}
+
+		.ios-select-circle.checked {
+			border-color: #007aff;
+			background: #007aff;
+		}
+
+		.card.select-mode {
+			grid-template-columns: 1fr auto;
+		}
+
+		.card.select-mode .ios-unread-dot {
+			display: none;
 		}
 	}
 </style>
