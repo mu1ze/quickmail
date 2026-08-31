@@ -182,6 +182,7 @@
 		class="app-shell"
 		class:has-dock={!composing}
 		class:mailbox-mobile={mailboxRoute}
+		class:compose-mobile={composing}
 		data-collapsed={collapsed}
 	>
 		<Sidebar
@@ -194,7 +195,7 @@
 		/>
 
 		<div class="app-content">
-			{#if !mailboxRoute}
+			{#if !mailboxRoute && !composing}
 				<Topbar
 					userName={data.user!.name}
 					userEmail={data.user!.email}

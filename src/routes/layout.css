@@ -346,8 +346,19 @@ textarea:focus-visible {
 		padding-bottom: calc(4.75rem + env(safe-area-inset-bottom));
 	}
 
-	.app-shell.mailbox-mobile .app-content {
-		background: var(--color-surface);
+	.app-shell.compose-mobile .app-main {
+		padding: 0;
+		max-width: none;
+	}
+
+	.app-shell.compose-mobile .app-content {
+		background: var(--color-bezel);
+	}
+
+	@media (max-width: 900px) {
+		.app-shell.compose-mobile > :global(.sidebar) {
+			display: none;
+		}
 	}
 
 	.icon-btn {
