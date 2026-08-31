@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import type { PageServerLoad } from './$types';
+import type { LayoutServerLoad } from './$types';
 import { listUsers } from '$lib/server/auth';
 import {
 	safeEmailProviderKind,
@@ -15,7 +15,7 @@ import type { DomainPermissionFlags } from '$lib/types';
 
 const EMPTY_PERMISSIONS: Record<string, Record<string, DomainPermissionFlags>> = {};
 
-export const load: PageServerLoad = async ({ locals, platform }) => {
+export const load: LayoutServerLoad = async ({ locals, platform }) => {
 	if (!locals.user?.is_admin) {
 		throw error(403, 'Forbidden');
 	}
