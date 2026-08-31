@@ -198,7 +198,7 @@
 	<title>{pageTitle} — Mail</title>
 </svelte:head>
 
-<form class="compose-page" onsubmit={submit}>
+<form class="compose-page compose-fullscreen" onsubmit={submit}>
 	<div class="compose-sheet">
 		<div class="compose-grab" aria-hidden="true"></div>
 
@@ -541,23 +541,6 @@
 	}
 
 	@media (min-width: 901px) {
-		.compose-page {
-			display: flex;
-			justify-content: center;
-			padding: 1.5rem 1rem 2rem;
-		}
-
-		.compose-sheet {
-			width: min(100%, 42rem);
-			min-height: auto;
-			border-radius: 20px;
-			box-shadow: var(--mat-panel);
-		}
-
-		.compose-grab {
-			display: none;
-		}
-
 		.compose-title {
 			font-size: 1.75rem;
 		}
@@ -568,14 +551,6 @@
 	}
 
 	@media (max-width: 900px) {
-		.compose-page {
-			position: fixed;
-			inset: 0;
-			z-index: 40;
-			background: var(--color-surface);
-			overflow: hidden;
-		}
-
 		.compose-grab {
 			display: block;
 			width: 2.25rem;

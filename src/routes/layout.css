@@ -393,12 +393,29 @@ body.nav-open {
 
 body.compose-open {
 	overflow: hidden;
+	background: var(--color-surface);
 }
 
-@media (max-width: 900px) {
-	body.compose-open {
-		background: var(--color-surface);
-	}
+body.compose-open .compose-fullscreen {
+	position: fixed;
+	inset: 0;
+	z-index: 100;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	height: 100dvh;
+	margin: 0;
+	padding: 0;
+	background: var(--color-surface);
+	overflow: hidden;
+}
+
+body.compose-open .compose-fullscreen .compose-sheet {
+	flex: 1;
+	width: 100%;
+	height: 100%;
+	border-radius: 0;
+	box-shadow: none;
 }
 
 .page-title {
