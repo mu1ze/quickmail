@@ -13,10 +13,12 @@
 
 	let {
 		initial,
-		sounds
+		sounds,
+		embedded = false
 	}: {
 		initial: BrrrView;
 		sounds: SoundOption[];
+		embedded?: boolean;
 	} = $props();
 
 	let settings = $state<BrrrView>(untrack(() => initial));
@@ -131,7 +133,7 @@
 	}
 </script>
 
-<section class="surface-lg card">
+<section class="surface-lg card" class:embedded>
 	<div class="card-head">
 		<div>
 			<h2><Icon name="smartphone-line" size={18} /> Phone notifications</h2>
@@ -239,7 +241,14 @@
 </section>
 
 <style>
-	.card {
+	.card.embedded {
+		margin-top: 0;
+		padding: 0;
+		background: transparent;
+		box-shadow: none;
+	}
+
+	.card:not(.embedded) {
 		margin-top: 1.5rem;
 		padding: 1.5rem;
 	}

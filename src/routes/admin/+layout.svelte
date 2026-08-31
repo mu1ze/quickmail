@@ -72,6 +72,12 @@
 		display: none;
 	}
 
+	@media (max-width: 900px) {
+		.admin-layout:not(.admin-hub) .admin-nav {
+			display: none;
+		}
+	}
+
 	.admin-detail {
 		min-width: 0;
 	}

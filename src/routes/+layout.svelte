@@ -19,6 +19,12 @@
 	import type { LayoutData } from './$types';
 
 	const MAILBOX_ROUTES = ['/inbox', '/starred', '/drafts', '/sent', '/later', '/trash'];
+	const hubRoute = $derived(
+		$page.url.pathname === '/settings' ||
+			$page.url.pathname.startsWith('/settings/') ||
+			$page.url.pathname === '/admin' ||
+			$page.url.pathname.startsWith('/admin/')
+	);
 
 	let { children, data }: { children: import('svelte').Snippet; data: LayoutData } = $props();
 
@@ -26,7 +32,7 @@
 	const showShell = $derived(Boolean(data.user) && $page.url.pathname !== '/onboarding');
 
 	// Pages that read better centred than full-bleed.
-	const NARROW = ['/mail', '/settings'];
+	const NARROW = ['/mail'];
 	const narrow = $derived(NARROW.some((path) => $page.url.pathname.startsWith(path)));
 
 	let collapsed = $state(false);
@@ -187,6 +193,7 @@
 		class="app-shell"
 		class:has-dock={!composing}
 		class:mailbox-mobile={mailboxRoute}
+		class:hub-mobile={hubRoute}
 		class:compose-mobile={composing}
 		data-collapsed={collapsed}
 	>
@@ -200,7 +207,7 @@
 		/>
 
 		<div class="app-content">
-			{#if !mailboxRoute && !composing}
+			{#if !mailboxRoute && !composing && !hubRoute}
 				<Topbar
 					userName={data.user!.name}
 					userEmail={data.user!.email}

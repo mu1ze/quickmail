@@ -346,6 +346,20 @@ textarea:focus-visible {
 		padding-bottom: calc(4.75rem + env(safe-area-inset-bottom));
 	}
 
+	.app-shell.hub-mobile .app-main {
+		padding: 0;
+	}
+
+	.app-shell.hub-mobile .app-content {
+		background: var(--color-well);
+	}
+
+	@media (max-width: 900px) {
+		.app-shell.hub-mobile > :global(.sidebar) {
+			display: none;
+		}
+	}
+
 	.app-shell.compose-mobile .app-main {
 		padding: 0;
 		max-width: none;
