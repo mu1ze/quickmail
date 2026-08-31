@@ -12,7 +12,8 @@
 		activeDomainId,
 		isAdmin,
 		collapsed = $bindable(false),
-		mobileOpen = $bindable(false)
+		mobileOpen = $bindable(false),
+		onLogout
 	}: {
 		counts: MailboxCounts;
 		domains: Domain[];
@@ -20,6 +21,7 @@
 		isAdmin: boolean;
 		collapsed?: boolean;
 		mobileOpen?: boolean;
+		onLogout: () => void;
 	} = $props();
 
 	type NavItem = {
@@ -133,6 +135,19 @@
 				{#if expanded}<span class="nav-label">{item.label}</span>{/if}
 			</a>
 		{/each}
+		<button
+			type="button"
+			class="nav-link"
+			title={expanded ? undefined : 'Log out'}
+			aria-label="Log out"
+			onclick={() => {
+				mobileOpen = false;
+				onLogout();
+			}}
+		>
+			<Icon name="logout-box-r-line" size={17} />
+			{#if expanded}<span class="nav-label">Log out</span>{/if}
+		</button>
 	</nav>
 
 	<div class="sidebar-foot">
@@ -262,6 +277,15 @@
 		color: var(--color-text);
 		font-weight: 500;
 		box-shadow: var(--mat-panel);
+	}
+
+	button.nav-link {
+		width: 100%;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		font: inherit;
+		text-align: left;
 	}
 
 	.nav-label {

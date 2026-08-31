@@ -5,11 +5,13 @@
 	let {
 		menuOpen = false,
 		onOpenMenu,
-		onSearch
+		onSearch,
+		hideSearch = false
 	}: {
 		menuOpen?: boolean;
 		onOpenMenu: () => void;
 		onSearch: () => void;
+		hideSearch?: boolean;
 	} = $props();
 
 	const composing = $derived($page.url.pathname.startsWith('/compose'));
@@ -29,10 +31,12 @@
 				<Icon name="menu-line" size={20} />
 			</button>
 
-			<button type="button" class="dock-search" aria-label="Search messages" onclick={onSearch}>
-				<Icon name="search-line" size={18} />
-				<span class="dock-search-label">Search</span>
-			</button>
+			{#if !hideSearch}
+				<button type="button" class="dock-search" aria-label="Search messages" onclick={onSearch}>
+					<Icon name="search-line" size={18} />
+					<span class="dock-search-label">Search</span>
+				</button>
+			{/if}
 
 			<a href="/compose" class="dock-btn dock-compose" aria-label="New message">
 				<Icon name="edit-line" size={20} />
@@ -128,6 +132,7 @@
 
 		.dock-compose {
 			color: var(--color-text);
+			margin-left: auto;
 		}
 	}
 

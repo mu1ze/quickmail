@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import Icon from './Icon.svelte';
 
 	let {
@@ -18,12 +19,13 @@
 	let editor = $state<HTMLDivElement | null>(null);
 	let seeded = $state(false);
 
+	// Seed once when the contenteditable node mounts. Gating on a truthy `html`
+	// left empty composers unseeded, so the first keystroke wrote innerHTML and
+	// jumped the caret to the start.
 	$effect(() => {
 		if (!editor || seeded) return;
-		if (html) {
-			editor.innerHTML = html;
-			seeded = true;
-		}
+		editor.innerHTML = untrack(() => html);
+		seeded = true;
 	});
 
 	function exec(command: string, value?: string) {

@@ -78,7 +78,7 @@
 		flex: 1;
 		min-height: 0;
 		overflow: auto;
-		padding: 1rem 0.875rem calc(1rem + env(safe-area-inset-bottom));
+		padding: 1rem 0.875rem calc(1rem + 4.75rem + env(safe-area-inset-bottom));
 	}
 
 	@media (min-width: 901px) {

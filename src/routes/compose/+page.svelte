@@ -314,21 +314,19 @@
 			</div>
 
 			<div class="compose-body">
-				<RichTextEditor bind:html embedded showToolbar={false} minHeight={280} placeholder="" />
+				<RichTextEditor bind:html embedded minHeight={280} placeholder="" />
 			</div>
 
-			{#if showExtras}
-				<div class="compose-attachments">
-					<AttachmentPicker bind:attachments />
+			<div class="compose-attachments">
+				<AttachmentPicker bind:attachments />
+			</div>
+			{#if data.signatures.length > 0}
+				<div class="compose-signature">
+					<SignaturePicker bind:value={selectedSignatureId} signatures={data.signatures} />
+					{#if compiledSignature.html}
+						<SignaturePreview html={compiledSignature.html} />
+					{/if}
 				</div>
-				{#if data.signatures.length > 0}
-					<div class="compose-signature">
-						<SignaturePicker bind:value={selectedSignatureId} signatures={data.signatures} />
-						{#if compiledSignature.html}
-							<SignaturePreview html={compiledSignature.html} />
-						{/if}
-					</div>
-				{/if}
 			{/if}
 		</div>
 
@@ -580,6 +578,10 @@
 			display: flex;
 			flex-direction: column;
 			min-height: 12rem;
+		}
+
+		.compose-body :global(.toolbar) {
+			display: none;
 		}
 
 		.compose-body :global(.editor-shell) {

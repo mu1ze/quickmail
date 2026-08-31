@@ -40,6 +40,7 @@
 	let searchInput = $state<HTMLInputElement | null>(null);
 	let paletteOpen = $state(false);
 	let sheetOpen = $state(false);
+	let mobileViewport = $state(false);
 
 	const composing = $derived($page.url.pathname.startsWith('/compose'));
 	const mailboxRoute = $derived(MAILBOX_ROUTES.includes($page.url.pathname));
@@ -80,6 +81,16 @@
 	$effect(() => {
 		if (!showShell) return;
 		return bindPendingSendFlush();
+	});
+
+	$effect(() => {
+		const query = window.matchMedia('(max-width: 900px)');
+		const sync = () => {
+			mobileViewport = query.matches;
+		};
+		sync();
+		query.addEventListener('change', sync);
+		return () => query.removeEventListener('change', sync);
 	});
 
 	const GO_DEST: Record<string, string> = {
@@ -155,8 +166,15 @@
 
 	function handleDockSearch() {
 		mobileOpen = false;
-		if (mailboxRoute) requestSearchFocus();
-		else focusSearchField();
+		if (mailboxRoute && mobileViewport) {
+			requestSearchFocus();
+			return;
+		}
+		if (hubRoute && mobileViewport) {
+			void goto('/inbox');
+			return;
+		}
+		focusSearchField();
 	}
 
 	setShellContext({
@@ -204,19 +222,18 @@
 			isAdmin={data.user!.is_admin}
 			bind:collapsed
 			bind:mobileOpen
+			onLogout={logout}
 		/>
 
 		<div class="app-content">
-			{#if !mailboxRoute && !composing && !hubRoute}
-				<Topbar
-					userName={data.user!.name}
-					userEmail={data.user!.email}
-					addresses={data.addresses}
-					bind:searchInput
-					onToggleNav={() => (mobileOpen = !mobileOpen)}
-					onLogout={logout}
-				/>
-			{/if}
+			<Topbar
+				userName={data.user!.name}
+				userEmail={data.user!.email}
+				addresses={data.addresses}
+				bind:searchInput
+				onToggleNav={() => (mobileOpen = !mobileOpen)}
+				onLogout={logout}
+			/>
 
 			<main class="app-main" class:app-main-narrow={narrow}>
 				{@render children()}
@@ -228,10 +245,11 @@
 				menuOpen={mobileOpen}
 				onOpenMenu={() => (mobileOpen = !mobileOpen)}
 				onSearch={handleDockSearch}
+				hideSearch={hubRoute}
 			/>
 		{/if}
 
-		<CommandPalette bind:open={paletteOpen} onSearch={focusSearchField} />
+		<CommandPalette bind:open={paletteOpen} onSearch={handleDockSearch} />
 		<ShortcutSheet bind:open={sheetOpen} />
 		<UndoToast />
 	</div>

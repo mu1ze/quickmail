@@ -493,7 +493,7 @@
 				aria-label="Unread"
 				onclick={() => apply({ unread: filters.unreadOnly ? null : '1' })}
 			>
-				<Icon name="user-line" size={18} />
+				<Icon name="mail-unread-line" size={18} />
 			</button>
 			<button
 				type="button"
@@ -502,7 +502,7 @@
 				aria-label="Starred"
 				onclick={() => apply({ starred: filters.starredOnly ? null : '1' })}
 			>
-				<Icon name="shopping-cart-line" size={18} />
+				<Icon name="star-line" size={18} />
 			</button>
 			<button
 				type="button"
@@ -511,10 +511,10 @@
 				aria-label="Has attachments"
 				onclick={() => apply({ attachments: filters.attachmentsOnly ? null : '1' })}
 			>
-				<Icon name="chat-3-line" size={18} />
+				<Icon name="attachment-2" size={18} />
 			</button>
 			<a class="ios-filter-icon" aria-label="Later" href="/later">
-				<Icon name="megaphone-line" size={18} />
+				<Icon name="time-line" size={18} />
 			</a>
 		</div>
 		<button
@@ -939,7 +939,15 @@
 							</div>
 						</div>
 
-						<a class="card-link" href={href(thread)}>
+						<a
+							class="card-link"
+							href={href(thread)}
+							onclick={(event) => {
+								if (!selectMode) return;
+								event.preventDefault();
+								toggle(thread.latest_id);
+							}}
+						>
 							<span class="avatar" style={avatarStyle(thread)}>{initial(thread)}</span>
 
 							<span class="card-body">
