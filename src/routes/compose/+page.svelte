@@ -340,13 +340,17 @@
 
 <style>
 	.compose-page {
-		min-height: 100%;
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-height: 0;
 	}
 
 	.compose-sheet {
 		display: flex;
 		flex-direction: column;
-		min-height: 100%;
+		flex: 1;
+		min-height: 0;
 		background: var(--color-surface);
 	}
 
@@ -564,6 +568,14 @@
 	}
 
 	@media (max-width: 900px) {
+		.compose-page {
+			position: fixed;
+			inset: 0;
+			z-index: 40;
+			background: var(--color-surface);
+			overflow: hidden;
+		}
+
 		.compose-grab {
 			display: block;
 			width: 2.25rem;
@@ -573,13 +585,8 @@
 			background: var(--color-line-strong);
 		}
 
-		.compose-sheet {
-			min-height: 100%;
-			border-radius: 14px 14px 0 0;
-		}
-
 		.compose-toolbar {
-			padding-top: 0.5rem;
+			padding-top: max(0.5rem, env(safe-area-inset-top));
 		}
 
 		.compose-title {
@@ -587,7 +594,28 @@
 		}
 
 		.compose-canvas {
-			padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+			flex: 1;
+			min-height: 0;
+			overflow: auto;
+			padding-bottom: env(safe-area-inset-bottom);
+		}
+
+		.compose-body {
+			flex: 1;
+			display: flex;
+			flex-direction: column;
+			min-height: 12rem;
+		}
+
+		.compose-body :global(.editor-shell) {
+			flex: 1;
+			display: flex;
+			flex-direction: column;
+		}
+
+		.compose-body :global(.editor) {
+			flex: 1;
+			min-height: 12rem;
 		}
 	}
 </style>

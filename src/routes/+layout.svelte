@@ -26,7 +26,7 @@
 	const showShell = $derived(Boolean(data.user) && $page.url.pathname !== '/onboarding');
 
 	// Pages that read better centred than full-bleed.
-	const NARROW = ['/compose', '/mail', '/settings'];
+	const NARROW = ['/mail', '/settings'];
 	const narrow = $derived(NARROW.some((path) => $page.url.pathname.startsWith(path)));
 
 	let collapsed = $state(false);
@@ -64,6 +64,11 @@
 	$effect(() => {
 		document.body.classList.toggle('nav-open', mobileOpen);
 		return () => document.body.classList.remove('nav-open');
+	});
+
+	$effect(() => {
+		document.body.classList.toggle('compose-open', composing);
+		return () => document.body.classList.remove('compose-open');
 	});
 
 	$effect(() => {

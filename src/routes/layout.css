@@ -349,16 +349,31 @@ textarea:focus-visible {
 	.app-shell.compose-mobile .app-main {
 		padding: 0;
 		max-width: none;
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		overflow: hidden;
 	}
 
 	.app-shell.compose-mobile .app-content {
-		background: var(--color-bezel);
+		background: var(--color-surface);
 	}
 
-	@media (max-width: 900px) {
-		.app-shell.compose-mobile > :global(.sidebar) {
-			display: none;
-		}
+	.app-shell.compose-mobile {
+		height: 100dvh;
+	}
+
+	.app-shell.compose-mobile .app-content {
+		flex: none;
+		width: 100%;
+		height: 100dvh;
+		border-radius: 0;
+		box-shadow: none;
+	}
+
+	.app-shell.compose-mobile > :global(.sidebar) {
+		display: none;
 	}
 
 	.icon-btn {
@@ -374,6 +389,16 @@ textarea:focus-visible {
 
 body.nav-open {
 	overflow: hidden;
+}
+
+body.compose-open {
+	overflow: hidden;
+}
+
+@media (max-width: 900px) {
+	body.compose-open {
+		background: var(--color-surface);
+	}
 }
 
 .page-title {
