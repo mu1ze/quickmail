@@ -45,7 +45,7 @@
 	--sidebar-width: 15.25rem;
 	--sidebar-width-collapsed: 4.25rem;
 	--topbar-height: 3.25rem;
-	--mobile-dock-height: 4.25rem;
+	--mobile-dock-height: 4.5rem;
 	--radius-panel: 20px;
 	--gutter: 12px;
 }
@@ -339,6 +339,89 @@ textarea:focus-visible {
 
 	.app-shell.has-dock .app-main {
 		padding-bottom: calc(1rem + var(--mobile-dock-height) + env(safe-area-inset-bottom));
+	}
+
+	.app-shell.mailbox-mobile .app-main {
+		padding: 0;
+		padding-bottom: calc(4.75rem + env(safe-area-inset-bottom));
+	}
+
+	.app-shell.mailbox-mobile .topbar,
+	.app-shell.hub-mobile .topbar,
+	.app-shell.compose-mobile .topbar {
+		display: none;
+	}
+
+	.app-shell.hub-mobile .app-main {
+		padding: 0;
+		padding-bottom: calc(4.75rem + env(safe-area-inset-bottom));
+	}
+
+	body.compose-open {
+		overflow: hidden;
+		background: var(--color-surface);
+	}
+
+	body.compose-open .compose-fullscreen {
+		position: fixed;
+		inset: 0;
+		z-index: 100;
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+		height: 100dvh;
+		margin: 0;
+		padding: 0;
+		background: var(--color-surface);
+		overflow: hidden;
+	}
+
+	body.compose-open .compose-fullscreen .compose-sheet {
+		flex: 1;
+		width: 100%;
+		height: 100%;
+		border-radius: 0;
+		box-shadow: none;
+	}
+
+	.app-shell.hub-mobile .app-content {
+		background: var(--color-well);
+	}
+
+	@media (max-width: 900px) {
+		.app-shell.hub-mobile > :global(.sidebar) {
+			display: none;
+		}
+	}
+
+	.app-shell.compose-mobile .app-main {
+		padding: 0;
+		max-width: none;
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	.app-shell.compose-mobile .app-content {
+		background: var(--color-surface);
+	}
+
+	.app-shell.compose-mobile {
+		height: 100dvh;
+	}
+
+	.app-shell.compose-mobile .app-content {
+		flex: none;
+		width: 100%;
+		height: 100dvh;
+		border-radius: 0;
+		box-shadow: none;
+	}
+
+	.app-shell.compose-mobile > :global(.sidebar) {
+		display: none;
 	}
 
 	.icon-btn {

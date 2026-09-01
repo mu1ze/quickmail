@@ -14,7 +14,17 @@
 	import { armGoChord, consumeGoChord, isMod, isTypingTarget } from '$lib/shortcuts';
 	import { watchSystemTheme } from '$lib/theme';
 	import { runUndo } from '$lib/undo';
+	import { setShellContext } from '$lib/shell-context';
+	import { requestSearchFocus } from '$lib/search-focus';
 	import type { LayoutData } from './$types';
+
+	const MAILBOX_ROUTES = ['/inbox', '/starred', '/drafts', '/sent', '/later', '/trash'];
+	const hubRoute = $derived(
+		$page.url.pathname === '/settings' ||
+			$page.url.pathname.startsWith('/settings/') ||
+			$page.url.pathname === '/admin' ||
+			$page.url.pathname.startsWith('/admin/')
+	);
 
 	let { children, data }: { children: import('svelte').Snippet; data: LayoutData } = $props();
 
@@ -22,7 +32,7 @@
 	const showShell = $derived(Boolean(data.user) && $page.url.pathname !== '/onboarding');
 
 	// Pages that read better centred than full-bleed.
-	const NARROW = ['/compose', '/mail', '/settings'];
+	const NARROW = ['/mail'];
 	const narrow = $derived(NARROW.some((path) => $page.url.pathname.startsWith(path)));
 
 	let collapsed = $state(false);
@@ -30,8 +40,10 @@
 	let searchInput = $state<HTMLInputElement | null>(null);
 	let paletteOpen = $state(false);
 	let sheetOpen = $state(false);
+	let mobileViewport = $state(false);
 
 	const composing = $derived($page.url.pathname.startsWith('/compose'));
+	const mailboxRoute = $derived(MAILBOX_ROUTES.includes($page.url.pathname));
 
 	// app.html already applied the theme; this keeps "System" live afterwards.
 	$effect(() => watchSystemTheme());
@@ -62,8 +74,23 @@
 	});
 
 	$effect(() => {
+		document.body.classList.toggle('compose-open', composing);
+		return () => document.body.classList.remove('compose-open');
+	});
+
+	$effect(() => {
 		if (!showShell) return;
 		return bindPendingSendFlush();
+	});
+
+	$effect(() => {
+		const query = window.matchMedia('(max-width: 900px)');
+		const sync = () => {
+			mobileViewport = query.matches;
+		};
+		sync();
+		query.addEventListener('change', sync);
+		return () => query.removeEventListener('change', sync);
 	});
 
 	const GO_DEST: Record<string, string> = {
@@ -109,7 +136,7 @@
 		if (key === '/') {
 			event.preventDefault();
 			event.stopImmediatePropagation();
-			focusSearch();
+			handleDockSearch();
 			return;
 		}
 		if (key === '?') {
@@ -131,11 +158,29 @@
 		}
 	}
 
-	function focusSearch() {
+	function focusSearchField() {
 		mobileOpen = false;
 		searchInput?.focus();
 		searchInput?.scrollIntoView({ block: 'nearest' });
 	}
+
+	function handleDockSearch() {
+		mobileOpen = false;
+		if (mailboxRoute && mobileViewport) {
+			requestSearchFocus();
+			return;
+		}
+		if (hubRoute && mobileViewport) {
+			void goto('/inbox');
+			return;
+		}
+		focusSearchField();
+	}
+
+	setShellContext({
+		openNav: () => (mobileOpen = true),
+		focusSearch: handleDockSearch
+	});
 
 	async function logout() {
 		try {
@@ -162,7 +207,14 @@
 <svelte:window onkeydowncapture={onWindowKeydown} />
 
 {#if showShell}
-	<div class="app-shell" class:has-dock={!composing} data-collapsed={collapsed}>
+	<div
+		class="app-shell"
+		class:has-dock={!composing}
+		class:mailbox-mobile={mailboxRoute}
+		class:hub-mobile={hubRoute}
+		class:compose-mobile={composing}
+		data-collapsed={collapsed}
+	>
 		<Sidebar
 			counts={data.counts}
 			domains={data.domains}
@@ -170,6 +222,7 @@
 			isAdmin={data.user!.is_admin}
 			bind:collapsed
 			bind:mobileOpen
+			onLogout={logout}
 		/>
 
 		<div class="app-content">
@@ -189,14 +242,14 @@
 
 		{#if !composing}
 			<MobileDock
-				inboxUnread={data.counts.inbox_unread}
 				menuOpen={mobileOpen}
 				onOpenMenu={() => (mobileOpen = !mobileOpen)}
-				onSearch={focusSearch}
+				onSearch={handleDockSearch}
+				hideSearch={hubRoute}
 			/>
 		{/if}
 
-		<CommandPalette bind:open={paletteOpen} onSearch={focusSearch} />
+		<CommandPalette bind:open={paletteOpen} onSearch={handleDockSearch} />
 		<ShortcutSheet bind:open={sheetOpen} />
 		<UndoToast />
 	</div>

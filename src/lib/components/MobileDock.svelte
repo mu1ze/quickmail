@@ -3,74 +3,47 @@
 	import Icon from './Icon.svelte';
 
 	let {
-		inboxUnread = 0,
 		menuOpen = false,
 		onOpenMenu,
-		onSearch
+		onSearch,
+		hideSearch = false
 	}: {
-		inboxUnread?: number;
 		menuOpen?: boolean;
 		onOpenMenu: () => void;
 		onSearch: () => void;
+		hideSearch?: boolean;
 	} = $props();
 
-	function inboxActive(): boolean {
-		return $page.url.pathname === '/inbox' || $page.url.pathname.startsWith('/inbox/');
-	}
-
-	function starredActive(): boolean {
-		return $page.url.pathname === '/starred' || $page.url.pathname.startsWith('/starred/');
-	}
+	const composing = $derived($page.url.pathname.startsWith('/compose'));
 </script>
 
-<nav class="dock" aria-label="Primary">
-	<a
-		href="/inbox"
-		class="dock-item"
-		class:active={inboxActive()}
-		aria-current={inboxActive() ? 'page' : undefined}
-	>
-		<span class="dock-icon">
-			<Icon name="inbox-line" size={20} />
-			{#if inboxUnread > 0}
-				<span class="dock-badge">{inboxUnread > 99 ? '99+' : inboxUnread}</span>
+{#if !composing}
+	<nav class="dock" aria-label="Primary">
+		<div class="dock-pill">
+			<button
+				type="button"
+				class="dock-btn"
+				class:active={menuOpen}
+				aria-label="Open menu"
+				aria-expanded={menuOpen}
+				onclick={onOpenMenu}
+			>
+				<Icon name="menu-line" size={20} />
+			</button>
+
+			{#if !hideSearch}
+				<button type="button" class="dock-search" aria-label="Search messages" onclick={onSearch}>
+					<Icon name="search-line" size={18} />
+					<span class="dock-search-label">Search</span>
+				</button>
 			{/if}
-		</span>
-		<span class="dock-label">Inbox</span>
-	</a>
 
-	<a
-		href="/starred"
-		class="dock-item"
-		class:active={starredActive()}
-		aria-current={starredActive() ? 'page' : undefined}
-	>
-		<span class="dock-icon"><Icon name="star-line" size={20} /></span>
-		<span class="dock-label">Starred</span>
-	</a>
-
-	<a href="/compose" class="compose" aria-label="New message">
-		<Icon name="pencil-line" size={20} />
-		<span class="compose-label">New</span>
-	</a>
-
-	<button type="button" class="dock-item" aria-label="Search messages" onclick={onSearch}>
-		<span class="dock-icon"><Icon name="search-line" size={20} /></span>
-		<span class="dock-label">Search</span>
-	</button>
-
-	<button
-		type="button"
-		class="dock-item"
-		class:active={menuOpen}
-		aria-label="Open menu"
-		aria-expanded={menuOpen}
-		onclick={onOpenMenu}
-	>
-		<span class="dock-icon"><Icon name="menu-line" size={20} /></span>
-		<span class="dock-label">Menu</span>
-	</button>
-</nav>
+			<a href="/compose" class="dock-btn dock-compose" aria-label="New message">
+				<Icon name="edit-line" size={20} />
+			</a>
+		</div>
+	</nav>
+{/if}
 
 <style>
 	.dock {
@@ -80,105 +53,92 @@
 	@media (max-width: 900px) {
 		.dock {
 			position: fixed;
-			right: 0;
-			bottom: 0;
-			left: 0;
+			right: 0.75rem;
+			bottom: calc(0.625rem + env(safe-area-inset-bottom));
+			left: 0.75rem;
 			z-index: 32;
-			display: grid;
-			grid-template-columns: 1fr 1fr auto 1fr 1fr;
-			align-items: end;
-			gap: 0.125rem;
-			padding: 0.25rem 0.375rem calc(0.25rem + env(safe-area-inset-bottom));
-			background: var(--color-surface);
-			box-shadow: var(--mat-float);
-			border-radius: 14px 14px 0 0;
+			display: block;
+			pointer-events: none;
+		}
+
+		.dock-pill {
+			display: flex;
+			align-items: center;
+			gap: 0.375rem;
+			padding: 0.375rem;
+			border-radius: 999px;
+			background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+			box-shadow:
+				0 0 0 1px rgba(28, 25, 23, 0.06),
+				0 8px 32px -8px rgba(24, 22, 20, 0.35);
+			backdrop-filter: blur(16px);
+			pointer-events: auto;
+		}
+
+		:root[data-theme='dark'] .dock-pill {
+			box-shadow:
+				0 0 0 1px rgba(255, 255, 255, 0.08),
+				0 8px 32px -8px rgba(0, 0, 0, 0.55);
+		}
+
+		.dock-btn {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			flex-shrink: 0;
+			width: 2.75rem;
+			height: 2.75rem;
+			border: none;
+			border-radius: 999px;
+			color: var(--color-text-secondary);
+			background: transparent;
+			cursor: pointer;
+			transition: background 0.15s, color 0.15s;
+		}
+
+		.dock-btn:hover,
+		.dock-btn.active {
+			background: var(--color-surface-muted);
+			color: var(--color-text);
+		}
+
+		.dock-search {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 0.375rem;
+			flex: 1;
+			min-width: 0;
+			height: 2.75rem;
+			padding: 0 1rem;
+			border: none;
+			border-radius: 999px;
+			font-size: 1rem;
+			color: var(--color-muted);
+			background: var(--color-well);
+			cursor: pointer;
+			transition: background 0.15s;
+		}
+
+		.dock-search:hover {
+			background: var(--color-surface-muted);
+		}
+
+		.dock-search-label {
+			font-size: 1.0625rem;
+			font-weight: 400;
+			letter-spacing: -0.01em;
+		}
+
+		.dock-compose {
+			color: var(--color-text);
+			margin-left: auto;
 		}
 	}
 
-	.dock-item {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 0.1875rem;
-		min-height: 2.75rem;
-		padding: 0.25rem 0.125rem;
-		border: none;
-		border-radius: 9px;
-		color: var(--color-muted);
-		background: transparent;
-		cursor: pointer;
-		transition: color 0.15s, background 0.15s;
-	}
-
-	.dock-item:hover,
-	.dock-item.active {
-		color: var(--color-text);
-	}
-
-	.dock-item.active {
-		background: var(--color-surface-muted);
-	}
-
-	.dock-icon {
-		position: relative;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 1.5rem;
-		height: 1.5rem;
-	}
-
-	.dock-badge {
-		position: absolute;
-		top: -0.35rem;
-		right: -0.55rem;
-		min-width: 1rem;
-		padding: 0.05rem 0.25rem;
-		border-radius: 6px;
-		font-size: 0.5625rem;
-		font-weight: 700;
-		line-height: 1.2;
-		text-align: center;
-		color: var(--color-on-accent);
-		background: var(--color-accent);
-	}
-
-	.dock-label {
-		font-size: 0.625rem;
-		font-weight: 600;
-		letter-spacing: 0.01em;
-		line-height: 1;
-	}
-
-	.compose {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 0.1875rem;
-		width: 3.25rem;
-		margin: -0.75rem 0.35rem 0;
-		padding: 0.45rem 0 0.2rem;
-		border-radius: 14px;
-		color: var(--color-on-accent);
-		background: var(--color-accent);
-		box-shadow: var(--shadow-sm);
-	}
-
-	.compose:hover {
-		background: var(--color-accent-hover);
-	}
-
-	.compose-label {
-		font-size: 0.5625rem;
-		font-weight: 700;
-		letter-spacing: 0.02em;
-	}
-
 	@media (prefers-reduced-motion: reduce) {
-		.dock-item,
-		.compose {
+		.dock-btn,
+		.dock-search {
 			transition: none;
 		}
 	}

@@ -1,10 +1,10 @@
-import type { PageServerLoad } from './$types';
+import type { LayoutServerLoad } from './$types';
 import { listApiTokens } from '$lib/server/api-tokens';
 import { BRRR_SOUND_OPTIONS, loadBrrrSettings } from '$lib/server/brrr';
 import { listSignatures } from '$lib/server/email-signature';
 import { readVapidConfiguration } from '$lib/server/push-notifications';
 
-export const load: PageServerLoad = async ({ locals, platform }) => {
+export const load: LayoutServerLoad = async ({ locals, platform }) => {
 	const db = platform?.env.DB;
 	const signatures = locals.user && db ? await listSignatures(db, locals.user.id) : [];
 	const apiTokens = locals.user && db ? await listApiTokens(db, locals.user.id) : [];

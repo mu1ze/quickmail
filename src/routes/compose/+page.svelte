@@ -4,7 +4,6 @@
 	import RichTextEditor from '$lib/components/RichTextEditor.svelte';
 	import AttachmentPicker from '$lib/components/AttachmentPicker.svelte';
 	import RecipientField from '$lib/components/RecipientField.svelte';
-	import LoadingButton from '$lib/interior/LoadingButton.svelte';
 	import SignaturePreview from '$lib/components/SignaturePreview.svelte';
 	import SignaturePicker from '$lib/components/SignaturePicker.svelte';
 	import { queueMailSend } from '$lib/pending-send';
@@ -27,13 +26,15 @@
 		addresses.find((address) => address.is_default)?.id ?? addresses[0]?.id ?? ''
 	);
 
-	// Falls back to the default identity until the composer picks another.
 	let chosenAddressId = $state('');
 	const fromAddressId = $derived(chosenAddressId || defaultAddressId);
 
-	// The draft or forwarded original seeds the form once; after that the fields own their values.
 	const draft = untrack(() => data.draft);
 	const forward = untrack(() => data.forward);
+
+	const initialShowDetails = untrack(() =>
+		Boolean(draft?.cc_addr || draft?.bcc_addr || data.addresses.length > 1)
+	);
 
 	let draftId = $state<string | null>(draft?.id ?? null);
 	let to = $state(draft?.to_addr ?? '');
@@ -46,11 +47,25 @@
 	let sending = $state(false);
 	let savingDraft = $state(false);
 	let savedAt = $state('');
+	let showDetails = $state(initialShowDetails);
+	let showExtras = $state(false);
+
+	const pageTitle = $derived(
+		draftId ? 'Draft' : forward ? 'Forward' : 'New Message'
+	);
 
 	const isEmpty = $derived(
 		!to.trim() && !cc.trim() && !bcc.trim() && !subject.trim() && isHtmlEmpty(html)
 	);
+	const canSend = $derived(Boolean(to.trim()) && !isHtmlEmpty(html) && !sending);
+
 	const selectedAddress = $derived(addresses.find((address) => address.id === fromAddressId));
+	const fromLabel = $derived(
+		selectedAddress?.label
+			? `${selectedAddress.label} · ${selectedAddress.address}`
+			: (selectedAddress?.address ?? '—')
+	);
+
 	let lastFromId = $state('');
 	let selectedSignatureId = $state('');
 	$effect(() => {
@@ -107,6 +122,11 @@
 		}
 	}
 
+	function closeComposer() {
+		if (window.history.length > 1) window.history.back();
+		else window.location.href = '/inbox';
+	}
+
 	async function discardDraft() {
 		if (!draftId) {
 			window.location.href = '/inbox';
@@ -118,7 +138,7 @@
 
 	function submit(event: SubmitEvent) {
 		event.preventDefault();
-		if (sending) return;
+		if (sending || !canSend) return;
 		if (isHtmlEmpty(html)) {
 			error = 'Write a message';
 			return;
@@ -167,132 +187,220 @@
 			event.preventDefault();
 			document.querySelector<HTMLFormElement>('.compose-page')?.requestSubmit();
 		}
+		if (isMod(event) && event.key.toLowerCase() === 's') {
+			event.preventDefault();
+			void saveDraft();
+		}
 	}}
 />
 
 <svelte:head>
-	<title>{draftId ? 'Draft' : forward ? 'Forward' : 'Compose'} — Mail</title>
+	<title>{pageTitle} — Mail</title>
 </svelte:head>
 
-<form class="compose-page" onsubmit={submit}>
-	<header class="compose-header">
-		<div class="compose-heading">
-			<h1 class="page-title">{draftId ? 'Draft' : forward ? 'Forward' : 'New message'}</h1>
-			{#if savedAt}<span class="saved">Saved {savedAt}</span>{/if}
+<form class="compose-page compose-fullscreen" onsubmit={submit}>
+	<div class="compose-sheet">
+		<div class="compose-grab" aria-hidden="true"></div>
+
+		<div class="compose-toolbar">
+			<button type="button" class="compose-circle" aria-label="Close" onclick={closeComposer}>
+				<Icon name="close-line" size={20} />
+			</button>
+
+			<div class="compose-toolbar-meta">
+				{#if savedAt}<span class="saved">Saved {savedAt}</span>{/if}
+			</div>
+
+			<div class="compose-toolbar-actions">
+				<button
+					type="button"
+					class="compose-circle"
+					aria-label="More options"
+					aria-expanded={showExtras}
+					onclick={() => (showExtras = !showExtras)}
+				>
+					<Icon name="attachment-2" size={18} />
+				</button>
+				<button
+					type="submit"
+					class="compose-circle send"
+					class:ready={canSend}
+					aria-label="Send"
+					disabled={!canSend}
+				>
+					<Icon name="arrow-up-line" size={20} />
+				</button>
+			</div>
 		</div>
 
-		<div class="compose-actions">
-			<button type="button" class="btn-ghost" disabled={savingDraft || isEmpty} onclick={saveDraft}>
-				<Icon name="save-line" size={15} />
-				{savingDraft ? 'Saving…' : 'Save draft'}
-			</button>
-			{#if draftId}
-				<button type="button" class="btn-ghost" onclick={discardDraft} aria-label="Discard draft">
-					<Icon name="delete-bin-line" size={15} />
+		{#if showExtras}
+			<div class="compose-extras">
+				<button
+					type="button"
+					class="compose-extra-btn"
+					disabled={savingDraft || isEmpty}
+					onclick={saveDraft}
+				>
+					<Icon name="save-line" size={16} />
+					{savingDraft ? 'Saving…' : 'Save draft'}
+				</button>
+				{#if draftId}
+					<button type="button" class="compose-extra-btn danger" onclick={discardDraft}>
+						<Icon name="delete-bin-line" size={16} />
+						Discard
+					</button>
+				{/if}
+			</div>
+		{/if}
+
+		<h1 class="compose-title">{pageTitle}</h1>
+
+		<div class="compose-canvas">
+			<div class="compose-row">
+				<label class="compose-label" for="compose-to">To:</label>
+				<RecipientField
+					id="compose-to"
+					label="To"
+					bind:value={to}
+					required
+					placeholder=""
+				/>
+			</div>
+
+			{#if showDetails}
+				<div class="compose-row">
+					<label class="compose-label" for="compose-cc">Cc:</label>
+					<RecipientField id="compose-cc" label="Cc" bind:value={cc} placeholder="" />
+				</div>
+				<div class="compose-row">
+					<label class="compose-label" for="compose-bcc">Bcc:</label>
+					<RecipientField id="compose-bcc" label="Bcc" bind:value={bcc} placeholder="" />
+				</div>
+				<div class="compose-row">
+					<span class="compose-label">From:</span>
+					{#if addresses.length > 1}
+						<select
+							value={fromAddressId}
+							onchange={(event) => (chosenAddressId = event.currentTarget.value)}
+							class="compose-input compose-select"
+							aria-label="Send from"
+						>
+							{#each addresses as address (address.id)}
+								<option value={address.id}>
+									{address.label ? `${address.label} · ${address.address}` : address.address}
+								</option>
+							{/each}
+						</select>
+					{:else}
+						<span class="compose-meta-value">{fromLabel}</span>
+					{/if}
+				</div>
+			{:else}
+				<button type="button" class="compose-row compose-meta-toggle" onclick={() => (showDetails = true)}>
+					<span class="compose-label">Cc/Bcc, From:</span>
+					<span class="compose-meta-value">{fromLabel}</span>
 				</button>
 			{/if}
-			<LoadingButton
-				type="submit"
-				tone="accent"
-				label="Send"
-				pendingLabel="Sending"
-				successLabel="Sent"
-				status={sending ? 'pending' : 'idle'}
-				disabled={sending}
-			/>
-		</div>
-	</header>
 
-	<div class="surface compose-fields">
-		<!-- With several domains connected, choosing the identity matters. -->
-		<div class="field-row">
-			<span class="field-label">From</span>
-			{#if addresses.length > 1}
-				<select
-					value={fromAddressId}
-					onchange={(event) => (chosenAddressId = event.currentTarget.value)}
-					class="field-input"
-					aria-label="Send from"
-				>
-					{#each addresses as address (address.id)}
-						<option value={address.id}>
-							{address.label ? `${address.label} · ${address.address}` : address.address}
-						</option>
-					{/each}
-				</select>
-			{:else}
-				<span class="field-static">
-					{addresses[0]?.label
-						? `${addresses[0].label} · ${addresses[0].address}`
-						: (addresses[0]?.address ?? '—')}
-				</span>
+			<div class="compose-row">
+				<label class="compose-label" for="compose-subject">Subject:</label>
+				<input
+					id="compose-subject"
+					type="text"
+					bind:value={subject}
+					required
+					class="compose-input"
+				/>
+			</div>
+
+			<div class="compose-body">
+				<RichTextEditor bind:html embedded minHeight={280} placeholder="" />
+			</div>
+
+			<div class="compose-attachments">
+				<AttachmentPicker bind:attachments />
+			</div>
+			{#if data.signatures.length > 0}
+				<div class="compose-signature">
+					<SignaturePicker bind:value={selectedSignatureId} signatures={data.signatures} />
+					{#if compiledSignature.html}
+						<SignaturePreview html={compiledSignature.html} />
+					{/if}
+				</div>
 			{/if}
 		</div>
 
-		<div class="field-row">
-			<span class="field-label">To</span>
-			<RecipientField id="to" label="To" bind:value={to} required placeholder="Add recipients" />
-		</div>
-
-		<div class="field-row">
-			<span class="field-label">Cc</span>
-			<RecipientField id="cc" label="Cc" bind:value={cc} placeholder="People who should see this" />
-		</div>
-
-		<div class="field-row">
-			<span class="field-label">Bcc</span>
-			<RecipientField id="bcc" label="Bcc" bind:value={bcc} placeholder="Hidden copies" />
-		</div>
-
-		<div class="field-row">
-			<span class="field-label">Subject</span>
-			<input
-				id="subject"
-				type="text"
-				bind:value={subject}
-				required
-				placeholder="Subject"
-				class="field-input"
-			/>
-		</div>
+		{#if error}
+			<p class="compose-error">{error}</p>
+		{/if}
 	</div>
-
-	<div class="mt-4">
-		<RichTextEditor bind:html minHeight={220} />
-	</div>
-
-	{#if data.signatures.length > 0}
-		<div class="signature-preview">
-			<SignaturePicker bind:value={selectedSignatureId} signatures={data.signatures} />
-			{#if compiledSignature.html}
-				<SignaturePreview html={compiledSignature.html} />
-			{/if}
-		</div>
-	{/if}
-
-	<div class="mt-4 px-1">
-		<AttachmentPicker bind:attachments />
-	</div>
-
-	{#if error}
-		<p class="mt-3 text-sm text-[var(--color-danger)]">{error}</p>
-	{/if}
 </form>
 
 <style>
-	.compose-header {
+	.compose-page {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-height: 0;
+	}
+
+	.compose-sheet {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-height: 0;
+		background: var(--color-surface);
+	}
+
+	.compose-grab {
+		display: none;
+	}
+
+	.compose-toolbar {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 1rem;
-		margin-bottom: 1.25rem;
-		flex-wrap: wrap;
+		gap: 0.75rem;
+		padding: 0.75rem 1rem 0.25rem;
 	}
 
-	.compose-heading {
+	.compose-toolbar-meta {
+		flex: 1;
+		min-width: 0;
+		text-align: center;
+	}
+
+	.compose-toolbar-actions {
 		display: flex;
-		align-items: baseline;
-		gap: 0.625rem;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.compose-circle {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.25rem;
+		height: 2.25rem;
+		border: none;
+		border-radius: 999px;
+		color: var(--color-text-secondary);
+		background: var(--color-well);
+		transition: background 0.15s, color 0.15s, opacity 0.15s;
+	}
+
+	.compose-circle.send {
+		color: var(--color-muted);
+	}
+
+	.compose-circle.send.ready {
+		color: var(--color-on-accent);
+		background: #007aff;
+	}
+
+	.compose-circle:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
 	}
 
 	.saved {
@@ -300,56 +408,191 @@
 		color: var(--color-muted);
 	}
 
-	.compose-actions {
+	.compose-extras {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		padding: 0 1rem 0.5rem;
+	}
+
+	.compose-extra-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.375rem 0.625rem;
+		border: none;
+		border-radius: 999px;
+		font-size: 0.8125rem;
+		color: var(--color-text-secondary);
+		background: var(--color-well);
+	}
+
+	.compose-extra-btn.danger {
+		color: var(--color-danger);
+	}
+
+	.compose-title {
+		padding: 0.25rem 1rem 0.75rem;
+		font-size: 2rem;
+		font-weight: 700;
+		line-height: 1.1;
+		letter-spacing: -0.03em;
+	}
+
+	.compose-canvas {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		padding: 0 1rem 1.5rem;
+	}
+
+	.compose-row {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
+		gap: 0.375rem;
+		min-height: 2.75rem;
+		padding: 0.375rem 0;
+		box-shadow: inset 0 -1px 0 var(--color-line);
 	}
 
-	.compose-fields {
+	.compose-meta-toggle {
+		width: 100%;
+		border: none;
+		background: transparent;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.compose-label {
+		flex-shrink: 0;
+		font-size: 1.0625rem;
+		color: var(--color-muted);
+		white-space: nowrap;
+	}
+
+	.compose-meta-value {
+		flex: 1;
+		min-width: 0;
 		overflow: hidden;
-	}
-
-	.field-static {
-		font-size: 0.9375rem;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 1.0625rem;
 		color: var(--color-text-secondary);
 	}
 
-	.signature-preview {
+	.compose-input {
+		flex: 1;
+		min-width: 0;
+		border: none;
+		font-size: 1.0625rem;
+		color: var(--color-text);
+		background: transparent;
+		outline: none;
+	}
+
+	.compose-input::placeholder {
+		color: var(--color-muted);
+	}
+
+	.compose-select {
+		padding: 0;
+		appearance: none;
+	}
+
+	.compose-body {
+		flex: 1;
+		min-height: 0;
+		padding-top: 0.25rem;
+	}
+
+	.compose-body :global(.editor-shell) {
+		height: 100%;
+	}
+
+	.compose-body :global(.editor) {
+		min-height: 18rem;
+		font-size: 1.0625rem;
+		line-height: 1.45;
+	}
+
+	.compose-attachments,
+	.compose-signature {
+		margin-top: 1rem;
+		padding-top: 1rem;
+		box-shadow: inset 0 1px 0 var(--color-line);
+	}
+
+	.compose-signature {
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
-		margin-top: 1rem;
+	}
+
+	.compose-error {
+		margin: 0 1rem 1rem;
+		font-size: 0.875rem;
+		color: var(--color-danger);
+	}
+
+	.compose-row :global(.field-input) {
+		font-size: 1.0625rem;
+	}
+
+	@media (min-width: 901px) {
+		.compose-title {
+			font-size: 1.75rem;
+		}
+
+		.compose-body :global(.editor) {
+			min-height: 14rem;
+		}
 	}
 
 	@media (max-width: 900px) {
-		.compose-page {
-			padding-bottom: calc(4.75rem + env(safe-area-inset-bottom));
+		.compose-grab {
+			display: block;
+			width: 2.25rem;
+			height: 0.3125rem;
+			margin: 0.375rem auto 0;
+			border-radius: 999px;
+			background: var(--color-line-strong);
 		}
 
-		.compose-header {
+		.compose-toolbar {
+			padding-top: max(0.5rem, env(safe-area-inset-top));
+		}
+
+		.compose-title {
+			font-size: 2.125rem;
+		}
+
+		.compose-canvas {
+			flex: 1;
+			min-height: 0;
+			overflow: auto;
+			padding-bottom: env(safe-area-inset-bottom);
+		}
+
+		.compose-body {
+			flex: 1;
+			display: flex;
 			flex-direction: column;
-			align-items: stretch;
-			gap: 0.75rem;
-			margin-bottom: 1rem;
+			min-height: 12rem;
 		}
 
-		.compose-actions {
-			position: fixed;
-			right: 0;
-			bottom: 0;
-			left: 0;
-			z-index: 28;
-			justify-content: flex-end;
-			flex-wrap: wrap;
-			gap: 0.375rem;
-			padding: 0.625rem 0.75rem calc(0.625rem + env(safe-area-inset-bottom));
-			background: var(--color-surface);
-			box-shadow: inset 0 1px 0 var(--color-line);
+		.compose-body :global(.toolbar) {
+			display: none;
 		}
 
-		.compose-actions .btn-ghost {
-			padding: 0.5rem 0.75rem;
+		.compose-body :global(.editor-shell) {
+			flex: 1;
+			display: flex;
+			flex-direction: column;
+		}
+
+		.compose-body :global(.editor) {
+			flex: 1;
+			min-height: 12rem;
 		}
 	}
 </style>

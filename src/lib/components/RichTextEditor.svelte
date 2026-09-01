@@ -1,19 +1,32 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import Icon from './Icon.svelte';
 
 	let {
 		html = $bindable(''),
 		placeholder = 'Write your message…',
 		minHeight = 240,
-		embedded = false
+		embedded = false,
+		showToolbar = true
 	}: {
 		html?: string;
 		placeholder?: string;
 		minHeight?: number;
 		embedded?: boolean;
+		showToolbar?: boolean;
 	} = $props();
 
 	let editor = $state<HTMLDivElement | null>(null);
+	let seeded = $state(false);
+
+	// Seed once when the contenteditable node mounts. Gating on a truthy `html`
+	// left empty composers unseeded, so the first keystroke wrote innerHTML and
+	// jumped the caret to the start.
+	$effect(() => {
+		if (!editor || seeded) return;
+		editor.innerHTML = untrack(() => html);
+		seeded = true;
+	});
 
 	function exec(command: string, value?: string) {
 		editor?.focus();
@@ -51,19 +64,21 @@
 </script>
 
 <div class="editor-shell" class:editor-shell-embedded={embedded}>
-	<div class="toolbar">
-		{#each tools as tool (tool.command)}
-			<button
-				type="button"
-				class="icon-btn"
-				title={tool.label}
-				aria-label={tool.label}
-				onclick={() => handleTool(tool)}
-			>
-				<Icon name={tool.icon} size={16} />
-			</button>
-		{/each}
-	</div>
+	{#if showToolbar}
+		<div class="toolbar">
+			{#each tools as tool (tool.command)}
+				<button
+					type="button"
+					class="icon-btn"
+					title={tool.label}
+					aria-label={tool.label}
+					onclick={() => handleTool(tool)}
+				>
+					<Icon name={tool.icon} size={16} />
+				</button>
+			{/each}
+		</div>
+	{/if}
 
 	<div
 		bind:this={editor}
@@ -100,6 +115,8 @@
 	.editor-shell-embedded .editor {
 		padding-left: 0;
 		padding-right: 0;
+		padding-top: 0.75rem;
+		min-height: 12rem;
 	}
 
 	.toolbar {
