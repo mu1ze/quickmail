@@ -18,9 +18,11 @@
 	import { requestSearchFocus } from '$lib/search-focus';
 	import {
 		hideDockSearch,
+		hideMobileDock,
 		hideTopbarOnMobile,
 		isComposeRoute,
 		isHubRoute,
+		isMailRoute,
 		isMailboxRoute,
 		resolveSearchFocusAction
 	} from '$lib/shell-chrome';
@@ -33,10 +35,6 @@
 	// Onboarding runs before the user has an address, so the shell would be empty.
 	const showShell = $derived(Boolean(data.user) && $page.url.pathname !== '/onboarding');
 
-	// Pages that read better centred than full-bleed.
-	const NARROW = ['/mail'];
-	const narrow = $derived(NARROW.some((path) => $page.url.pathname.startsWith(path)));
-
 	let collapsed = $state(false);
 	let mobileOpen = $state(false);
 	let searchInput = $state<HTMLInputElement | null>(null);
@@ -46,8 +44,10 @@
 
 	const composing = $derived(isComposeRoute($page.url.pathname));
 	const mailboxRoute = $derived(isMailboxRoute($page.url.pathname));
+	const mailRoute = $derived(isMailRoute($page.url.pathname));
 	const hideMobileTopbar = $derived(hideTopbarOnMobile($page.url.pathname));
 	const hideHubSearch = $derived(hideDockSearch($page.url.pathname));
+	const hideDock = $derived(hideMobileDock($page.url.pathname));
 
 	// app.html already applied the theme; this keeps "System" live afterwards.
 	$effect(() => watchSystemTheme());
@@ -218,10 +218,11 @@
 {#if showShell}
 	<div
 		class="app-shell"
-		class:has-dock={!composing}
+		class:has-dock={!hideDock}
 		class:mailbox-mobile={mailboxRoute}
 		class:hub-mobile={hubRoute}
 		class:compose-mobile={composing}
+		class:mail-mobile={mailRoute}
 		class:hide-topbar-mobile={hideMobileTopbar}
 		data-collapsed={collapsed}
 	>
@@ -245,12 +246,12 @@
 				onLogout={logout}
 			/>
 
-			<main class="app-main" class:app-main-narrow={narrow}>
+			<main class="app-main">
 				{@render children()}
 			</main>
 		</div>
 
-		{#if !composing}
+		{#if !hideDock}
 			<MobileDock
 				menuOpen={mobileOpen}
 				onOpenMenu={() => (mobileOpen = !mobileOpen)}

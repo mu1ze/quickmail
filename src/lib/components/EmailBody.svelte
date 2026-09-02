@@ -112,7 +112,7 @@
 			if (height === 0) {
 				const document_ = frame?.contentDocument;
 				if (document_) document_.documentElement.style.overflowY = 'auto';
-				height = 360;
+				height = Math.round(window.innerHeight * 0.6);
 			}
 		}, 700);
 
@@ -172,8 +172,9 @@
 	.frame {
 		display: block;
 		width: 100%;
-		min-height: 1.5rem;
+		min-height: 12rem;
 		border: 0;
+		background: transparent;
 		/* Until the first measurement lands the height is a guess; hide the jump. */
 		opacity: 0;
 	}
@@ -181,12 +182,5 @@
 	.frame.sized {
 		opacity: 1;
 		transition: opacity 0.12s;
-	}
-
-	/* A designed message sits on the white page it was built for, so give it a
-	   card to sit on — in both themes. */
-	.frame.rich {
-		border-radius: 0.75rem;
-		background: #ffffff;
 	}
 </style>

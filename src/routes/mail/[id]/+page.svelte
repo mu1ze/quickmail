@@ -377,7 +377,7 @@
 		</div>
 	</header>
 
-	<article class="surface-lg mail-card">
+	<div class="mail-reading">
 		<div class="subject-row">
 			<h1>{data.subject}</h1>
 			{#if messages.length > 1}
@@ -465,15 +465,35 @@
 				Reply
 			</button>
 		{/if}
-	</article>
+	</div>
 </div>
 
 <style>
+	.mail-page {
+		display: flex;
+		flex-direction: column;
+		min-height: 100%;
+		overflow: auto;
+		background: var(--color-surface);
+	}
+
 	.mail-toolbar {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		margin-bottom: 1.25rem;
+		gap: 0.5rem;
+		position: sticky;
+		top: 0;
+		z-index: 2;
+		padding: 0.75rem 1.25rem;
+		background: var(--color-surface);
+		box-shadow: inset 0 -1px 0 var(--color-line);
+	}
+
+	.mail-reading {
+		flex: 1;
+		min-width: 0;
+		padding: 1.25rem 1.5rem 2rem;
 	}
 
 	.toolbar-actions {
@@ -505,11 +525,7 @@
 		z-index: 20;
 	}
 
-	.mail-card {
-		padding: 1.75rem;
-	}
-
-	.mail-card h1 {
+	.mail-reading h1 {
 		font-size: 1.25rem;
 		font-weight: 600;
 		letter-spacing: -0.02em;
@@ -613,16 +629,22 @@
 	}
 
 	@media (max-width: 900px) {
+		.mail-page {
+			min-height: 100dvh;
+			height: 100%;
+			overflow: auto;
+		}
+
 		.mail-toolbar {
-			margin-bottom: 0.875rem;
+			padding: max(0.5rem, env(safe-area-inset-top)) 0.75rem 0.5rem;
 			gap: 0.5rem;
 		}
 
-		.mail-card {
-			padding: 1rem 1rem 1.25rem;
+		.mail-reading {
+			padding: 1rem 1rem calc(1.25rem + env(safe-area-inset-bottom));
 		}
 
-		.mail-card h1 {
+		.mail-reading h1 {
 			font-size: 1.125rem;
 		}
 

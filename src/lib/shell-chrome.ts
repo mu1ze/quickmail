@@ -24,9 +24,23 @@ export function isComposeRoute(pathname: string): boolean {
 	return pathname.startsWith('/compose');
 }
 
+export function isMailRoute(pathname: string): boolean {
+	return pathname.startsWith('/mail/');
+}
+
 /** Topbar stays mounted; CSS hides it on these mobile routes. */
 export function hideTopbarOnMobile(pathname: string): boolean {
-	return isMailboxRoute(pathname) || isHubRoute(pathname) || isComposeRoute(pathname);
+	return (
+		isMailboxRoute(pathname) ||
+		isHubRoute(pathname) ||
+		isComposeRoute(pathname) ||
+		isMailRoute(pathname)
+	);
+}
+
+/** Inbox dock covers the reading surface; hide it on compose and open mail. */
+export function hideMobileDock(pathname: string): boolean {
+	return isComposeRoute(pathname) || isMailRoute(pathname);
 }
 
 export function hideDockSearch(pathname: string): boolean {

@@ -40,7 +40,8 @@ export function splitQuotedText(text: string): { body: string; quoted: string } 
 		// The attribution line often wraps onto the next one.
 		const attribution =
 			/^on\b/i.test(line) &&
-			ATTRIBUTION.test(`${line} ${(lines[index + 1] ?? '').trim()}`.slice(0, 400));
+			(ATTRIBUTION.test(line) ||
+				ATTRIBUTION.test(`${line} ${(lines[index + 1] ?? '').trim()}`.slice(0, 400)));
 
 		if (
 			line.startsWith('>') ||
