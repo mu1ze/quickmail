@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { seedEditor } from '$lib/editor-seed';
 	import Icon from './Icon.svelte';
 
 	let {
@@ -23,9 +24,7 @@
 	// left empty composers unseeded, so the first keystroke wrote innerHTML and
 	// jumped the caret to the start.
 	$effect(() => {
-		if (!editor || seeded) return;
-		editor.innerHTML = untrack(() => html);
-		seeded = true;
+		seeded = seedEditor(editor, untrack(() => html), seeded);
 	});
 
 	function exec(command: string, value?: string) {

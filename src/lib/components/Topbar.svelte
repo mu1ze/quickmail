@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import Icon from './Icon.svelte';
+	import { isMailboxRoute } from '$lib/shell-chrome';
 	import type { MailAddress } from '$lib/types';
 
 	let {
@@ -21,10 +22,7 @@
 	} = $props();
 
 	// Search applies to whichever mailbox is open; anywhere else it lands in Inbox.
-	const MAILBOXES = ['/inbox', '/sent', '/starred', '/drafts', '/later', '/trash'];
-	const searchTarget = $derived(
-		MAILBOXES.find((path) => $page.url.pathname === path) ?? '/inbox'
-	);
+	const searchTarget = $derived(isMailboxRoute($page.url.pathname) ? $page.url.pathname : '/inbox');
 
 	let query = $state('');
 	let menuOpen = $state(false);

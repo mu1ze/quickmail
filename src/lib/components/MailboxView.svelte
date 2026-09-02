@@ -13,6 +13,7 @@
 	import { showUndo } from '$lib/undo';
 	import { getShellContext } from '$lib/shell-context';
 	import { onSearchFocus } from '$lib/search-focus';
+	import { handleMailboxRowClick, toggleSelection } from '$lib/mailbox-select';
 	import {
 		readMailboxLayout,
 		setMailboxLayout,
@@ -183,9 +184,7 @@
 	}
 
 	function toggle(id: string) {
-		selected = selected.includes(id)
-			? selected.filter((value) => value !== id)
-			: [...selected, id];
+		selected = toggleSelection(selected, id);
 	}
 
 	function selectAll(next: boolean) {
@@ -943,9 +942,9 @@
 							class="card-link"
 							href={href(thread)}
 							onclick={(event) => {
-								if (!selectMode) return;
-								event.preventDefault();
-								toggle(thread.latest_id);
+								if (handleMailboxRowClick(selectMode, () => event.preventDefault()) === 'toggle') {
+									toggle(thread.latest_id);
+								}
 							}}
 						>
 							<span class="avatar" style={avatarStyle(thread)}>{initial(thread)}</span>
