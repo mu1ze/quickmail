@@ -60,7 +60,7 @@
 			display: block;
 			padding: 0.375rem 0.75rem env(safe-area-inset-bottom);
 			pointer-events: none;
-			background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+			background: color-mix(in srgb, var(--color-surface) 96%, transparent);
 			box-shadow: inset 0 1px 0 var(--color-line);
 			backdrop-filter: blur(16px);
 		}
@@ -69,17 +69,15 @@
 			display: flex;
 			align-items: center;
 			gap: 0.375rem;
-			padding: 0.25rem;
-			border-radius: 999px;
-			background: color-mix(in srgb, var(--color-surface) 92%, transparent);
-			box-shadow: 0 0 0 1px rgba(28, 25, 23, 0.06);
+			padding: 0;
+			border-radius: 0;
+			background: transparent;
+			box-shadow: none;
 			pointer-events: auto;
 		}
 
 		:root[data-theme='dark'] .dock-pill {
-			box-shadow:
-				0 0 0 1px rgba(255, 255, 255, 0.08),
-				0 8px 32px -8px rgba(0, 0, 0, 0.55);
+			box-shadow: none;
 		}
 
 		.dock-btn {
