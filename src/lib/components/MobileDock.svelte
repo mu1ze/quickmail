@@ -53,25 +53,26 @@
 	@media (max-width: 900px) {
 		.dock {
 			position: fixed;
-			right: 0.75rem;
-			bottom: calc(0.625rem + env(safe-area-inset-bottom));
-			left: 0.75rem;
+			right: 0;
+			bottom: 0;
+			left: 0;
 			z-index: 32;
 			display: block;
+			padding: 0.375rem 0.75rem env(safe-area-inset-bottom);
 			pointer-events: none;
+			background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+			box-shadow: inset 0 1px 0 var(--color-line);
+			backdrop-filter: blur(16px);
 		}
 
 		.dock-pill {
 			display: flex;
 			align-items: center;
 			gap: 0.375rem;
-			padding: 0.375rem;
+			padding: 0.25rem;
 			border-radius: 999px;
 			background: color-mix(in srgb, var(--color-surface) 92%, transparent);
-			box-shadow:
-				0 0 0 1px rgba(28, 25, 23, 0.06),
-				0 8px 32px -8px rgba(24, 22, 20, 0.35);
-			backdrop-filter: blur(16px);
+			box-shadow: 0 0 0 1px rgba(28, 25, 23, 0.06);
 			pointer-events: auto;
 		}
 
