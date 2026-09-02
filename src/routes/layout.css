@@ -346,9 +346,7 @@ textarea:focus-visible {
 		padding-bottom: calc(4.75rem + env(safe-area-inset-bottom));
 	}
 
-	.app-shell.mailbox-mobile .topbar,
-	.app-shell.hub-mobile .topbar,
-	.app-shell.compose-mobile .topbar {
+	.app-shell.hide-topbar-mobile .topbar {
 		display: none;
 	}
 

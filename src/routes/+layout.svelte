@@ -16,15 +16,17 @@
 	import { runUndo } from '$lib/undo';
 	import { setShellContext } from '$lib/shell-context';
 	import { requestSearchFocus } from '$lib/search-focus';
+	import {
+		hideDockSearch,
+		hideTopbarOnMobile,
+		isComposeRoute,
+		isHubRoute,
+		isMailboxRoute,
+		resolveSearchFocusAction
+	} from '$lib/shell-chrome';
 	import type { LayoutData } from './$types';
 
-	const MAILBOX_ROUTES = ['/inbox', '/starred', '/drafts', '/sent', '/later', '/trash'];
-	const hubRoute = $derived(
-		$page.url.pathname === '/settings' ||
-			$page.url.pathname.startsWith('/settings/') ||
-			$page.url.pathname === '/admin' ||
-			$page.url.pathname.startsWith('/admin/')
-	);
+	const hubRoute = $derived(isHubRoute($page.url.pathname));
 
 	let { children, data }: { children: import('svelte').Snippet; data: LayoutData } = $props();
 
@@ -42,8 +44,10 @@
 	let sheetOpen = $state(false);
 	let mobileViewport = $state(false);
 
-	const composing = $derived($page.url.pathname.startsWith('/compose'));
-	const mailboxRoute = $derived(MAILBOX_ROUTES.includes($page.url.pathname));
+	const composing = $derived(isComposeRoute($page.url.pathname));
+	const mailboxRoute = $derived(isMailboxRoute($page.url.pathname));
+	const hideMobileTopbar = $derived(hideTopbarOnMobile($page.url.pathname));
+	const hideHubSearch = $derived(hideDockSearch($page.url.pathname));
 
 	// app.html already applied the theme; this keeps "System" live afterwards.
 	$effect(() => watchSystemTheme());
@@ -166,11 +170,16 @@
 
 	function handleDockSearch() {
 		mobileOpen = false;
-		if (mailboxRoute && mobileViewport) {
+		const action = resolveSearchFocusAction({
+			pathname: $page.url.pathname,
+			mobileViewport
+		});
+		if (action === 'mailbox') {
 			requestSearchFocus();
 			return;
 		}
-		if (hubRoute && mobileViewport) {
+		if (action === 'inbox-then-mailbox') {
+			requestSearchFocus();
 			void goto('/inbox');
 			return;
 		}
@@ -213,6 +222,7 @@
 		class:mailbox-mobile={mailboxRoute}
 		class:hub-mobile={hubRoute}
 		class:compose-mobile={composing}
+		class:hide-topbar-mobile={hideMobileTopbar}
 		data-collapsed={collapsed}
 	>
 		<Sidebar
@@ -245,7 +255,7 @@
 				menuOpen={mobileOpen}
 				onOpenMenu={() => (mobileOpen = !mobileOpen)}
 				onSearch={handleDockSearch}
-				hideSearch={hubRoute}
+				hideSearch={hideHubSearch}
 			/>
 		{/if}
 
