@@ -135,7 +135,7 @@ blockquote { border-color: rgba(0, 0, 0, 0.12) !important; }
  * its contents flip.
  */
 const RICH_CSS = `
-body { color: #18181b; background: #ffffff; padding: 18px 20px; }
+body { color: #18181b; background: transparent; padding: 0; }
 a { color: #1a56db; }
 .quote-toggle { color: #52525b; background: #f0f0f0; }
 .quote-toggle:hover { background: #e6e6e6; }

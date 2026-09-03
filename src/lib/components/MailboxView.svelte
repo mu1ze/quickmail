@@ -14,6 +14,7 @@
 	import { getShellContext } from '$lib/shell-context';
 	import { onSearchFocus } from '$lib/search-focus';
 	import { handleMailboxRowClick, toggleSelection } from '$lib/mailbox-select';
+	import { threadHeadline } from '$lib/mailbox-people';
 	import {
 		readMailboxLayout,
 		setMailboxLayout,
@@ -123,20 +124,11 @@
 	const someSelected = $derived(selected.length > 0);
 
 	/**
-	 * Who to show on the card. Sent and Drafts are about where a message went, so
-	 * they name the recipient; everywhere else names the people in the thread.
+	 * Who to show on the card. Sent and Drafts are about where a message went;
+	 * everywhere else names the senders. Always the email, not a guessed name.
 	 */
 	function people(thread: ThreadSummary): string {
-		if (view === 'drafts' || (view === 'sent' && thread.participants.every((p) => p.self))) {
-			return recipientOf(thread) || (view === 'drafts' ? 'No recipient' : 'Unknown');
-		}
-
-		return thread.participants.map((participant) => participant.label).join(', ');
-	}
-
-	function recipientOf(thread: ThreadSummary): string {
-		const [first] = thread.participants;
-		return first?.address ? first.address.split('@')[0].replace(/[._-]+/g, ' ') : '';
+		return threadHeadline(thread, view);
 	}
 
 	function initial(thread: ThreadSummary): string {
@@ -1530,7 +1522,7 @@
 	}
 
 	.cards.layout-list .sender {
-		width: 10.5rem;
+		width: 16rem;
 		flex-shrink: 0;
 	}
 
@@ -1633,7 +1625,7 @@
 		min-width: 0;
 		font-size: 0.75rem;
 		color: var(--color-text-secondary);
-		text-transform: capitalize;
+		text-transform: none;
 	}
 
 	.card.unread .sender {

@@ -1,7 +1,7 @@
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
 import { MAILBOX_PAGE_SIZE } from '$lib/constants';
 import { MAX_BODY_BYTES } from './constants';
-import { stripQuotedText } from '$lib/utils/quotes';
+import { buildMessagePreview } from '$lib/utils/message-preview';
 import { displaySubject, normalizeSubject, resolveThreadId } from './threads';
 import type {
 	DeliveryStatus,
@@ -283,7 +283,7 @@ export async function listMailbox(
 		.prepare(
 			`SELECT m.id, COALESCE(m.thread_id, m.id) AS thread_id, m.direction, m.from_addr, m.to_addr,
 			        m.subject, m.is_read, m.is_starred, m.is_pinned, m.created_at, m.domain_id, m.status, m.snoozed_until,
-			        substr(COALESCE(m.body_text, ''), 1, 4000) AS body_head,
+			        substr(COALESCE(NULLIF(trim(m.body_text), ''), m.body_html, ''), 1, 4000) AS body_head,
 			        EXISTS(SELECT 1 FROM email_attachments a WHERE a.email_id = m.id) AS has_attachments
 			 FROM emails m
 			 WHERE m.user_id = ? AND COALESCE(m.thread_id, m.id) IN (${placeholders}) AND ${display}
@@ -337,7 +337,7 @@ function toThreadSummary(messages: ThreadMessageRow[]): ThreadSummary {
 		latest_id: latest.id,
 		// The conversation keeps the subject it started with, not "Re: Re: …".
 		subject: displaySubject(oldest.subject),
-		preview: buildPreview(latest.body_head),
+		preview: buildMessagePreview(latest.body_head),
 		participants,
 		message_count: messages.length,
 		is_read: messages.every((message) => message.is_read === 1),
@@ -357,17 +357,11 @@ function toThreadSummary(messages: ThreadMessageRow[]): ThreadSummary {
 	};
 }
 
-/** "hello.there@x.com" → "hello there"; the list capitalizes it in CSS. */
+/** Keep a short label for APIs; the mailbox row shows the address instead. */
 function displayNameFor(address: string): string {
 	if (!address) return 'Unknown';
 	const [local] = address.split('@');
 	return local.replace(/[._-]+/g, ' ');
-}
-
-/** The newest message's own words — quoted history is dropped. */
-function buildPreview(bodyHead: string | null): string {
-	if (!bodyHead) return '';
-	return stripQuotedText(bodyHead).replace(/\s+/g, ' ').trim().slice(0, 220);
 }
 
 /** Flat message list, used by the JSON API rather than the mailbox UI. */
@@ -387,7 +381,7 @@ export async function listEmails(
 		.prepare(
 			`SELECT e.id, e.direction, e.from_addr, e.to_addr, e.subject, e.is_read, e.is_starred,
 			        e.created_at, e.domain_id, e.status,
-			        substr(COALESCE(e.body_text, ''), 1, 4000) AS body_head,
+			        substr(COALESCE(NULLIF(trim(e.body_text), ''), e.body_html, ''), 1, 4000) AS body_head,
 			        EXISTS(SELECT 1 FROM email_attachments a WHERE a.email_id = e.id) AS has_attachments
 			 FROM emails e
 			 WHERE ${where}
@@ -403,7 +397,7 @@ export async function listEmails(
 		from_addr: row.from_addr,
 		to_addr: row.to_addr,
 		subject: row.subject,
-		preview: buildPreview(row.body_head),
+		preview: buildMessagePreview(row.body_head),
 		is_read: row.is_read === 1,
 		is_starred: row.is_starred === 1,
 		is_draft: row.status === 'draft',

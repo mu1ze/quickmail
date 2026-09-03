@@ -3,8 +3,10 @@ import { describe, test } from 'node:test';
 import {
 	hideDockSearch,
 	hideTopbarOnMobile,
+	hideMobileDock,
 	isComposeRoute,
 	isHubRoute,
+	isMailRoute,
 	isMailboxRoute,
 	resolveSearchFocusAction
 } from './shell-chrome';
@@ -20,15 +22,23 @@ describe('shell chrome routing', () => {
 		assert.equal(isComposeRoute('/compose'), true);
 		assert.equal(isComposeRoute('/compose/draft-1'), true);
 		assert.equal(isComposeRoute('/inbox'), false);
+		assert.equal(isMailRoute('/mail/abc'), true);
+		assert.equal(isMailRoute('/inbox'), false);
 	});
 
-	test('Topbar hides on mobile mailbox, hub, and compose — not on thread pages', () => {
+	test('Topbar hides on mobile mailbox, hub, compose, and open mail', () => {
 		assert.equal(hideTopbarOnMobile('/inbox'), true);
 		assert.equal(hideTopbarOnMobile('/settings'), true);
 		assert.equal(hideTopbarOnMobile('/admin/domains'), true);
 		assert.equal(hideTopbarOnMobile('/compose'), true);
-		assert.equal(hideTopbarOnMobile('/mail/abc'), false);
+		assert.equal(hideTopbarOnMobile('/mail/abc'), true);
 		assert.equal(hideTopbarOnMobile('/onboarding'), false);
+	});
+
+	test('mobile dock hides on compose and open mail', () => {
+		assert.equal(hideMobileDock('/compose'), true);
+		assert.equal(hideMobileDock('/mail/abc'), true);
+		assert.equal(hideMobileDock('/inbox'), false);
 	});
 
 	test('dock Search is hidden on settings and admin hubs', () => {
