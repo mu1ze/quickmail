@@ -3,7 +3,7 @@
  * adapter-cloudflare writes the SvelteKit fetch worker to wrangler `main`
  * (`.svelte-kit/cloudflare/_worker.js`). We keep that path so the adapter
  * does not overwrite `src/worker.ts`, then wrap the generated file with
- * Cloudflare Email Service's `email()` handler.
+ * Cloudflare Email Service's `email()` handler and the weekly `scheduled()` job.
  */
 import { existsSync } from 'node:fs';
 import { readFile, rename, writeFile } from 'node:fs/promises';

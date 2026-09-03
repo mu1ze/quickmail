@@ -37,6 +37,27 @@ describe('API key access', () => {
 		);
 	});
 
+	test('sessions can manage mailbox automations', () => {
+		assert.deepEqual(
+			authorizeApiRequest({
+				pathname: '/api/settings/automations',
+				method: 'PUT',
+				authMethod: 'session',
+				scopes: []
+			}),
+			{ ok: true }
+		);
+		assert.deepEqual(
+			authorizeApiRequest({
+				pathname: '/api/settings/automations/run',
+				method: 'POST',
+				authMethod: 'session',
+				scopes: []
+			}),
+			{ ok: true }
+		);
+	});
+
 	test('a read key cannot send or manage keys', () => {
 		assert.equal(
 			authorizeApiRequest({
@@ -112,6 +133,32 @@ describe('API key access', () => {
 				ok: false,
 				status: 403,
 				error: 'API keys cannot manage Brrr destinations. Sign in with a browser session.'
+			}
+		);
+		assert.deepEqual(
+			authorizeApiRequest({
+				pathname: '/api/settings/automations',
+				method: 'PUT',
+				authMethod: 'api_token',
+				scopes: ['mail:read', 'mail:send', 'admin']
+			}),
+			{
+				ok: false,
+				status: 403,
+				error: 'API keys cannot manage mailbox automations. Sign in with a browser session.'
+			}
+		);
+		assert.deepEqual(
+			authorizeApiRequest({
+				pathname: '/api/settings/automations/run',
+				method: 'POST',
+				authMethod: 'api_token',
+				scopes: ['mail:read', 'mail:send', 'admin']
+			}),
+			{
+				ok: false,
+				status: 403,
+				error: 'API keys cannot manage mailbox automations. Sign in with a browser session.'
 			}
 		);
 	});

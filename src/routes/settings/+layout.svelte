@@ -11,6 +11,7 @@
 		{ href: '/settings/appearance', label: 'Appearance', icon: 'contrast-2-line' },
 		{ href: '/settings/password', label: 'Password', icon: 'lock-password-line' },
 		{ href: '/settings/notifications', label: 'Notifications', icon: 'notification-3-line' },
+		{ href: '/settings/automations', label: 'Automations', icon: 'sparkling-2-line' },
 		{ href: '/settings/signatures', label: 'Signatures', icon: 'pencil-line' },
 		{ href: '/settings/addresses', label: 'Addresses', icon: 'at-line' },
 		{ href: '/settings/domains', label: 'Connected domains', icon: 'global-line' },

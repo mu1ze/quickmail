@@ -170,6 +170,8 @@ export type ThreadSummary = {
 	status: DeliveryStatus | null;
 	/** Present when this conversation is waiting until a later time. */
 	snoozed_until: string | null;
+	/** True when weekly cleanup moved this conversation to Trash. */
+	auto_trashed: boolean;
 	created_at: string;
 };
 

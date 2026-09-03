@@ -30,6 +30,10 @@ declare global {
 				PUBLIC_APP_URL?: string;
 				/** Shared secret required by /recover. Set with wrangler secret put. */
 				PASSWORD_RESET_KEY?: string;
+				/** Workers AI. Missing locally unless the AI binding is available. */
+				AI?: {
+					run(model: string, input: Record<string, unknown>): Promise<unknown>;
+				};
 			};
 		}
 		interface Locals {

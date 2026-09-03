@@ -3,6 +3,7 @@ import { MAILBOX_PAGE_SIZE } from '$lib/constants';
 import { MAX_BODY_BYTES } from './constants';
 import { buildMessagePreview } from '$lib/utils/message-preview';
 import { displaySubject, normalizeSubject, resolveThreadId } from './threads';
+import { loadThreadSummaries } from './mail-summaries';
 import type {
 	DeliveryStatus,
 	EmailAttachmentMeta,
@@ -196,6 +197,7 @@ type ThreadMessageRow = {
 	domain_id: string | null;
 	status: MailStatus | null;
 	snoozed_until: string | null;
+	auto_trashed_at: string | null;
 	created_at: string;
 };
 
@@ -283,6 +285,7 @@ export async function listMailbox(
 		.prepare(
 			`SELECT m.id, COALESCE(m.thread_id, m.id) AS thread_id, m.direction, m.from_addr, m.to_addr,
 			        m.subject, m.is_read, m.is_starred, m.is_pinned, m.created_at, m.domain_id, m.status, m.snoozed_until,
+			        m.auto_trashed_at,
 			        substr(COALESCE(NULLIF(trim(m.body_text), ''), m.body_html, ''), 1, 4000) AS body_head,
 			        EXISTS(SELECT 1 FROM email_attachments a WHERE a.email_id = m.id) AS has_attachments
 			 FROM emails m
@@ -303,6 +306,18 @@ export async function listMailbox(
 		.map((threadId) => byThread.get(threadId))
 		.filter((group): group is ThreadMessageRow[] => Boolean(group?.length))
 		.map(toThreadSummary);
+
+	const summaries = await loadThreadSummaries(
+		db,
+		userId,
+		threads.map((thread) => thread.thread_id)
+	);
+	for (const thread of threads) {
+		const summary = summaries.get(thread.thread_id);
+		if (summary && summary.source_latest_id === thread.latest_id) {
+			thread.preview = summary.summary;
+		}
+	}
 
 	return { threads, total, page, pageCount, pageSize };
 }
@@ -353,6 +368,7 @@ function toThreadSummary(messages: ThreadMessageRow[]): ThreadSummary {
 				.filter((value): value is string => Boolean(value))
 				.sort()
 				.at(-1) ?? null,
+		auto_trashed: messages.some((message) => Boolean(message.auto_trashed_at)),
 		created_at: latest.created_at
 	};
 }
@@ -525,6 +541,9 @@ export async function setEmailFlags(
 		assignments.push(update.trashed ? "deleted_at = datetime('now')" : 'deleted_at = NULL');
 		if (update.trashed) {
 			assignments.push('snoozed_until = NULL');
+		} else {
+			assignments.push('auto_trashed_at = NULL');
+			assignments.push('auto_trash_reason = NULL');
 		}
 	}
 	if (update.snoozedUntil !== undefined) {

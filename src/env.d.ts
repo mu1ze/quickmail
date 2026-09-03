@@ -16,6 +16,10 @@ declare global {
 		VAPID_SUBJECT?: string;
 		PUBLIC_APP_URL?: string;
 		PASSWORD_RESET_KEY?: string;
+		/** Workers AI. Absent in local-bindings mode; automations then skip the model. */
+		AI?: {
+			run(model: string, input: Record<string, unknown>): Promise<unknown>;
+		};
 	}
 }
 

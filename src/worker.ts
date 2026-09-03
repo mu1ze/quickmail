@@ -1,9 +1,10 @@
-import type { ExecutionContext } from '@cloudflare/workers-types';
+import type { ExecutionContext, ScheduledController } from '@cloudflare/workers-types';
 import {
 	handleCloudflareInbound,
 	type CloudflareInboundEnv,
 	type CloudflareInboundMessage
 } from './lib/server/cloudflare-inbound';
+import { runWeeklyMailAutomations } from './lib/server/mail-automations';
 // Renamed from `_worker.js` by `scripts/wrap-cloudflare-worker.mjs` after `vite build`.
 // @ts-expect-error file is created at build time
 import sveltekit from '../.svelte-kit/cloudflare/_sveltekit.js';
@@ -16,7 +17,8 @@ const svelteApp = sveltekit as SvelteKitWorker;
 
 /**
  * SvelteKit's generated Worker is fetch-only. This wrapper keeps HTTP on
- * SvelteKit and adds Cloudflare Email Service's `email()` handler.
+ * SvelteKit and adds Cloudflare Email Service's `email()` handler plus the
+ * weekly `scheduled()` cleanup of opened mail.
  */
 export default {
 	fetch(request: Request, env: Env, ctx: ExecutionContext) {
@@ -43,5 +45,10 @@ export default {
 		};
 
 		await handleCloudflareInbound(message, inboundEnv);
+	},
+
+	async scheduled(_controller: ScheduledController, env: Env) {
+		const result = await runWeeklyMailAutomations(env);
+		console.log('mail automations', result);
 	}
 };
