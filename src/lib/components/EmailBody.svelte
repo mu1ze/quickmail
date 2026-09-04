@@ -6,6 +6,10 @@
 		isRichHtml
 	} from '$lib/utils/email-html';
 	import { foldQuotedHtml } from '$lib/utils/quotes';
+	import {
+		readRemoteContentPreference,
+		watchRemoteContentPreference
+	} from '$lib/remote-content';
 
 	const STYLE_ID = '__mail-frame-style';
 
@@ -15,6 +19,13 @@
 	const remote = $derived(hasRemoteContent(html));
 	let allowRemote = $state(false);
 	const srcdoc = $derived(buildEmailDocument(html, { rich, allowRemote }));
+
+	$effect(() => {
+		allowRemote = readRemoteContentPreference();
+		return watchRemoteContentPreference((enabled) => {
+			allowRemote = enabled;
+		});
+	});
 
 	let frame = $state<HTMLIFrameElement | null>(null);
 	let height = $state(0);
