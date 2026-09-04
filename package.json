@@ -21,7 +21,7 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"cf-typegen": "wrangler types",
 		"quickmail": "bun cli/main.ts",
-		"test": "bun test src/lib/email-signature.test.ts src/lib/signature-template.test.ts src/lib/utils/email-html.test.ts src/lib/utils/message-preview.test.ts src/lib/utils/recipients.test.ts src/lib/utils/forward.test.ts src/lib/mailbox-layout.test.ts src/lib/mailbox-people.test.ts src/lib/mailbox-select.test.ts src/lib/editor-seed.test.ts src/lib/search-focus.test.ts src/lib/shell-chrome.test.ts src/lib/push-client.test.ts src/lib/server/api-access.test.ts src/lib/server/api-tokens.test.ts src/lib/server/auth.test.ts src/lib/server/brrr.test.ts src/lib/server/crypto.test.ts src/lib/server/domain-permissions.test.ts src/lib/server/email-address.test.ts src/lib/server/outbox.test.ts src/lib/server/push-notifications.test.ts src/lib/server/request-limits.test.ts src/lib/server/signature-assets.test.ts src/lib/theme.test.ts src/lib/interior/motion.test.ts src/lib/snooze.test.ts src/lib/shortcuts.test.ts cli/client.test.ts"
+		"test": "bun test src/lib/email-signature.test.ts src/lib/signature-template.test.ts src/lib/utils/email-html.test.ts src/lib/utils/message-preview.test.ts src/lib/utils/recipients.test.ts src/lib/utils/forward.test.ts src/lib/mailbox-layout.test.ts src/lib/mailbox-people.test.ts src/lib/mailbox-select.test.ts src/lib/editor-seed.test.ts src/lib/search-focus.test.ts src/lib/shell-chrome.test.ts src/lib/push-client.test.ts src/lib/server/api-access.test.ts src/lib/server/api-tokens.test.ts src/lib/server/auth.test.ts src/lib/server/brrr.test.ts src/lib/server/crypto.test.ts src/lib/server/domain-permissions.test.ts src/lib/server/email-address.test.ts src/lib/server/mail-automations.test.ts src/lib/server/mail-classify.test.ts src/lib/server/mail-summaries.test.ts src/lib/server/outbox.test.ts src/lib/server/push-notifications.test.ts src/lib/server/request-limits.test.ts src/lib/server/signature-assets.test.ts src/lib/theme.test.ts src/lib/interior/motion.test.ts src/lib/snooze.test.ts src/lib/shortcuts.test.ts cli/client.test.ts"
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "^4.20260601.1",
@@ -72,6 +72,9 @@
 			},
 			"PASSWORD_RESET_KEY": {
 				"description": "Shared secret for the /recover page. Anyone with this key can set a new password for an existing account."
+			},
+			"AI": {
+				"description": "Workers AI binding used by optional weekly cleanup classification and inbox summaries. Safe to omit; automations then use rules and heuristics only."
 			}
 		}
 	}

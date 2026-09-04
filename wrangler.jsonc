@@ -68,5 +68,16 @@
 
 	"observability": {
 		"enabled": true
+	},
+
+	// Sunday 08:00 UTC. The handler only scans mail the user has already opened.
+	"triggers": {
+		"crons": ["0 8 * * 0"]
+	},
+
+	// Optional. Classification and inbox summaries skip AI when this binding is
+	// missing (including local QUICKMAIL_LOCAL_BINDINGS=1).
+	"ai": {
+		"binding": "AI"
 	}
 }

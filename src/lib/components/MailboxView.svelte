@@ -949,6 +949,9 @@
 											<span class="count">{thread.message_count}</span>
 										{/if}
 										{#if thread.is_draft}<span class="tag tag-draft">Draft</span>{/if}
+										{#if view === 'trash' && thread.auto_trashed}
+											<span class="tag tag-cleaned">Cleaned up</span>
+										{/if}
 									</span>
 									<span class="date">
 										{view === 'later' && thread.snoozed_until
@@ -1713,6 +1716,10 @@
 	.tag-draft {
 		color: var(--color-danger);
 		background: rgba(185, 28, 28, 0.08);
+	}
+
+	.tag-cleaned {
+		color: var(--color-muted);
 	}
 
 	.date {

@@ -19,6 +19,7 @@ function thread(participants: ThreadSummary['participants']): ThreadSummary {
 		domain_id: null,
 		status: null,
 		snoozed_until: null,
+		auto_trashed: false,
 		created_at: '2026-09-02 12:00:00'
 	};
 }
