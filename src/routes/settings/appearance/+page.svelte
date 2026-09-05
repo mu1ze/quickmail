@@ -79,12 +79,12 @@
 	</GroupedPanel>
 
 	<GroupedPanel
-		hint="Images, fonts, and styles hosted by the sender. Off by default so tracking pixels stay blocked. You can still load them on a single message."
+		hint="Images, fonts, and styles hosted by the sender. Off by default so tracking pixels stay blocked. When this is on, every message loads them — mail already in the inbox and new mail. You can still load them on a single message while this is off."
 	>
 		<label class="toggle-row">
 			<span>
 				<span class="toggle-title">Load remote content</span>
-				<span class="toggle-hint">Applies to opened mail on this device.</span>
+				<span class="toggle-hint">Applies to this device, for current and future mail.</span>
 			</span>
 			<input
 				class="switch"
