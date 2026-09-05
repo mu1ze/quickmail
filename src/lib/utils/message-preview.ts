@@ -18,40 +18,29 @@ function decodeEntities(value: string): string {
 		});
 }
 
+/** Stop unclosed blocks at body markup so a missing </head> cannot eat the message. */
+const BEFORE_BODY = '(?=<body\\b)|$';
+
 /**
  * Markup that should never leak into a mailbox snippet: comments, Outlook
- * conditionals, a truncated <style> block, or ordinary tags.
+ * conditionals, or ordinary tags. Comparison operators and lone entities
+ * are not HTML.
  */
 export function looksLikeHtml(value: string): boolean {
-	return /<!--|<!\[|<\/?[a-z!]|\sxmlns:|<o:p|&nbsp;|&lt;/i.test(value);
+	return /<!--|<!\[|<!doctype|<\/?[a-z][a-z0-9]*(?:\s[^>]*)?\/?>|<o:p|\sxmlns:/i.test(value);
 }
 
-/** Turn a stored HTML fragment into readable words for a mailbox snippet. */
-export function htmlToPreviewText(html: string): string {
-	const text = html
-		// Truncated snippets often cut through <style> / <head>, dumping CSS.
-		.replace(/<style[\s\S]*?(?:<\/style>|$)/gi, ' ')
-		.replace(/<script[\s\S]*?(?:<\/script>|$)/gi, ' ')
-		.replace(/<head[\s\S]*?(?:<\/head>|$)/gi, ' ')
-		.replace(/<noscript[\s\S]*?(?:<\/noscript>|$)/gi, ' ')
-		.replace(/<!--\[if[\s\S]*?(?:<!\[endif\]-->|$)/gi, ' ')
-		.replace(/<!\[if[\s\S]*?(?:<!\[endif\]>|$)/gi, ' ')
-		.replace(/<!--[\s\S]*?(?:-->|$)/g, ' ')
-		.replace(/<!\[endif\]-->?/gi, ' ')
-		.replace(/<!doctype[^>]*>/gi, ' ')
-		.replace(/<br\s*\/?>/gi, '\n')
-		.replace(/<\/(p|div|tr|td|th|h[1-6]|li|blockquote)>/gi, '\n')
-		.replace(/<[^>]+>/g, ' ');
-
-	return tidyPreviewText(decodeEntities(text));
+function looksLikeCssBlock(inner: string): boolean {
+	return /[;:]/.test(inner) || /#[0-9a-f]{3,8}\b/i.test(inner) || /\d+(?:px|em|rem|%)/i.test(inner);
 }
 
-function tidyPreviewText(value: string): string {
+/** CSS leftovers and tracking URLs — only for the HTML path. */
+function tidyHtmlPreviewText(value: string): string {
 	return value
 		.replace(/<!--+|--+>/g, ' ')
 		.replace(/\[if[^\]]*\]/gi, ' ')
 		.replace(/\[endif\]/gi, ' ')
-		.replace(/\{[^{}]{0,400}\}/g, ' ')
+		.replace(/\{([^{}]{0,400})\}/g, (match, inner: string) => (looksLikeCssBlock(inner) ? ' ' : match))
 		.replace(/https?:\/\/[^\s)]+/gi, ' ')
 		.replace(/\(\s*\)/g, ' ')
 		.replace(/[<>]/g, ' ')
@@ -59,19 +48,40 @@ function tidyPreviewText(value: string): string {
 		.trim();
 }
 
-function isReadablePreview(text: string): boolean {
-	const letters = (text.match(/\p{L}/gu) ?? []).length;
-	if (letters >= 12) return true;
-	if (letters < 3) return false;
-	return letters / text.length >= 0.45;
+/** Outlook truncation and leftover CSS, not short real replies. */
+function isLeftoverMarkup(text: string): boolean {
+	if (!text) return true;
+	if (/^[A-Za-z]\.{2,}$/.test(text)) return true;
+	if (/[{}]/.test(text) && looksLikeCssBlock(text)) return true;
+	return false;
+}
+
+/** Turn a stored HTML fragment into readable words for a mailbox snippet. */
+export function htmlToPreviewText(html: string): string {
+	const text = html
+		.replace(new RegExp(`<style\\b[^>]*>[\\s\\S]*?(?:</style>|${BEFORE_BODY})`, 'gi'), ' ')
+		.replace(new RegExp(`<script\\b[^>]*>[\\s\\S]*?(?:</script>|${BEFORE_BODY})`, 'gi'), ' ')
+		.replace(/<head\b[^>]*>[\s\S]*?(?:<\/head>|(?=<body\b))/gi, ' ')
+		.replace(new RegExp(`<noscript\\b[^>]*>[\\s\\S]*?(?:</noscript>|${BEFORE_BODY})`, 'gi'), ' ')
+		.replace(new RegExp(`<!--\\[if[\\s\\S]*?(?:<!\\[endif\\]-->|(?=<body\\b)|$)`, 'gi'), ' ')
+		.replace(new RegExp(`<!\\[if[\\s\\S]*?(?:<!\\[endif\\]>|(?=<body\\b)|$)`, 'gi'), ' ')
+		.replace(new RegExp(`<!--[\\s\\S]*?(?:-->|(?=<body\\b)|$)`, 'g'), ' ')
+		.replace(/<!\[endif\]-->?/gi, ' ')
+		.replace(/<!doctype[^>]*>/gi, ' ')
+		.replace(/<br\s*\/?>/gi, '\n')
+		.replace(/<\/(p|div|tr|td|th|h[1-6]|li|blockquote)>/gi, '\n')
+		.replace(/<[^>]+>/g, ' ');
+
+	const decoded = decodeEntities(text).replace(/<[^>]+>/g, ' ');
+	return tidyHtmlPreviewText(decoded);
 }
 
 /** Newest message's own words — quoted history and markup are dropped. */
 export function buildMessagePreview(bodyHead: string | null | undefined): string {
 	if (!bodyHead) return '';
-	const source = looksLikeHtml(bodyHead) ? htmlToPreviewText(bodyHead) : bodyHead;
-	let text = tidyPreviewText(stripQuotedText(source));
-	if (looksLikeHtml(text)) text = htmlToPreviewText(text);
-	text = text.slice(0, 220).trim();
-	return isReadablePreview(text) ? text : '';
+	const html = looksLikeHtml(bodyHead);
+	const source = html ? htmlToPreviewText(bodyHead) : bodyHead;
+	const text = stripQuotedText(source).replace(/\s+/g, ' ').trim().slice(0, 220);
+	if (html && isLeftoverMarkup(text)) return '';
+	return text;
 }
