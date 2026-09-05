@@ -6,6 +6,12 @@
 		isRichHtml
 	} from '$lib/utils/email-html';
 	import { foldQuotedHtml } from '$lib/utils/quotes';
+	import { browser } from '$app/environment';
+	import {
+		readRemoteContentPreference,
+		shouldLoadRemoteContent,
+		watchRemoteContentPreference
+	} from '$lib/remote-content';
 
 	const STYLE_ID = '__mail-frame-style';
 
@@ -13,8 +19,17 @@
 
 	const rich = $derived(isRichHtml(html));
 	const remote = $derived(hasRemoteContent(html));
-	let allowRemote = $state(false);
+	let preference = $state(browser ? readRemoteContentPreference() : false);
+	let messageOptIn = $state(false);
+	const allowRemote = $derived(shouldLoadRemoteContent(preference, messageOptIn));
 	const srcdoc = $derived(buildEmailDocument(html, { rich, allowRemote }));
+
+	$effect(() => {
+		preference = readRemoteContentPreference();
+		return watchRemoteContentPreference((enabled) => {
+			preference = enabled;
+		});
+	});
 
 	let frame = $state<HTMLIFrameElement | null>(null);
 	let height = $state(0);
@@ -128,7 +143,7 @@
 {#if remote && !allowRemote}
 	<div class="remote-notice">
 		<span>Remote images are blocked to protect your privacy.</span>
-		<button type="button" onclick={() => (allowRemote = true)}>Load remote content</button>
+		<button type="button" onclick={() => (messageOptIn = true)}>Load remote content</button>
 	</div>
 {/if}
 

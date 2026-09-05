@@ -9,20 +9,39 @@
 		THEME_OPTIONS,
 		type ThemePreference
 	} from '$lib/theme';
+	import {
+		readRemoteContentPreference,
+		setRemoteContentPreference,
+		watchRemoteContentPreference
+	} from '$lib/remote-content';
 
 	let theme = $state<ThemePreference>('system');
+	let loadRemote = $state(false);
 	$effect(() => {
 		theme = readThemePreference();
+		loadRemote = readRemoteContentPreference();
 		const sync = () => {
 			theme = readThemePreference();
 		};
 		window.addEventListener(THEME_CHANGE_EVENT, sync);
-		return () => window.removeEventListener(THEME_CHANGE_EVENT, sync);
+		const stopRemote = watchRemoteContentPreference((enabled) => {
+			loadRemote = enabled;
+		});
+		return () => {
+			window.removeEventListener(THEME_CHANGE_EVENT, sync);
+			stopRemote();
+		};
 	});
 
 	function chooseTheme(next: ThemePreference) {
 		theme = next;
 		setThemePreference(next);
+	}
+
+	function toggleRemote(event: Event) {
+		const checked = (event.currentTarget as HTMLInputElement).checked;
+		loadRemote = checked;
+		setRemoteContentPreference(checked);
 	}
 </script>
 
@@ -57,6 +76,25 @@
 				</button>
 			{/each}
 		</div>
+	</GroupedPanel>
+
+	<GroupedPanel
+		hint="Images, fonts, and styles hosted by the sender. Off by default so tracking pixels stay blocked. When this is on, every message loads them — mail already in the inbox and new mail. You can still load them on a single message while this is off."
+	>
+		<label class="toggle-row">
+			<span>
+				<span class="toggle-title">Load remote content</span>
+				<span class="toggle-hint">Applies to this device, for current and future mail.</span>
+			</span>
+			<input
+				class="switch"
+				type="checkbox"
+				role="switch"
+				aria-label="Load remote content"
+				checked={loadRemote}
+				onchange={toggleRemote}
+			/>
+		</label>
 	</GroupedPanel>
 </HubShell>
 
@@ -165,5 +203,56 @@
 		.theme-options {
 			grid-template-columns: 1fr;
 		}
+	}
+
+	.toggle-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
+	.toggle-title {
+		display: block;
+		font-size: 0.9375rem;
+		font-weight: 500;
+	}
+
+	.toggle-hint {
+		display: block;
+		margin-top: 0.2rem;
+		font-size: 0.8125rem;
+		line-height: 1.4;
+		color: var(--color-muted);
+	}
+
+	.switch {
+		flex-shrink: 0;
+		width: 2.5rem;
+		height: 1.5rem;
+		appearance: none;
+		border-radius: 999px;
+		background: var(--color-line);
+		box-shadow: inset 0 0 0 1px var(--color-line);
+		transition: background 0.15s;
+	}
+
+	.switch::after {
+		content: '';
+		display: block;
+		width: 1.125rem;
+		height: 1.125rem;
+		margin: 0.1875rem;
+		border-radius: 999px;
+		background: var(--color-surface);
+		transition: transform 0.15s;
+	}
+
+	.switch:checked {
+		background: var(--color-accent);
+	}
+
+	.switch:checked::after {
+		transform: translateX(1rem);
 	}
 </style>

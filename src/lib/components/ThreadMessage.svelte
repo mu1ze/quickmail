@@ -56,7 +56,9 @@
 
 		<div class="body mail-body">
 			{#if message.body_html}
-				<EmailBody html={message.body_html} />
+				{#key message.id}
+					<EmailBody html={message.body_html} />
+				{/key}
 			{:else if text.body}
 				<p class="whitespace-pre-wrap">{text.body}</p>
 				{#if text.quoted}
