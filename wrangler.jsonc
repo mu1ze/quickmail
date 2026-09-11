@@ -71,8 +71,10 @@
 	},
 
 	// Sunday 08:00 UTC. The handler only scans mail the user has already opened.
+	// NOTE: Cloudflare weekdays are 1=SUN..7=SAT ("0" is rejected with code 10100),
+	// so prefer the "SUN" abbreviation to avoid ambiguity.
 	"triggers": {
-		"crons": ["0 8 * * 0"]
+		"crons": ["0 8 * * SUN"]
 	},
 
 	// Optional. Classification and inbox summaries skip AI when this binding is
