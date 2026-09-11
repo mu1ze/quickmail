@@ -334,6 +334,7 @@
 
 	async function toggleStar(thread: ThreadSummary) {
 		const isStarred = !thread.is_starred;
+		rowMenuFor = null;
 		items = items.map((row) =>
 			row.thread_id === thread.thread_id ? { ...row, is_starred: isStarred } : row
 		);
@@ -348,6 +349,7 @@
 
 	async function togglePin(thread: ThreadSummary) {
 		const isPinned = !thread.is_pinned;
+		rowMenuFor = null;
 		items = items.map((row) =>
 			row.thread_id === thread.thread_id ? { ...row, is_pinned: isPinned } : row
 		);
@@ -918,38 +920,15 @@
 					>
 						<span class="ios-unread-dot" class:visible={!thread.is_read} aria-hidden="true"></span>
 
-						<div class="card-bar">
-							{#if selectMode}
+						{#if selectMode}
+							<div class="card-bar">
 								<Check
 									label={`Select conversation with ${people(thread)}`}
 									checked={selected.includes(thread.latest_id)}
 									onchange={() => toggle(thread.latest_id)}
 								/>
-							{/if}
-
-							<div class="marks">
-								<button
-									type="button"
-									class="star"
-									class:on={thread.is_starred}
-									aria-label={thread.is_starred ? 'Remove flag' : 'Flag'}
-									title={thread.is_starred ? 'Remove flag' : 'Flag'}
-									onclick={() => toggleStar(thread)}
-								>
-									<Icon name={thread.is_starred ? 'flag-fill' : 'flag-line'} size={14} />
-								</button>
-								<button
-									type="button"
-									class="star pin"
-									class:on={thread.is_pinned}
-									aria-label={thread.is_pinned ? 'Unpin' : 'Pin to top'}
-									title={thread.is_pinned ? 'Unpin' : 'Pin to top'}
-									onclick={() => togglePin(thread)}
-								>
-									<Icon name={thread.is_pinned ? 'pushpin-2-fill' : 'pushpin-2-line'} size={14} />
-								</button>
 							</div>
-						</div>
+						{/if}
 
 						<a
 							class="card-link"
@@ -988,6 +967,12 @@
 
 								<span class="card-meta">
 									<span class="indicators">
+										{#if thread.is_starred}
+											<Icon name="flag-fill" size={13} />
+										{/if}
+										{#if thread.is_pinned}
+											<Icon name="pushpin-2-fill" size={13} />
+										{/if}
 										{#if view === 'sent' && thread.status}
 											<DeliveryStatus status={thread.status} />
 										{/if}
@@ -1045,6 +1030,25 @@
 									/>
 								{:else}
 									<div class="menu menu-right" role="menu">
+										<button
+											type="button"
+											class="menu-item"
+											onclick={() => toggleStar(thread)}
+										>
+											<Icon name={thread.is_starred ? 'flag-fill' : 'flag-line'} size={15} />
+											{thread.is_starred ? 'Remove flag' : 'Flag'}
+										</button>
+										<button
+											type="button"
+											class="menu-item"
+											onclick={() => togglePin(thread)}
+										>
+											<Icon
+												name={thread.is_pinned ? 'pushpin-2-fill' : 'pushpin-2-line'}
+												size={15}
+											/>
+											{thread.is_pinned ? 'Unpin' : 'Pin to top'}
+										</button>
 										{#if view === 'trash'}
 											<button
 												type="button"
@@ -1484,34 +1488,6 @@
 		position: relative;
 	}
 
-	.star {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 1.5rem;
-		height: 1.5rem;
-		color: var(--color-muted);
-		transition: color 0.12s;
-	}
-
-	.star:hover {
-		color: var(--color-text);
-	}
-
-	.star.on {
-		color: var(--color-star);
-	}
-
-	.star.pin.on {
-		color: var(--color-accent);
-	}
-
-	.marks {
-		display: flex;
-		align-items: center;
-		margin-left: auto;
-	}
-
 	.cards.layout-list .card {
 		flex-direction: row;
 		align-items: stretch;
@@ -1622,10 +1598,6 @@
 		position: absolute;
 		top: 0.3rem;
 		right: 0.3rem;
-	}
-
-	.cards:not(.layout-list) .marks {
-		margin-right: 1.75rem;
 	}
 
 	.card-body {
@@ -2002,6 +1974,13 @@
 			box-shadow: inset 0 -1px 0 var(--color-line);
 		}
 
+		.cards.layout-list .card {
+			border-radius: 0;
+			min-height: 0;
+			padding: 0.5rem 0.75rem;
+			gap: 0.5rem;
+		}
+
 		.card.unread,
 		.card:hover,
 		.card.unread:hover,
@@ -2015,12 +1994,9 @@
 			background: var(--color-accent-soft);
 		}
 
-		.card.focused:not(.checked) {
-			box-shadow: inset 0 -1px 0 var(--color-line), inset 3px 0 0 #007aff;
-		}
-
+		.card.focused:not(.checked),
 		.card.pinned {
-			box-shadow: inset 0 -1px 0 var(--color-line), inset 3px 0 0 var(--color-accent);
+			box-shadow: inset 0 -1px 0 var(--color-line);
 		}
 
 		.ios-unread-dot {
