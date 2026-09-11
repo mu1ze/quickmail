@@ -64,6 +64,7 @@
 	let selectMenuOpen = $state(false);
 	let focused = $state(0);
 	let snoozeFor = $state<string | null>(null);
+	let rowMenuFor = $state<string | null>(null);
 	let bulkSnoozeOpen = $state(false);
 	let layout = $state<MailboxLayout>('cards');
 	let selectMode = $state(false);
@@ -116,6 +117,7 @@
 		items = mailbox.threads;
 		selected = [];
 		snoozeFor = null;
+		rowMenuFor = null;
 		bulkSnoozeOpen = false;
 		if (focused >= mailbox.threads.length) focused = Math.max(0, mailbox.threads.length - 1);
 	});
@@ -150,12 +152,19 @@
 	}
 
 	function toggleSelectMode() {
+		moreOpen = false;
+		rowMenuFor = null;
 		if (selectMode) {
 			selectMode = false;
 			selected = [];
 		} else {
 			selectMode = true;
 		}
+	}
+
+	function toggleRowMenu(id: string) {
+		snoozeFor = null;
+		rowMenuFor = rowMenuFor === id ? null : id;
 	}
 
 	function submitSearch(event: SubmitEvent) {
@@ -205,7 +214,9 @@
 			});
 			selected = [];
 			snoozeFor = null;
+			rowMenuFor = null;
 			bulkSnoozeOpen = false;
+			moreOpen = false;
 			if (action === 'trash') {
 				const n = target.length;
 				showUndo(n === 1 ? 'Moved to trash' : `${n} moved to trash`, () =>
@@ -411,10 +422,8 @@
 		</div>
 
 		<div class="ios-actions">
-			{#if selectMode || someSelected}
+			{#if selectMode}
 				<button type="button" class="ios-select" onclick={toggleSelectMode}>Cancel</button>
-			{:else}
-				<button type="button" class="ios-select" onclick={toggleSelectMode}>Select</button>
 			{/if}
 
 			<div class="ios-more">
@@ -436,6 +445,10 @@
 						onclick={() => (moreOpen = false)}
 					></button>
 					<div class="menu menu-right" role="menu">
+						<button type="button" class="menu-item" onclick={toggleSelectMode}>
+							<Icon name="checkbox-line" size={15} />
+							{selectMode ? 'Cancel selection' : 'Select'}
+						</button>
 						<button type="button" class="menu-item" onclick={() => run('read-all', [])}>
 							<Icon name="mail-open-line" size={15} /> Mark all as read
 						</button>
@@ -538,6 +551,7 @@
 
 	<header class="toolbar">
 		<div class="toolbar-left">
+			{#if selectMode}
 			<div class="select-all">
 				<Check
 					label="Select all messages"
@@ -584,6 +598,7 @@
 					</div>
 				{/if}
 			</div>
+			{/if}
 
 			{#if someSelected}
 				<span class="selected-count">{selected.length} selected</span>
@@ -723,6 +738,10 @@
 							onclick={() => (moreOpen = false)}
 						></button>
 						<div class="menu menu-left" role="menu">
+							<button type="button" class="menu-item" onclick={toggleSelectMode}>
+								<Icon name="checkbox-line" size={15} />
+								{selectMode ? 'Cancel selection' : 'Select'}
+							</button>
 							<button type="button" class="menu-item" onclick={() => run('read-all', [])}>
 								<Icon name="mail-open-line" size={15} /> Mark all as read
 							</button>
@@ -900,11 +919,13 @@
 						<span class="ios-unread-dot" class:visible={!thread.is_read} aria-hidden="true"></span>
 
 						<div class="card-bar">
-							<Check
-								label={`Select conversation with ${people(thread)}`}
-								checked={selected.includes(thread.latest_id)}
-								onchange={() => toggle(thread.latest_id)}
-							/>
+							{#if selectMode}
+								<Check
+									label={`Select conversation with ${people(thread)}`}
+									checked={selected.includes(thread.latest_id)}
+									onchange={() => toggle(thread.latest_id)}
+								/>
+							{/if}
 
 							<div class="marks">
 								<button
@@ -995,99 +1016,102 @@
 									{/if}
 								</span>
 							</button>
-						{:else}
-							<span class="ios-chevron" aria-hidden="true">
-								<Icon name="arrow-right-s-line" size={18} />
-							</span>
 						{/if}
 
-						<span class="card-actions">
-							{#if view === 'trash'}
+						<div class="card-actions">
+							<button
+								type="button"
+								class="tool-btn"
+								aria-label="Conversation actions"
+								aria-expanded={rowMenuFor === thread.latest_id}
+								onclick={() => toggleRowMenu(thread.latest_id)}
+							>
+								<Icon name="more-2-fill" size={15} />
+							</button>
+							{#if rowMenuFor === thread.latest_id}
 								<button
 									type="button"
-									class="tool-btn"
-									title="Restore"
-									onclick={() => run('restore', [thread.latest_id])}
-								>
-									<Icon name="arrow-go-back-line" size={15} />
-								</button>
-								<button
-									type="button"
-									class="tool-btn danger"
-									title="Delete permanently"
-									onclick={() => run('delete', [thread.latest_id])}
-								>
-									<Icon name="delete-bin-2-line" size={15} />
-								</button>
-							{:else if view === 'later'}
-								<button
-									type="button"
-									class="tool-btn"
-									title="Move to inbox"
-									onclick={() => run('unsnooze', [thread.latest_id])}
-								>
-									<Icon name="inbox-line" size={15} />
-								</button>
-								<button
-									type="button"
-									class="tool-btn"
-									title="Move to trash"
-									onclick={() => run('trash', [thread.latest_id])}
-								>
-									<Icon name="delete-bin-line" size={15} />
-								</button>
-							{:else}
-								{#if !thread.is_draft}
-									<button
-										type="button"
-										class="tool-btn"
-										title="Forward (f)"
-										onclick={() => goto(`/compose?forward=${thread.latest_id}`)}
-									>
-										<Icon name="share-forward-line" size={15} />
-									</button>
+									class="backdrop"
+									aria-label="Close actions"
+									onclick={() => {
+										rowMenuFor = null;
+										snoozeFor = null;
+									}}
+								></button>
+								{#if snoozeFor === thread.latest_id}
+									<SnoozeMenu
+										onPick={(until) => snoozeIds([thread.latest_id], until)}
+										onClose={() => (snoozeFor = null)}
+									/>
+								{:else}
+									<div class="menu menu-right" role="menu">
+										{#if view === 'trash'}
+											<button
+												type="button"
+												class="menu-item"
+												onclick={() => run('restore', [thread.latest_id])}
+											>
+												<Icon name="arrow-go-back-line" size={15} /> Restore
+											</button>
+											<button
+												type="button"
+												class="menu-item danger"
+												onclick={() => run('delete', [thread.latest_id])}
+											>
+												<Icon name="delete-bin-2-line" size={15} /> Delete permanently
+											</button>
+										{:else if view === 'later'}
+											<button
+												type="button"
+												class="menu-item"
+												onclick={() => run('unsnooze', [thread.latest_id])}
+											>
+												<Icon name="inbox-line" size={15} /> Move to inbox
+											</button>
+											<button
+												type="button"
+												class="menu-item"
+												onclick={() => run('trash', [thread.latest_id])}
+											>
+												<Icon name="delete-bin-line" size={15} /> Move to trash
+											</button>
+										{:else}
+											{#if !thread.is_draft}
+												<button
+													type="button"
+													class="menu-item"
+													onclick={() => goto(`/compose?forward=${thread.latest_id}`)}
+												>
+													<Icon name="share-forward-line" size={15} /> Forward
+												</button>
+											{/if}
+											<button
+												type="button"
+												class="menu-item"
+												onclick={() => run(thread.is_read ? 'unread' : 'read', [thread.latest_id])}
+											>
+												<Icon name={thread.is_read ? 'mail-line' : 'mail-open-line'} size={15} />
+												{thread.is_read ? 'Mark as unread' : 'Mark as read'}
+											</button>
+											<button
+												type="button"
+												class="menu-item"
+												onclick={() => (snoozeFor = thread.latest_id)}
+											>
+												<Icon name="time-line" size={15} /> Snooze
+											</button>
+											<button
+												type="button"
+												class="menu-item"
+												onclick={() => run('trash', [thread.latest_id])}
+											>
+												<Icon name="delete-bin-line" size={15} /> Move to trash
+											</button>
+										{/if}
+									</div>
 								{/if}
-								<button
-									type="button"
-									class="tool-btn"
-									title={thread.is_read ? 'Mark as unread' : 'Mark as read'}
-									onclick={() => run(thread.is_read ? 'unread' : 'read', [thread.latest_id])}
-								>
-									<Icon name={thread.is_read ? 'mail-line' : 'mail-open-line'} size={15} />
-								</button>
-								<div class="snooze-wrap">
-									<button
-										type="button"
-										class="tool-btn"
-										title="Snooze (b)"
-										onclick={() =>
-											(snoozeFor = snoozeFor === thread.latest_id ? null : thread.latest_id)}
-									>
-										<Icon name="time-line" size={15} />
-									</button>
-									{#if snoozeFor === thread.latest_id}
-										<button
-											type="button"
-											class="backdrop"
-											aria-label="Close snooze"
-											onclick={() => (snoozeFor = null)}
-										></button>
-										<SnoozeMenu
-											onPick={(until) => snoozeIds([thread.latest_id], until)}
-											onClose={() => (snoozeFor = null)}
-										/>
-									{/if}
-								</div>
-								<button
-									type="button"
-									class="tool-btn"
-									title="Move to trash (e)"
-									onclick={() => run('trash', [thread.latest_id])}
-								>
-									<Icon name="delete-bin-line" size={15} />
-								</button>
 							{/if}
-						</span>
+						</div>
 					</li>
 				{/each}
 			</ul>
@@ -1119,7 +1143,6 @@
 	}
 
 	.ios-unread-dot,
-	.ios-chevron,
 	.ios-select-toggle {
 		display: none;
 	}
@@ -1454,7 +1477,7 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.125rem;
-		margin: -0.125rem -0.125rem 0.25rem;
+		margin: 0;
 	}
 
 	.snooze-wrap {
@@ -1491,47 +1514,60 @@
 
 	.cards.layout-list .card {
 		flex-direction: row;
-		align-items: center;
+		align-items: stretch;
 		height: auto;
-		min-height: 2.75rem;
-		padding: 0.35rem 0.5rem;
+		min-height: 0;
+		padding: 0.25rem 0.4rem;
 		border-radius: 10px;
-		gap: 0.5rem;
+		gap: 0.35rem;
 	}
 
 	.cards.layout-list .card-bar {
 		margin: 0;
 		flex-shrink: 0;
+		align-self: center;
 	}
 
 	.cards.layout-list .card-link {
 		flex-direction: row;
-		align-items: center;
-		gap: 0.75rem;
+		align-items: flex-start;
+		gap: 0.5rem;
 		flex: 1;
 	}
 
 	.cards.layout-list .avatar {
-		align-self: center;
+		align-self: flex-start;
+		margin-top: 0.125rem;
 	}
 
 	.cards.layout-list .card-body {
+		display: flex;
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0;
 		flex: 1;
 		min-width: 0;
 	}
 
 	.cards.layout-list .card-top-row {
-		display: contents;
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 0.5rem;
 	}
 
 	.cards.layout-list .sender {
-		width: 16rem;
-		flex-shrink: 0;
+		width: auto;
+		flex: 1;
+		min-width: 0;
+		order: 0;
 	}
 
 	.cards.layout-list .subject {
-		width: 28%;
-		flex-shrink: 0;
+		width: auto;
+		flex-shrink: 1;
+		order: 0;
+		margin: 0;
 		-webkit-line-clamp: 1;
 		line-clamp: 1;
 	}
@@ -1539,25 +1575,30 @@
 	.cards.layout-list .preview {
 		-webkit-line-clamp: 1;
 		line-clamp: 1;
-		flex: 1;
+		flex: none;
+		order: 0;
+		margin: 0;
 	}
 
 	.cards.layout-list .card-meta {
 		margin-top: 0;
 		flex-shrink: 0;
 		width: auto;
+		order: 0;
+	}
+
+	.cards.layout-list .date {
+		order: 0;
+		margin-left: 0;
+		flex-shrink: 0;
 	}
 
 	.cards.layout-list .card-actions {
 		position: static;
 		display: flex;
+		align-self: center;
 		padding: 0;
 		background: none;
-		opacity: 0;
-	}
-
-	.cards.layout-list .card:hover .card-actions,
-	.cards.layout-list .card.focused .card-actions {
 		opacity: 1;
 	}
 
@@ -1565,7 +1606,7 @@
 		display: flex;
 		flex-direction: column;
 		flex: 1;
-		gap: 0.25rem;
+		gap: 0.0625rem;
 		min-width: 0;
 		color: inherit;
 		text-decoration: none;
@@ -1577,16 +1618,21 @@
 		gap: 0.375rem;
 	}
 
-	.cards:not(.layout-list) .card-body {
-		flex: 1;
-		min-width: 0;
+	.cards:not(.layout-list) .card-actions {
+		position: absolute;
+		top: 0.3rem;
+		right: 0.3rem;
+	}
+
+	.cards:not(.layout-list) .marks {
+		margin-right: 1.75rem;
 	}
 
 	.card-body {
 		display: flex;
 		flex-direction: column;
 		flex: 1;
-		gap: 0.25rem;
+		gap: 0.0625rem;
 		min-width: 0;
 	}
 
@@ -1596,10 +1642,6 @@
 		justify-content: space-between;
 		gap: 0.5rem;
 		min-width: 0;
-	}
-
-	.cards.layout-list .date {
-		margin-left: auto;
 	}
 
 	.avatar {
@@ -1662,7 +1704,7 @@
 		line-clamp: 2;
 		overflow: hidden;
 		font-size: 0.8125rem;
-		line-height: 1.3;
+		line-height: 1.2;
 		color: var(--color-text-secondary);
 		word-break: break-word;
 	}
@@ -1681,7 +1723,7 @@
 		min-width: 0;
 		overflow: hidden;
 		font-size: 0.75rem;
-		line-height: 1.35;
+		line-height: 1.2;
 		color: var(--color-muted);
 		word-break: break-word;
 	}
@@ -1691,7 +1733,7 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.25rem;
-		margin-top: 0.25rem;
+		margin-top: 0;
 		min-width: 0;
 	}
 
@@ -1737,16 +1779,13 @@
 	}
 
 	.card-actions {
-		position: absolute;
-		right: 0.4rem;
-		bottom: 0.4rem;
-		z-index: 5;
-		display: none;
+		position: relative;
+		display: flex;
 		align-items: center;
-		gap: 0.125rem;
-		padding: 0.2rem 0.2rem 0.2rem 1.25rem;
-		border-radius: 10px;
-		background: linear-gradient(to right, transparent, var(--color-surface-muted) 1.1rem);
+		flex-shrink: 0;
+		z-index: 5;
+		padding: 0;
+		background: none;
 	}
 
 	.card:hover .card-actions {
@@ -1955,9 +1994,9 @@
 			display: grid;
 			grid-template-columns: auto 1fr auto;
 			align-items: center;
-			gap: 0.625rem;
-			min-height: 5.5rem;
-			padding: 0.75rem 0.875rem;
+			gap: 0.5rem;
+			min-height: 0;
+			padding: 0.5rem 0.75rem;
 			border-radius: 0;
 			background: var(--color-surface);
 			box-shadow: inset 0 -1px 0 var(--color-line);
@@ -1998,9 +2037,15 @@
 		}
 
 		.card-bar,
-		.card-actions,
 		.card-meta {
 			display: none !important;
+		}
+
+		.card-actions {
+			position: relative;
+			display: flex;
+			top: auto;
+			right: auto;
 		}
 
 		.card-link {
@@ -2026,7 +2071,7 @@
 		}
 
 		.card-body {
-			gap: 0.125rem;
+			gap: 0;
 		}
 
 		.card-top-row {
@@ -2049,7 +2094,7 @@
 
 		.subject {
 			font-size: 0.9375rem;
-			line-height: 1.25;
+			line-height: 1.15;
 			-webkit-line-clamp: 1;
 			line-clamp: 1;
 			color: var(--color-text);
@@ -2060,8 +2105,8 @@
 		}
 
 		.preview {
-			font-size: 0.9375rem;
-			line-height: 1.35;
+			font-size: 0.875rem;
+			line-height: 1.2;
 			-webkit-line-clamp: 2;
 			line-clamp: 2;
 			color: var(--color-muted);
@@ -2078,7 +2123,6 @@
 			color: var(--color-muted);
 		}
 
-		.ios-chevron,
 		.ios-select-toggle {
 			display: flex;
 			align-items: center;
@@ -2113,7 +2157,8 @@
 			grid-template-columns: 1fr auto;
 		}
 
-		.card.select-mode .ios-unread-dot {
+		.card.select-mode .ios-unread-dot,
+		.card.select-mode .card-actions {
 			display: none;
 		}
 	}
