@@ -1,13 +1,15 @@
 import type { AvailableDomain } from '$lib/types';
 import {
-	parseMailDomains,
 	ProviderError,
 	toAvailableDomain,
 	type EmailProvider,
 	type EmailProviderKind
 } from './email-provider';
 import { ConfigError } from './errors';
-import { createCloudflareProvider } from './providers/cloudflare-provider';
+import {
+	createCloudflareProvider,
+	type CloudflareSendEmailBinding
+} from './providers/cloudflare-provider';
 import { createResendProvider, getResendReceivingClient } from './providers/resend-provider';
 import type { ResendClient } from './resend';
 
@@ -45,13 +47,10 @@ export function getEmailProvider(platform: PlatformLike): EmailProvider {
 			return createResendProvider(apiKey);
 		}
 		case 'cloudflare': {
-			const email = platform?.env.EMAIL;
-			if (!email) {
-				throw new ConfigError(
-					'Cloudflare Email binding EMAIL is missing. Add a send_email binding named EMAIL in wrangler.jsonc.'
-				);
-			}
-			return createCloudflareProvider(email, platform?.env.CLOUDFLARE_MAIL_DOMAINS ?? '');
+			return createCloudflareProvider(
+				platform?.env.EMAIL ?? missingEmailBinding(),
+				platform?.env.CLOUDFLARE_MAIL_DOMAINS ?? ''
+			);
 		}
 		default: {
 			const _never: never = kind;
@@ -67,7 +66,7 @@ export function hasProviderConfigured(platform: PlatformLike): boolean {
 			case 'resend':
 				return Boolean(platform?.env.RESEND_API_KEY);
 			case 'cloudflare':
-				return Boolean(platform?.env.EMAIL) && parseMailDomains(platform?.env.CLOUDFLARE_MAIL_DOMAINS).length > 0;
+				return true;
 			default: {
 				const _never: never = kind;
 				return _never;
@@ -125,4 +124,16 @@ export function statusForProviderError(error: unknown): number {
 	if (error instanceof ConfigError) return 503;
 	if (error instanceof ProviderError) return error.status >= 500 ? 502 : 400;
 	return 400;
+}
+
+function missingEmailBinding(): CloudflareSendEmailBinding {
+	return {
+		async send() {
+			throw new ProviderError(
+				503,
+				'missing_email_binding',
+				'Cloudflare Email binding EMAIL is missing. Add a send_email binding named EMAIL in wrangler.jsonc.'
+			);
+		}
+	};
 }

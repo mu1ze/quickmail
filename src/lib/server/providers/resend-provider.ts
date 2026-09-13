@@ -6,8 +6,14 @@ import {
 	type ResendClient,
 	type ResendDomain
 } from '../resend';
-import type { EmailProvider, ProviderDomain } from '../email-provider';
-import { ProviderError } from '../email-provider';
+import {
+	isValidDomainName,
+	looksLikeProviderId,
+	normalizeDomainName,
+	ProviderError,
+	type EmailProvider,
+	type ProviderDomain
+} from '../email-provider';
 import type { OutboundMailInput, OutboundMailResult } from '../send-mail';
 
 export function createResendProvider(apiKey: string): EmailProvider {
@@ -59,6 +65,33 @@ export function createResendProvider(apiKey: string): EmailProvider {
 		async getDomain(id: string): Promise<ProviderDomain> {
 			try {
 				return toProviderDomain(await client.getDomain(id));
+			} catch (error) {
+				throw wrapResendError(error);
+			}
+		},
+		async resolveDomain(nameOrId: string): Promise<ProviderDomain> {
+			const trimmed = nameOrId.trim();
+			if (looksLikeProviderId(trimmed)) {
+				try {
+					return toProviderDomain(await client.getDomain(trimmed));
+				} catch (error) {
+					throw wrapResendError(error);
+				}
+			}
+
+			const name = normalizeDomainName(trimmed);
+			if (!isValidDomainName(name)) {
+				throw new ProviderError(400, 'invalid_domain', 'Enter a valid domain like example.com');
+			}
+
+			try {
+				const existing = (await client.listDomains()).find(
+					(domain) => domain.name.toLowerCase() === name
+				);
+				if (existing) {
+					return toProviderDomain(await client.getDomain(existing.id));
+				}
+				return toProviderDomain(await client.createDomain(name));
 			} catch (error) {
 				throw wrapResendError(error);
 			}

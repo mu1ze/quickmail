@@ -139,15 +139,11 @@ export async function syncDomains(db: D1Database, provider: EmailProvider): Prom
 	const connected = await listDomains(db);
 	if (connected.length === 0) return [];
 
-	const remote = await provider.listDomains();
-	const byId = new Map(remote.map((domain) => [domain.id, domain]));
-
 	for (const domain of connected) {
-		const match = byId.get(domain.id);
-		if (match) {
-			await upsertDomain(db, match);
-		} else {
-			// Removed from the provider — mark it so the UI can explain why sending fails.
+		try {
+			await upsertDomain(db, await provider.getDomain(domain.id));
+		} catch {
+			// Gone from the provider — mark it so the UI can explain why sending fails.
 			await db
 				.prepare(
 					`UPDATE domains SET status = 'missing', sending_enabled = 0, receiving_enabled = 0,

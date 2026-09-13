@@ -55,9 +55,22 @@ export function noDomainsTitle(kind: EmailProviderKind): string {
 export function noDomainsBody(kind: EmailProviderKind): string {
 	switch (kind) {
 		case 'resend':
-			return 'Add and verify a domain at resend.com/domains, then reload this page.';
+			return 'Type a domain below to create it in Resend, or add it at resend.com/domains and reload.';
 		case 'cloudflare':
-			return 'Onboard the domain in Cloudflare Email Service, then set CLOUDFLARE_MAIL_DOMAINS and reload.';
+			return 'Type a domain you have onboarded in Cloudflare Email Service. You can also list seed domains in CLOUDFLARE_MAIL_DOMAINS.';
+		default: {
+			const _never: never = kind;
+			return _never;
+		}
+	}
+}
+
+export function addDomainHint(kind: EmailProviderKind): string {
+	switch (kind) {
+		case 'resend':
+			return 'Creates the domain in your Resend account if it is not there yet. Add the DNS records Resend shows, including MX, then Re-sync.';
+		case 'cloudflare':
+			return "Onboard the domain in Email Sending and Email Routing first, then add it here. Point Routing's catch-all at this Worker.";
 		default: {
 			const _never: never = kind;
 			return _never;
@@ -70,7 +83,7 @@ export function domainPickerSubtitle(kind: EmailProviderKind): string {
 		case 'resend':
 			return 'These are the domains your Resend account can send and receive on. Pick the one you want to use — you can add more later.';
 		case 'cloudflare':
-			return 'These are the domains listed in CLOUDFLARE_MAIL_DOMAINS. Pick the one you want to use — you can add more later.';
+			return 'These are the domains listed in CLOUDFLARE_MAIL_DOMAINS. Pick one, or type another hostname you have onboarded in Cloudflare Email.';
 		default: {
 			const _never: never = kind;
 			return _never;

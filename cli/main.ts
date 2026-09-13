@@ -32,7 +32,7 @@ Admin:
   quickmail users delete <id>
   quickmail users passwd <id-or-email> --password <pw>
   quickmail domains list
-  quickmail domains connect <id>
+  quickmail domains connect <id-or-name>
   quickmail domains disconnect <id>
   quickmail addresses list [--all]
   quickmail addresses create --local <part> --domain <id> [--user <id>]
