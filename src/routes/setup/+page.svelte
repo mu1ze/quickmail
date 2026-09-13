@@ -18,6 +18,7 @@
 
 	let step = $state(1);
 	let selected = $state<string[]>([]);
+	let customDomain = $state('');
 
 	let name = $state('');
 	let localPart = $state('');
@@ -26,14 +27,28 @@
 	let error = $state('');
 	let submitting = $state(false);
 
-	const chosen = $derived(data.available.find((domain) => domain.id === selected[0]) ?? null);
+	const typedDomain = $derived(customDomain.trim().toLowerCase().replace(/^@/, ''));
+	const chosen = $derived(
+		data.available.find((domain) => domain.id === selected[0]) ??
+			(typedDomain
+				? {
+						id: typedDomain,
+						name: typedDomain,
+						status: 'pending',
+						region: null,
+						can_send: true,
+						can_receive: true,
+						connected: false
+					}
+				: null)
+	);
 	const cleanLocal = $derived(localPart.trim().toLowerCase().replace(/@.*$/, ''));
 	// Once they type a name, offer the obvious mailbox for it.
 	const suggestion = $derived(name.trim().split(/\s+/)[0]?.toLowerCase().replace(/[^a-z0-9]/g, '') ?? '');
 
 	function goToDetails() {
 		if (!chosen) {
-			error = 'Pick a domain to continue';
+			error = data.available.length === 0 ? 'Enter a domain to continue' : 'Pick a domain to continue';
 			return;
 		}
 		error = '';
@@ -113,18 +128,35 @@
 					<p class="notice-body">{data.loadError}</p>
 				</div>
 			</div>
-		{:else if data.available.length === 0}
-			<div class="surface-lg notice">
-				<Icon name="global-line" size={18} />
-				<div>
-					<p class="notice-title">{noDomainsTitle(data.providerKind)}</p>
-					<p class="notice-body">
-						{noDomainsBody(data.providerKind)}
-					</p>
-				</div>
-			</div>
 		{:else}
-			<DomainPicker domains={data.available} bind:selected multi={false} />
+			{#if data.available.length === 0}
+				<div class="surface-lg notice">
+					<Icon name="global-line" size={18} />
+					<div>
+						<p class="notice-title">{noDomainsTitle(data.providerKind)}</p>
+						<p class="notice-body">
+							{noDomainsBody(data.providerKind)}
+						</p>
+					</div>
+				</div>
+			{:else}
+				<DomainPicker domains={data.available} bind:selected multi={false} />
+			{/if}
+
+			<label class="field-title custom-domain" for="custom-domain">
+				{data.available.length === 0 ? 'Domain' : 'Or type a different domain'}
+			</label>
+			<input
+				id="custom-domain"
+				type="text"
+				bind:value={customDomain}
+				placeholder="yourdomain.com"
+				class="text-input"
+				inputmode="url"
+				autocomplete="off"
+				autocapitalize="none"
+				spellcheck="false"
+			/>
 
 			{#if error}<p class="error">{error}</p>{/if}
 
@@ -211,6 +243,10 @@
 		display: block;
 		font-size: 0.8125rem;
 		color: var(--color-text-secondary);
+	}
+
+	.custom-domain {
+		margin-top: 1.25rem;
 	}
 
 	.text-input {

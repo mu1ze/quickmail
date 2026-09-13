@@ -95,7 +95,7 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 		const connected = [];
 
 		for (const id of ids) {
-			connected.push(await upsertDomain(db, await provider.getDomain(id)));
+			connected.push(await upsertDomain(db, await provider.resolveDomain(id)));
 		}
 
 		return json({ connected, domains: await listDomains(db) }, { status: 201 });

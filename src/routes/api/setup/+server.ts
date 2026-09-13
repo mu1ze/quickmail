@@ -70,7 +70,7 @@ export const POST: RequestHandler = async ({ request, cookies, platform }) => {
 
 	try {
 		const provider = getEmailProvider(platform);
-		const domain = await upsertDomain(db, await provider.getDomain(body.domainId));
+		const domain = await upsertDomain(db, await provider.resolveDomain(body.domainId));
 
 		const localPart = body.localPart.trim().toLowerCase().replace(/@.*$/, '');
 		const address = `${localPart}@${domain.name}`;

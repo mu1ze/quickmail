@@ -1,5 +1,11 @@
-import { base64ToBytes } from '../attachments';
-import { parseMailDomains, ProviderError, type EmailProvider, type ProviderDomain } from '../email-provider';
+import {
+	isValidDomainName,
+	normalizeDomainName,
+	parseMailDomains,
+	ProviderError,
+	type EmailProvider,
+	type ProviderDomain
+} from '../email-provider';
 import type { OutboundMailInput, OutboundMailResult } from '../send-mail';
 
 /**
@@ -75,18 +81,20 @@ export function createCloudflareProvider(
 			return parseMailDomains(configuredDomains).map(cloudflareDomain);
 		},
 		async getDomain(id: string): Promise<ProviderDomain> {
-			const domains = parseMailDomains(configuredDomains);
-			const match = domains.find((name) => name === id.toLowerCase());
-			if (!match) {
-				throw new ProviderError(
-					404,
-					'domain_not_configured',
-					`${id} is not in CLOUDFLARE_MAIL_DOMAINS`
-				);
-			}
-			return cloudflareDomain(match);
+			return resolveCloudflareDomain(id);
+		},
+		async resolveDomain(nameOrId: string): Promise<ProviderDomain> {
+			return resolveCloudflareDomain(nameOrId);
 		}
 	};
+}
+
+function resolveCloudflareDomain(id: string): ProviderDomain {
+	const name = normalizeDomainName(id);
+	if (!isValidDomainName(name)) {
+		throw new ProviderError(400, 'invalid_domain', 'Enter a valid domain like example.com');
+	}
+	return cloudflareDomain(name);
 }
 
 function cloudflareDomain(name: string): ProviderDomain {
@@ -101,7 +109,7 @@ function cloudflareDomain(name: string): ProviderDomain {
 }
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
-	const bytes = base64ToBytes(base64);
+	const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
 	const copy = new Uint8Array(bytes.byteLength);
 	copy.set(bytes);
 	return copy.buffer;

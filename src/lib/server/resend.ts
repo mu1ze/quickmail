@@ -163,6 +163,17 @@ export function createResendClient(apiKey: string) {
 			return request<ResendDomain>(`/domains/${id}`);
 		},
 
+		/** POST /domains — https://resend.com/docs/api-reference/domains/create-domain */
+		async createDomain(name: string): Promise<ResendDomain> {
+			return request<ResendDomain>('/domains', {
+				method: 'POST',
+				body: JSON.stringify({
+					name,
+					capabilities: { sending: 'enabled', receiving: 'enabled' }
+				})
+			});
+		},
+
 		/** GET /emails/receiving/:id — full inbound message (webhooks carry metadata only). */
 		async getReceivedEmail(
 			id: string,

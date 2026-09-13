@@ -166,6 +166,23 @@ Inbound mail only works on a **deployed** Worker (or `bun run preview`) —
 
 Send yourself a message from another account — it should land within seconds.
 
+### Adding another domain
+
+In **Admin → Domains**, type the hostname and click **Add**. That is the
+in-app step — the provider still has to accept mail for that name.
+
+- **Resend:** QuickMail creates the domain in your Resend account if it is
+  not there yet. Add every DNS record Resend shows (including apex MX), then
+  **Re-sync**.
+- **Cloudflare Email:** Onboard the domain in Email Sending and Email Routing,
+  point the catch-all at this Worker, then add the hostname here. You can
+  also append it to `CLOUDFLARE_MAIL_DOMAINS` and redeploy so it appears under
+  **Available**.
+
+```bash
+quickmail domains connect yourdomain.com
+```
+
 ### Desktop notifications (optional)
 
 QuickMail can push-notify users about new mail even with no tab open:

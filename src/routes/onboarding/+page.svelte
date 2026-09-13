@@ -15,6 +15,7 @@
 	let { data }: { data: PageData } = $props();
 
 	let selected = $state<string[]>([]);
+	let customDomain = $state('');
 	let connecting = $state(false);
 	let creating = $state(false);
 	let error = $state('');
@@ -33,14 +34,16 @@
 	const needsDomain = $derived(data.domains.length === 0);
 	const canClaim = $derived(data.addressableDomains.length > 0);
 	const connectable = $derived(data.available.filter((domain) => !domain.connected));
+	const typedDomain = $derived(customDomain.trim().toLowerCase().replace(/^@/, ''));
 	const cleanLocal = $derived(localPart.trim().toLowerCase().replace(/@.*$/, ''));
 	const activeDomain = $derived(
 		data.addressableDomains.find((domain) => domain.id === addressDomainId)
 	);
 
 	async function connectDomains() {
-		if (selected.length === 0) {
-			error = 'Pick at least one domain to continue';
+		const domainIds = typedDomain ? [...selected, typedDomain] : selected;
+		if (domainIds.length === 0) {
+			error = connectable.length === 0 ? 'Enter a domain to continue' : 'Pick at least one domain to continue';
 			return;
 		}
 
@@ -51,7 +54,7 @@
 			const res = await fetch('/api/domains', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ domainIds: selected })
+				body: JSON.stringify({ domainIds })
 			});
 			const body = await res.json();
 			if (!res.ok) {
@@ -125,18 +128,35 @@
 					<p class="notice-body">{data.loadError}</p>
 				</div>
 			</div>
-		{:else if connectable.length === 0}
-			<div class="surface-lg notice">
-				<Icon name="global-line" size={18} />
-				<div>
-					<p class="notice-title">{noDomainsTitle(data.providerKind)}</p>
-					<p class="notice-body">
-						{noDomainsBody(data.providerKind)}
-					</p>
-				</div>
-			</div>
 		{:else}
-			<DomainPicker domains={connectable} bind:selected />
+			{#if connectable.length === 0}
+				<div class="surface-lg notice">
+					<Icon name="global-line" size={18} />
+					<div>
+						<p class="notice-title">{noDomainsTitle(data.providerKind)}</p>
+						<p class="notice-body">
+							{noDomainsBody(data.providerKind)}
+						</p>
+					</div>
+				</div>
+			{:else}
+				<DomainPicker domains={connectable} bind:selected />
+			{/if}
+
+			<label class="field-title" for="custom-domain">
+				{connectable.length === 0 ? 'Domain' : 'Or type a different domain'}
+			</label>
+			<input
+				id="custom-domain"
+				type="text"
+				bind:value={customDomain}
+				placeholder="yourdomain.com"
+				class="text-input"
+				inputmode="url"
+				autocomplete="off"
+				autocapitalize="none"
+				spellcheck="false"
+			/>
 
 			{#if error}<p class="error">{error}</p>{/if}
 
@@ -148,7 +168,7 @@
 			>
 				{connecting
 					? 'Connecting…'
-					: `Continue with ${selected.length || 'no'} domain${selected.length === 1 ? '' : 's'}`}
+					: `Continue with ${selected.length + (typedDomain ? 1 : 0) || 'no'} domain${selected.length + (typedDomain ? 1 : 0) === 1 ? '' : 's'}`}
 			</button>
 		{/if}
 	{:else if !canClaim}
@@ -195,9 +215,9 @@
 			</button>
 		</form>
 
-		{#if data.isAdmin && data.available.some((domain) => !domain.connected)}
+		{#if data.isAdmin}
 			<p class="footnote">
-				Want more than one domain here? Connect them any time from <a href="/admin">Admin</a>.
+				Want more than one domain here? Add them any time from <a href="/admin/domains">Admin → Domains</a>.
 			</p>
 		{/if}
 	{/if}
@@ -206,6 +226,28 @@
 <style>
 	.address-card {
 		padding: 1.5rem;
+	}
+
+	.field-title {
+		display: block;
+		margin-top: 1.25rem;
+		font-size: 0.8125rem;
+		color: var(--color-text-secondary);
+	}
+
+	.text-input {
+		width: 100%;
+		margin-top: 0.5rem;
+		padding: 0.625rem 0.875rem;
+		border-radius: 0.625rem;
+		font-size: 0.9375rem;
+		background: var(--color-surface-muted);
+		box-shadow: inset 0 0 0 1px var(--color-line);
+		outline: none;
+	}
+
+	.text-input:focus {
+		box-shadow: inset 0 0 0 1px var(--color-focus-line), 0 0 0 3px var(--color-focus-halo);
 	}
 
 	.preview {
