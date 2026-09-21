@@ -38,7 +38,7 @@
 		"EMAIL_PROVIDER": "cloudflare",
 		// Optional seed list when EMAIL_PROVIDER=cloudflare. Admins can also
 		// add onboarded domains from Admin → Domains without editing this.
-		"CLOUDFLARE_MAIL_DOMAINS": "sharpsage.ca,dvlli.com"
+		"CLOUDFLARE_MAIL_DOMAINS": "sharpsage.ca,dvlli.com,motorz.dev"
 	},
 
 	"send_email": [
