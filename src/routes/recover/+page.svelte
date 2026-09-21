@@ -49,7 +49,11 @@
 		<div class="auth-brand">
 			<div class="brand-icon"><Logo size={48} /></div>
 			<h1>Reset password</h1>
-			<p class="auth-copy">Set a new password for an existing account. Mail stays in place.</p>
+			<p class="auth-copy">
+				Set a new password for an existing account. Mail stays in place. First run
+				<code>bunx wrangler secret put PASSWORD_RESET_KEY</code> — that secret is the recovery key
+				below. No migration is needed.
+			</p>
 		</div>
 
 		<form class="login-form" onsubmit={submit}>
@@ -119,6 +123,11 @@
 		color: var(--color-ink-muted);
 		font-size: 0.875rem;
 		line-height: 1.4;
+	}
+
+	.auth-copy code {
+		font-size: 0.8em;
+		word-break: break-all;
 	}
 
 	.login-form {

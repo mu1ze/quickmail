@@ -159,7 +159,9 @@ export async function recoverUserPassword(
 	input: { email: string; password: string; recoveryKey: string; expectedKey: string }
 ): Promise<{ user: User; token: string }> {
 	if (!input.expectedKey) {
-		throw new Error('Password recovery is not enabled');
+		throw new Error(
+			'Password recovery is not enabled. Run `bunx wrangler secret put PASSWORD_RESET_KEY`, then try again. No database migration is required.'
+		);
 	}
 	if (!(await recoveryKeysMatch(input.recoveryKey, input.expectedKey))) {
 		throw new Error('Recovery key is incorrect');
