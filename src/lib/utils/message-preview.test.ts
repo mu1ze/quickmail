@@ -3,6 +3,20 @@ import { describe, test } from 'node:test';
 import { buildMessagePreview, htmlToPreviewText, looksLikeHtml } from './message-preview';
 
 describe('message previews', () => {
+	test('uses original HTML instead of a text alternative polluted with CSS', () => {
+		assert.equal(buildMessagePreview(
+			"Your full transaction history is staying intact. a{ text-decoration:none !important; } Image Hello Muiz",
+			"<style>a{ text-decoration:none !important; }</style><p>Your full transaction history is staying intact.</p><img alt=\"Image\"><p>Hello Muiz</p>"
+		), 'Your full transaction history is staying intact. Hello Muiz');
+	});
+	test('cleans CSS from older flattened text without deleting nearby prose', () => {
+		assert.equal(buildMessagePreview("Your full transaction history is staying intact. Here's what's changing in your Dashboard & API. a{ text-decoration:none !important; } Hello Muiz"), "Your full transaction history is staying intact. Here's what's changing in your Dashboard & API. Hello Muiz");
+		assert.equal(buildMessagePreview('.hero { color: red; } Your receipt is ready.'), 'Your receipt is ready.');
+	});
+	test('falls back to useful text when HTML is empty', () => {
+		assert.equal(buildMessagePreview('Receipt attached.', '<html><body><img src="cid:receipt"></body></html>'), 'Receipt attached.');
+		assert.equal(buildMessagePreview('Meet at {time: 5:00} and bring {your name}.'), 'Meet at {time: 5:00} and bring {your name}.');
+	});
 	test('reads content after long stylesheets instead of truncating the HTML first', () => {
 		assert.equal(buildMessagePreview(`<html><head><style>${'.layout{color:red}'.repeat(400)}</style></head><body>Your flight is confirmed.</body></html>`), 'Your flight is confirmed.');
 	});

@@ -203,6 +203,7 @@ type ThreadMessageRow = {
 	to_addr: string;
 	subject: string;
 	body_head: string | null;
+	body_html: string | null;
 	is_read: number;
 	is_starred: number;
 	is_pinned: number;
@@ -299,7 +300,7 @@ export async function listMailbox(
 			`SELECT m.id, COALESCE(m.thread_id, m.id) AS thread_id, m.direction, m.from_addr, m.from_name, m.to_addr,
 			        m.subject, m.is_read, m.is_starred, m.is_pinned, m.is_archived, m.created_at, m.domain_id, m.status, m.snoozed_until,
 			        m.auto_trashed_at,
-			        COALESCE(NULLIF(trim(m.body_text), ''), m.body_html, '') AS body_head,
+			        m.body_text AS body_head, m.body_html,
 			        EXISTS(SELECT 1 FROM email_attachments a WHERE a.email_id = m.id) AS has_attachments
 			 FROM emails m
 			 WHERE m.user_id = ? AND COALESCE(m.thread_id, m.id) IN (${placeholders}) AND ${display}
@@ -330,7 +331,7 @@ export async function listMailbox(
 		thread.labels = labels.get(thread.thread_id) ?? [];
 		const summary = summaries.get(thread.thread_id);
 		if (summary && summary.source_latest_id === thread.latest_id) {
-			thread.preview = summary.summary;
+			thread.preview = buildMessagePreview(summary.summary);
 		}
 	}
 
@@ -370,7 +371,7 @@ function toThreadSummary(messages: ThreadMessageRow[]): ThreadSummary {
 		latest_id: latest.id,
 		// The conversation keeps the subject it started with, not "Re: Re: …".
 		subject: latest.status === 'draft' ? latest.subject : displaySubject(oldest.subject),
-		preview: buildMessagePreview(latest.body_head),
+		preview: buildMessagePreview(latest.body_head, latest.body_html),
 		participants,
 		message_count: messages.length,
 		is_read: messages.every((message) => message.is_read === 1),
@@ -416,7 +417,7 @@ export async function listEmails(
 		.prepare(
 			`SELECT e.id, e.direction, e.from_addr, e.to_addr, e.subject, e.is_read, e.is_starred,
 			        e.created_at, e.domain_id, e.status,
-			        COALESCE(NULLIF(trim(e.body_text), ''), e.body_html, '') AS body_head,
+		        e.body_text AS body_head, e.body_html,
 			        EXISTS(SELECT 1 FROM email_attachments a WHERE a.email_id = e.id) AS has_attachments
 			 FROM emails e
 			 WHERE ${where}
@@ -432,7 +433,7 @@ export async function listEmails(
 		from_addr: row.from_addr,
 		to_addr: row.to_addr,
 		subject: row.subject,
-		preview: buildMessagePreview(row.body_head),
+		preview: buildMessagePreview(row.body_head, row.body_html),
 		is_read: row.is_read === 1,
 		is_starred: row.is_starred === 1,
 		is_draft: row.status === 'draft',

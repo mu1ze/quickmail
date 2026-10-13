@@ -41,6 +41,14 @@ function looksLikeCssBlock(inner: string): boolean {
 	return /[;:]/.test(inner) || /#[0-9a-f]{3,8}\b/i.test(inner) || /\d+(?:px|em|rem|%)/i.test(inner);
 }
 
+/** Some providers flatten style elements into their text alternative. */
+function stripCssRules(text: string): string {
+	return text.replace(/(?:^|[\s}])((?:[.#][\w-]+|(?:html|body|a|p|div|span|table|tr|td|th|img|h[1-6]|ul|ol|li)\b)(?:[.#:][\w-]+|\[[^\]\n]*\])*(?:\s*[>+~,]\s*[.#]?[\w-]+(?:[.#:][\w-]+|\[[^\]\n]*\])*)?)\s*\{([^{}]{0,4000})\}/gi,
+		(match, _selector: string, declarations: string) =>
+			/(?:^|;)\s*(?:--[\w-]+|(?:text|font|background|border|margin|padding|display|color|width|height|line|position|overflow|visibility|opacity)[\w-]*)\s*:/i.test(declarations)
+				? ' ' : match);
+}
+
 /** CSS leftovers and tracking URLs — only for the HTML path. */
 function tidyHtmlPreviewText(value: string): string {
 	return value
@@ -91,7 +99,13 @@ export function htmlToPreviewText(html: string): string {
 }
 
 /** Newest message's own words — quoted history and markup are dropped. */
-export function buildMessagePreview(bodyHead: string | null | undefined): string {
+export function buildMessagePreview(bodyHead: string | null | undefined, bodyHtml?: string | null): string {
+	// The original HTML still distinguishes hidden styles from visible words,
+	// unlike a provider's already-flattened text alternative.
+	if (bodyHtml?.trim()) {
+		const fromHtml = buildMessagePreview(bodyHtml);
+		if (fromHtml) return fromHtml;
+	}
 	if (!bodyHead) return '';
 	const html = looksLikeHtml(bodyHead);
 	let body = bodyHead;
@@ -100,7 +114,7 @@ export function buildMessagePreview(bodyHead: string | null | undefined): string
 		const boundary = /<blockquote\b|<[^>]+(?:class\s*=\s*["'][^"']*(?:gmail_quote|yahoo_quoted)|id\s*=\s*["']?(?:appendonsend|divRplyFwdMsg))/i.exec(body);
 		if (boundary && htmlToPreviewText(body.slice(0, boundary.index))) body = body.slice(0, boundary.index);
 	}
-	const source = html ? previewHtmlLines(body) : body;
+	const source = stripCssRules(html ? previewHtmlLines(body) : body);
 	const text = stripQuotedText(source).replace(/\s+/g, ' ').trim().slice(0, 220);
 	if (html && isLeftoverMarkup(text)) return '';
 	return text;

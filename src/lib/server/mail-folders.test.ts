@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { D1Database } from '@cloudflare/workers-types';
-import { expandToThreads, getMailboxCounts, listMailbox, setEmailFlags } from './mail-store';
+import { expandToThreads, getMailboxCounts, insertEmail, listEmails, listMailbox, setEmailFlags } from './mail-store';
 import { threadHeadline } from '../mailbox-people';
 import { handleCloudflareInbound } from './cloudflare-inbound';
 import { handleResendWebhook } from './inbound';
@@ -69,6 +69,21 @@ describe('mail folders', () => {
 		const message = (await listMailbox(db, 'owner', { view: 'inbox' })).threads.find((entry) => entry.subject === 'Resend name')!;
 		assert.equal(threadHeadline(message, 'inbox'), 'Paystack');
 		assert.equal(message.participants[0].address, 'hello@m.paystack.com');
+	});
+	test('stores supplied sender names and builds clean mailbox/API previews from original HTML', async () => {
+		const id = await insertEmail(db, {
+			userId: 'owner', direction: 'inbound', from: 'hello@m.paystack.com', fromName: 'Paystack',
+			to: 'owner@example.com', subject: 'Transaction history',
+			bodyText: 'Your history is intact. a{ text-decoration:none !important; } Image Hello Muiz',
+			bodyHtml: '<style>a{ text-decoration:none !important; }</style><p>Your history is intact.</p><img alt="Image"><p>Hello Muiz</p>'
+		});
+		const mailbox = await listMailbox(db, 'owner', { view: 'inbox' });
+		const message = mailbox.threads.find((entry) => entry.latest_id === id)!;
+		assert.equal(threadHeadline(message, 'inbox'), 'Paystack');
+		assert.equal(message.participants[0].address, 'hello@m.paystack.com');
+		assert.equal(message.preview, 'Your history is intact. Hello Muiz');
+		assert.equal((await listEmails(db, 'owner')).find((entry) => entry.id === id)?.preview, message.preview);
+		assert.equal((await listMailbox(db, 'other', { view: 'inbox' })).threads.some((entry) => entry.latest_id === id), false);
 	});
 	test('archive preserves the conversation, sent mail and stars, and can be undone', async () => {
 		const ids = await expandToThreads(db, 'owner', ['reply']);
