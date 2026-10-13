@@ -10,7 +10,7 @@
 	import AdvancedSearch from './AdvancedSearch.svelte';
 	import LabelPicker from './LabelPicker.svelte';
 	import HoldToConfirm from '$lib/interior/HoldToConfirm.svelte';
-	import { formatRelativeDate } from '$lib/utils/date';
+	import { formatRelativeDate, formatFullDate } from '$lib/utils/date';
 	import { formatSnoozeUntil } from '$lib/snooze';
 	import { isGoChordArmed, isTypingTarget } from '$lib/shortcuts';
 	import { showUndo } from '$lib/undo';
@@ -23,6 +23,8 @@
 		readMailboxLayout,
 		setMailboxLayout,
 		watchMailboxLayout,
+		readMailboxDensity, setMailboxDensity, watchMailboxDensity,
+		type MailboxDensity,
 		type MailboxLayout
 	} from '$lib/mailbox-layout';
 	import type { MailboxCounts, MailboxFilters, MailboxPage, MailboxView, ThreadSummary, MailLabel } from '$lib/types';
@@ -73,6 +75,7 @@
 	let rowMenuFor = $state<string | null>(null);
 	let bulkSnoozeOpen = $state(false);
 	let layout = $state<MailboxLayout>('list');
+	let density = $state<MailboxDensity>('comfortable');
 	let selectMode = $state(false);
 	let searchOpen = $state(false);
 	let advancedOpen = $state(false);
@@ -118,9 +121,12 @@
 
 	$effect(() => {
 		layout = readMailboxLayout();
-		return watchMailboxLayout((next) => {
+		density = readMailboxDensity();
+		const stopDensity = watchMailboxDensity((next) => { density = next; });
+		const stopLayout = watchMailboxLayout((next) => {
 			layout = next;
 		});
+		return () => { stopLayout(); stopDensity(); };
 	});
 
 	$effect(() => {
@@ -277,7 +283,10 @@
 	}
 
 	function onListKeydown(event: KeyboardEvent) {
-		if (event.key === 'Escape') { moreOpen = false; selectMenuOpen = false; rowMenuFor = null; snoozeFor = null; bulkSnoozeOpen = false; selected = []; selectMode = false; return; }
+		if (event.key === 'Escape') {
+			if (document.querySelector('dialog[open]')) return;
+			moreOpen = false; selectMenuOpen = false; rowMenuFor = null; snoozeFor = null; bulkSnoozeOpen = false; selected = []; selectMode = false; selectionAnchor = null; return;
+		}
 		if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return;
 		if (event.key === 'Enter' && event.target instanceof Element && event.target.closest('button, a:not(.card-link)')) return;
 		if (
@@ -695,6 +704,7 @@
 			</div>
 		</div>
 		<div class="toolbar-right">
+			<button type="button" class="tool-btn density-toggle" aria-label="Compact density" aria-pressed={density === 'compact'} title={density === 'compact' ? 'Switch to comfortable spacing' : 'Switch to compact spacing'} onclick={() => setMailboxDensity(density === 'compact' ? 'comfortable' : 'compact')}><Icon name={density === 'compact' ? 'contract-up-down-line' : 'expand-up-down-line'} size={18} /></button>
 			<div class="layout-toggle" role="group" aria-label="Mailbox layout">
 				<button type="button" class="tool-btn" class:on={layout === 'list'} aria-pressed={layout === 'list'} aria-label="List view" title="List view" onclick={() => chooseLayout('list')}><Icon name="list-unordered" size={18} /></button>
 				<button type="button" class="tool-btn" class:on={layout === 'cards'} aria-pressed={layout === 'cards'} aria-label="Card view" title="Card view" onclick={() => chooseLayout('cards')}><Icon name="layout-grid-line" size={18} /></button>
@@ -731,7 +741,7 @@
 				<div class="empty-actions"><a class="btn-ghost" href={withParams({ q: null, unread: null, starred: null, attachments: null })}>Clear filters</a></div>
 			{/if}
 		{:else}
-			<ul class="cards" class:layout-list={layout === 'list'} class:ios-list={true}>
+			<ul class="cards" class:layout-list={layout === 'list'} class:compact={density === 'compact'} class:ios-list={true}>
 				{#each items as thread, index (thread.thread_id)}
 					<li
 						class="card"
@@ -776,7 +786,7 @@
 											<span class="tag tag-cleaned">Cleaned up</span>
 										{/if}
 									</span>
-									<span class="date">
+									<span class="date" title={formatFullDate(thread.created_at)}>
 										{view === 'later' && thread.snoozed_until
 											? formatSnoozeUntil(thread.snoozed_until)
 											: formatRelativeDate(thread.created_at)}
@@ -1054,6 +1064,8 @@
 	.mobile-pager { display: none; }
 	.cards.layout-list { display: flex; flex-direction: column; gap: 0; }
 	.cards.layout-list .card { display: flex; align-items: center; gap: 0.45rem; min-height: 3.5rem; padding: 0.55rem 0.6rem; border: 0; border-bottom: 1px solid var(--color-line); border-radius: 0; }
+	@media (min-width: 901px) { .cards.layout-list.compact .card { min-height: 2.75rem; padding-top: 0.15rem; padding-bottom: 0.15rem; } }
+	@media (min-width: 901px) { .indicators :global(.ri-star-fill) { display: none; } }
 	.cards.layout-list .card:first-child { border-radius: 10px 10px 0 0; }
 	.cards.layout-list .card:last-child { border-radius: 0 0 10px 10px; }
 	.cards.layout-list .card-link { flex: 1; align-items: center; padding: 0.25rem 2rem 0.25rem 0.3rem; }
@@ -1077,6 +1089,7 @@
 		.cards.layout-list .card-meta { grid-column: 3; }
 		.cards.layout-list .date { grid-column: 4; }
 		.selected-count { display: none; }
+		.density-toggle { display: none; }
 	}
 	@media (max-width:900px) {
 		.mailbox-heading, .toolbar, .filter-tabs { display: none; }

@@ -18,6 +18,7 @@
 	$effect(() => {
 		if (open && dialog && !dialog.open) {
 			words = query;
+			from = ''; to = ''; subject = ''; filename = ''; label = ''; after = ''; before = ''; folder = 'all'; unread = false; attachments = false;
 			dialog.showModal();
 		} else if (!open && dialog?.open) dialog.close();
 	});

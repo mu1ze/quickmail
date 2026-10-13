@@ -153,7 +153,7 @@
 		});
 	}
 	function restore() {
-		return act(async () => { if (!latest) return; await patch(latest.id, { trashed: false }); await goto('/inbox'); });
+		return act(async () => { if (!latest) return; await patch(latest.id, { trashed: false }); await goto(data.spam ? '/spam' : data.archived ? '/all' : latest.direction === 'outbound' ? '/sent' : '/inbox'); });
 	}
 	function destroy() {
 		return act(async () => {

@@ -15,6 +15,9 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 	if (labels.some((label) => label.name.toLowerCase() === name.toLowerCase())) return json({ error: 'A label with this name already exists.' }, { status: 409 });
 	if (labels.length >= 100) return json({ error: 'You can create up to 100 labels.' }, { status: 400 });
 	const id = crypto.randomUUID();
-	await platform.env.DB.prepare('INSERT INTO mail_labels(id, user_id, name) VALUES(?, ?, ?)').bind(id, locals.user.id, name).run();
+	const result = await platform.env.DB.prepare(`INSERT INTO mail_labels(id, user_id, name)
+		SELECT ?, ?, ? WHERE (SELECT COUNT(*) FROM mail_labels WHERE user_id = ?) < 100
+		ON CONFLICT(user_id, name) DO NOTHING`).bind(id, locals.user.id, name, locals.user.id).run();
+	if (!result.meta.changes) return json({ error: 'A label with this name already exists, or the label limit was reached.' }, { status: 409 });
 	return json({ id, name }, { status: 201 });
 };
