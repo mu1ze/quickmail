@@ -32,6 +32,8 @@ function mailboxView(url: URL): MailboxView {
 		case 'sent':
 		case 'later':
 		case 'trash':
+		case 'all':
+		case 'spam':
 			return view;
 		default:
 			break;

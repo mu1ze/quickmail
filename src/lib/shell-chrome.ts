@@ -4,6 +4,8 @@ export const MAILBOX_ROUTES = [
 	'/drafts',
 	'/sent',
 	'/later',
+	'/all',
+	'/spam',
 	'/trash'
 ] as const;
 

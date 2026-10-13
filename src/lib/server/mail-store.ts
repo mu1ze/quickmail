@@ -1,3 +1,4 @@
+import { parseMailSearch } from '$lib/mail-search';
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
 import { MAILBOX_PAGE_SIZE } from '$lib/constants';
 import { MAX_BODY_BYTES } from './constants';
@@ -136,18 +137,23 @@ export async function updateEmailStatusByProviderId(
  * Trash is anything with `deleted_at`, and the rest hide trashed mail. A
  * conversation shows up in a mailbox when any of its messages match.
  */
-function viewFilter(view: MailboxView): string {
+function viewFilter(view: MailboxView | 'anywhere'): string {
 	switch (view) {
+		case 'anywhere': return '1 = 1';
 		case 'inbox':
-			return "e.deleted_at IS NULL AND e.direction = 'inbound' AND (e.snoozed_until IS NULL OR e.snoozed_until <= datetime('now'))";
+			return "e.deleted_at IS NULL AND e.is_archived = 0 AND e.is_spam = 0 AND e.direction = 'inbound' AND (e.snoozed_until IS NULL OR e.snoozed_until <= datetime('now'))";
 		case 'sent':
-			return "e.deleted_at IS NULL AND e.direction = 'outbound' AND (e.status IS NULL OR e.status <> 'draft')";
+			return "e.deleted_at IS NULL AND e.is_spam = 0 AND e.direction = 'outbound' AND (e.status IS NULL OR e.status <> 'draft')";
 		case 'drafts':
 			return "e.deleted_at IS NULL AND e.status = 'draft'";
 		case 'starred':
-			return "e.deleted_at IS NULL AND e.is_starred = 1 AND (e.status IS NULL OR e.status <> 'draft')";
+			return "e.deleted_at IS NULL AND e.is_spam = 0 AND e.is_starred = 1 AND (e.status IS NULL OR e.status <> 'draft')";
 		case 'later':
-			return "e.deleted_at IS NULL AND e.snoozed_until IS NOT NULL AND e.snoozed_until > datetime('now')";
+			return "e.deleted_at IS NULL AND e.is_spam = 0 AND e.snoozed_until IS NOT NULL AND e.snoozed_until > datetime('now')";
+		case 'all':
+			return "e.deleted_at IS NULL AND e.is_spam = 0 AND (e.status IS NULL OR e.status <> 'draft')";
+		case 'spam':
+			return "e.deleted_at IS NULL AND e.is_spam = 1 AND (e.status IS NULL OR e.status <> 'draft')";
 		case 'trash':
 			return 'e.deleted_at IS NOT NULL';
 	}
@@ -158,8 +164,9 @@ function viewFilter(view: MailboxView): string {
  * `viewFilter` on purpose — an inbox row counts the replies we sent too, so it
  * reads as one conversation rather than a matched message.
  */
-function displayFilter(view: MailboxView, alias: string): string {
+function displayFilter(view: MailboxView | 'anywhere', alias: string): string {
 	switch (view) {
+		case 'anywhere': return '1 = 1';
 		case 'trash':
 			return `${alias}.deleted_at IS NOT NULL`;
 		case 'drafts':
@@ -203,7 +210,8 @@ type ThreadMessageRow = {
 
 /** Builds the WHERE clause and bindings shared by the count and the page query. */
 function buildScope(userId: string, query: MailboxQuery): { where: string; bindings: unknown[] } {
-	const filters = ['e.user_id = ?', viewFilter(query.view)];
+	const search = parseMailSearch(query.q ?? '');
+	const filters = ['e.user_id = ?', viewFilter(search.view ?? query.view)];
 	const bindings: unknown[] = [userId];
 
 	if (query.domainId) {
@@ -211,15 +219,8 @@ function buildScope(userId: string, query: MailboxQuery): { where: string; bindi
 		bindings.push(query.domainId);
 	}
 
-	const term = query.q?.trim();
-	if (term) {
-		filters.push(
-			`(e.subject LIKE ? ESCAPE '\\' OR e.from_addr LIKE ? ESCAPE '\\'
-			  OR e.to_addr LIKE ? ESCAPE '\\' OR e.body_text LIKE ? ESCAPE '\\')`
-		);
-		const like = `%${term.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
-		bindings.push(like, like, like, like);
-	}
+	filters.push(...search.conditions);
+	bindings.push(...search.bindings);
 
 	if (query.unreadOnly) filters.push('e.is_read = 0');
 	if (query.starredOnly) filters.push('e.is_starred = 1');
@@ -241,7 +242,7 @@ export async function listMailbox(
 ): Promise<MailboxPage> {
 	const { where, bindings } = buildScope(userId, query);
 	const pageSize = query.pageSize ?? MAILBOX_PAGE_SIZE;
-	const display = displayFilter(query.view, 'm');
+	const display = displayFilter(parseMailSearch(query.q ?? '').view ?? query.view, 'm');
 
 	const totalRow = await db
 		.prepare(
@@ -445,12 +446,12 @@ export async function getMailboxCounts(
 	const row = await db
 		.prepare(
 			`SELECT
-				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND direction = 'inbound' AND (snoozed_until IS NULL OR snoozed_until <= datetime('now')) THEN ${thread} END) AS inbox,
-				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND direction = 'inbound' AND is_read = 0 AND (snoozed_until IS NULL OR snoozed_until <= datetime('now')) THEN ${thread} END) AS inbox_unread,
-				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND is_starred = 1 AND (status IS NULL OR status <> 'draft') THEN ${thread} END) AS starred,
+				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND is_archived = 0 AND is_spam = 0 AND direction = 'inbound' AND (snoozed_until IS NULL OR snoozed_until <= datetime('now')) THEN ${thread} END) AS inbox,
+				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND is_archived = 0 AND is_spam = 0 AND direction = 'inbound' AND is_read = 0 AND (snoozed_until IS NULL OR snoozed_until <= datetime('now')) THEN ${thread} END) AS inbox_unread,
+				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND is_spam = 0 AND is_starred = 1 AND (status IS NULL OR status <> 'draft') THEN ${thread} END) AS starred,
 				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND status = 'draft' THEN ${thread} END) AS drafts,
-				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND direction = 'outbound' AND (status IS NULL OR status <> 'draft') THEN ${thread} END) AS sent,
-				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND snoozed_until IS NOT NULL AND snoozed_until > datetime('now') THEN ${thread} END) AS later,
+				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND is_spam = 0 AND direction = 'outbound' AND (status IS NULL OR status <> 'draft') THEN ${thread} END) AS sent,
+				COUNT(DISTINCT CASE WHEN deleted_at IS NULL AND is_spam = 0 AND snoozed_until IS NOT NULL AND snoozed_until > datetime('now') THEN ${thread} END) AS later,
 				COUNT(DISTINCT CASE WHEN deleted_at IS NOT NULL THEN ${thread} END) AS trash
 			 FROM emails WHERE ${scope}`
 		)
@@ -509,6 +510,8 @@ export type MailFlagUpdate = {
 	isStarred?: boolean;
 	isPinned?: boolean;
 	trashed?: boolean;
+	isArchived?: boolean;
+	isSpam?: boolean;
 	/** SQLite datetime; `null` wakes a snoozed conversation. */
 	snoozedUntil?: string | null;
 };
@@ -536,6 +539,15 @@ export async function setEmailFlags(
 	if (update.isPinned !== undefined) {
 		assignments.push('is_pinned = ?');
 		bindings.push(update.isPinned ? 1 : 0);
+	}
+	if (update.isArchived !== undefined) {
+		assignments.push('is_archived = ?');
+		bindings.push(update.isArchived ? 1 : 0);
+	}
+	if (update.isSpam !== undefined) {
+		assignments.push('is_spam = ?');
+		bindings.push(update.isSpam ? 1 : 0);
+		assignments.push('snoozed_until = NULL');
 	}
 	if (update.trashed !== undefined) {
 		assignments.push(update.trashed ? "deleted_at = datetime('now')" : 'deleted_at = NULL');

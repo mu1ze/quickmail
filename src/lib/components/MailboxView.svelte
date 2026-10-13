@@ -52,7 +52,9 @@
 		drafts: { title: 'Drafts', icon: 'draft-line', empty: 'No drafts saved' },
 		sent: { title: 'Sent', icon: 'send-plane-line', empty: 'Nothing sent yet' },
 		later: { title: 'Later', icon: 'time-line', empty: 'Nothing waiting' },
-		trash: { title: 'Trash', icon: 'delete-bin-line', empty: 'Trash is empty' }
+		trash: { title: 'Trash', icon: 'delete-bin-line', empty: 'Trash is empty' },
+		all: { title: 'All mail', icon: 'mail-stack-line', empty: 'No conversations yet' },
+		spam: { title: 'Spam', icon: 'spam-2-line', empty: 'No spam here' }
 	};
 
 	const meta = $derived(META[view]);
