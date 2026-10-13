@@ -4,11 +4,11 @@ export const MAILBOX_LAYOUT_KEY = 'mail:layout';
 export const MAILBOX_LAYOUT_EVENT = 'mail:layout';
 
 export function parseMailboxLayout(value: string | null | undefined): MailboxLayout {
-	return value === 'list' ? 'list' : 'cards';
+	return value === 'cards' ? 'cards' : 'list';
 }
 
 export function readMailboxLayout(): MailboxLayout {
-	if (typeof localStorage === 'undefined') return 'cards';
+	if (typeof localStorage === 'undefined') return 'list';
 	return parseMailboxLayout(localStorage.getItem(MAILBOX_LAYOUT_KEY));
 }
 

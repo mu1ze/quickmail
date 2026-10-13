@@ -14,7 +14,7 @@
 		disabled?: boolean;
 		label: string;
 		caption?: string;
-		onchange?: (next: boolean) => void;
+		onchange?: (next: boolean, event: MouseEvent) => void;
 	} = $props();
 
 	const icon = $derived(
@@ -36,7 +36,7 @@
 	class:mixed={indeterminate}
 	class:labeled={Boolean(caption)}
 	{disabled}
-	onclick={() => onchange?.(!checked)}
+	onclick={(event) => onchange?.(!checked, event)}
 >
 	<Icon name={icon} size={18} />
 	{#if caption}<span>{caption}</span>{/if}

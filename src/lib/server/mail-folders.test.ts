@@ -1,4 +1,4 @@
-/// <reference types="bun" />
+/// <reference path="../../../node_modules/bun-types/sqlite.d.ts" />
 import { Database } from 'bun:sqlite';
 import { readdirSync, readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, test } from 'node:test';

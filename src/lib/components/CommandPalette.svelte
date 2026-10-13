@@ -64,11 +64,13 @@
 		},
 		{
 			id: 'later',
-			label: 'Go to later',
+			label: 'Go to snoozed',
 			hint: 'g b',
 			icon: 'time-line',
 			run: () => goto('/later')
 		},
+		{ id: 'all', label: 'Go to all mail', hint: 'g a', icon: 'mail-line', run: () => goto('/all') },
+		{ id: 'spam', label: 'Go to spam', icon: 'spam-2-line', run: () => goto('/spam') },
 		{
 			id: 'trash',
 			label: 'Go to trash',

@@ -3,17 +3,17 @@
 
 @theme {
 	--font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
-	--color-bezel: #efeeea;
-	--color-bg: #efeeea;
+	--color-bezel: #edf2ef;
+	--color-bg: #edf2ef;
 	--color-surface: #ffffff;
-	--color-well: #f6f6f4;
-	--color-surface-muted: #f6f6f4;
-	--color-surface-hover: #ecece8;
-	--color-text: #1c1917;
-	--color-text-secondary: #57534e;
-	--color-muted: #a8a29e;
-	--color-accent: #5d8a6e;
-	--color-accent-hover: #4f7860;
+	--color-well: #f4f7f5;
+	--color-surface-muted: #f4f7f5;
+	--color-surface-hover: #eaf0ed;
+	--color-text: #202d27;
+	--color-text-secondary: #627169;
+	--color-muted: #6f7b74;
+	--color-accent: #326b50;
+	--color-accent-hover: #26563f;
 	--color-accent-soft: rgba(93, 138, 110, 0.16);
 	--color-accent-text: #3f6a52;
 	--color-on-accent: #f4f7f5;
@@ -42,25 +42,25 @@
 	--shadow-sm: var(--mat-panel);
 	--shadow-md: var(--mat-float);
 	--shadow-header: inset 0 -1px 0 var(--color-line);
-	--sidebar-width: 15.25rem;
+	--sidebar-width: 15.5rem;
 	--sidebar-width-collapsed: 4.25rem;
-	--topbar-height: 3.25rem;
+	--topbar-height: 4.5rem;
 	--mobile-dock-height: 4.5rem;
 	--radius-panel: 20px;
-	--gutter: 12px;
+	--gutter: 16px;
 }
 
 :root[data-theme='dark'] {
 	color-scheme: dark;
-	--color-bezel: #141312;
-	--color-bg: #141312;
-	--color-surface: #1d1d1a;
-	--color-well: #252522;
-	--color-surface-muted: #252522;
-	--color-surface-hover: #2a2a27;
+	--color-bezel: #101813;
+	--color-bg: #101813;
+	--color-surface: #18211c;
+	--color-well: #1e2922;
+	--color-surface-muted: #1e2922;
+	--color-surface-hover: #29372e;
 	--color-text: #e7e5e4;
 	--color-text-secondary: #a8a29e;
-	--color-muted: #78716c;
+	--color-muted: #a0ada5;
 	--color-accent: #8fb59d;
 	--color-accent-hover: #a4c5b0;
 	--color-accent-soft: rgba(143, 181, 157, 0.16);
@@ -106,8 +106,14 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-	outline: none;
+	outline: 2px solid var(--color-focus-line);
+	outline-offset: 3px;
 }
+
+button:not(:disabled), [role='button'], a { cursor: pointer; }
+button:disabled { cursor: default; }
+
+.app-shell.mailbox-mobile .app-main { padding: 0; }
 
 .surface,
 .surface-lg {

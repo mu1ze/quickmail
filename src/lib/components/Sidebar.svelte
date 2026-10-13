@@ -35,12 +35,12 @@
 
 	const mailboxes = $derived<NavItem[]>([
 		{ href: '/inbox', icon: 'inbox-line', label: 'Inbox', badge: counts.inbox_unread },
-		...(counts.later > 0 || $page.url.pathname === '/later'
-			? [{ href: '/later', icon: 'time-line', label: 'Later', count: counts.later }]
-			: []),
-		{ href: '/drafts', icon: 'draft-line', label: 'Drafts', count: counts.drafts },
-		{ href: '/sent', icon: 'send-plane-line', label: 'Sent' },
 		{ href: '/starred', icon: 'star-line', label: 'Starred', count: counts.starred },
+		{ href: '/later', icon: 'time-line', label: 'Snoozed', count: counts.later },
+		{ href: '/sent', icon: 'send-plane-line', label: 'Sent' },
+		{ href: '/drafts', icon: 'draft-line', label: 'Drafts', count: counts.drafts },
+		{ href: '/all', icon: 'mail-line', label: 'All mail' },
+		{ href: '/spam', icon: 'spam-2-line', label: 'Spam' },
 		{ href: '/trash', icon: 'delete-bin-line', label: 'Trash', count: counts.trash }
 	]);
 
@@ -86,7 +86,7 @@
 
 	<a href="/compose" class="new-message" title="New message" onclick={() => (mobileOpen = false)}>
 		<Icon name="pencil-line" size={expanded ? 16 : 18} />
-		{#if expanded}<span>New message</span>{/if}
+		{#if expanded}<span>Compose</span><kbd>C</kbd>{/if}
 	</a>
 
 	<nav class="nav">
@@ -95,6 +95,7 @@
 				href={item.href}
 				class="nav-link"
 				class:active={isActive(item.href)}
+				aria-current={isActive(item.href) ? 'page' : undefined}
 				title={expanded ? undefined : item.label}
 				onclick={() => (mobileOpen = false)}
 			>
@@ -128,6 +129,7 @@
 				href={item.href}
 				class="nav-link"
 				class:active={isActive(item.href)}
+				aria-current={isActive(item.href) ? 'page' : undefined}
 				title={expanded ? undefined : item.label}
 				onclick={() => (mobileOpen = false)}
 			>
@@ -186,14 +188,15 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 0 0.25rem 0.875rem;
+		min-height: var(--topbar-height);
+		padding: 0 0.75rem 0.75rem;
 	}
 
 	.brand {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		font-size: 0.9375rem;
+		font-size: 1.15rem;
 		font-weight: 600;
 		letter-spacing: -0.02em;
 		color: var(--color-text);
@@ -202,12 +205,13 @@
 	.new-message {
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		gap: 0.4375rem;
-		height: 2.25rem;
-		margin-bottom: 0.75rem;
-		border-radius: 9px;
-		font-size: 13px;
+		justify-content: flex-start;
+		gap: 0.7rem;
+		height: 3.25rem;
+		padding: 0 1.2rem;
+		margin-bottom: 1.25rem;
+		border-radius: 16px;
+		font-size: 14px;
 		font-weight: 500;
 		color: var(--color-on-accent);
 		background: var(--color-accent);
@@ -218,6 +222,8 @@
 	.new-message:hover {
 		background: var(--color-accent-hover);
 	}
+	.new-message kbd { margin-left: auto; font-size: 0.625rem; padding: 0.1rem 0.3rem; border: 1px solid rgba(255,255,255,0.25); border-radius: 4px; opacity: 0.65; }
+	.sidebar.collapsed .new-message { justify-content: center; padding: 0; }
 
 	.nav {
 		display: flex;
@@ -236,9 +242,9 @@
 		display: flex;
 		align-items: center;
 		gap: 0.625rem;
-		height: 2.125rem;
-		padding: 0 0.625rem;
-		border-radius: 9px;
+		height: 2.5rem;
+		padding: 0 0.875rem;
+		border-radius: 12px;
 		font-size: 13px;
 		color: var(--color-text-secondary);
 		transition: background 0.15s, color 0.15s;
@@ -273,10 +279,10 @@
 	}
 
 	.nav-link.active {
-		background: var(--color-surface);
-		color: var(--color-text);
-		font-weight: 500;
-		box-shadow: var(--mat-panel);
+		background: var(--color-accent-soft);
+		color: var(--color-accent-text);
+		font-weight: 600;
+		box-shadow: none;
 	}
 
 	button.nav-link {

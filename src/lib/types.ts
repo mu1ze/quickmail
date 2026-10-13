@@ -153,6 +153,8 @@ export type ThreadParticipant = {
 
 /** One card in a mailbox grid: a whole conversation, not a single message. */
 export type ThreadSummary = {
+	/** Whether every message has been archived. */
+	is_archived?: boolean;
 	thread_id: string;
 	/** Newest message in the conversation — what the card opens. */
 	latest_id: string;

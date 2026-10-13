@@ -103,7 +103,8 @@
 		d: '/drafts',
 		t: '/sent',
 		b: '/later',
-		e: '/trash'
+		e: '/trash',
+		a: '/all'
 	};
 
 	function onWindowKeydown(event: KeyboardEvent) {
@@ -242,7 +243,7 @@
 				userEmail={data.user!.email}
 				addresses={data.addresses}
 				bind:searchInput
-				onToggleNav={() => (mobileOpen = !mobileOpen)}
+				onToggleNav={() => { if (mobileViewport) mobileOpen = !mobileOpen; else collapsed = !collapsed; }}
 				onLogout={logout}
 			/>
 

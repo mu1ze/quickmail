@@ -58,7 +58,7 @@
 
 	const returnTo = $derived($page.url.searchParams.get('return'));
 	const backHref = $derived(
-		returnTo && /^\/(?:inbox|starred|sent|later|trash)(?:\?|$)/.test(returnTo) ? returnTo : data.trashed ? '/trash' : data.snoozedUntil ? '/later' : latest?.direction === 'outbound' ? '/sent' : '/inbox'
+		returnTo && /^\/(?:inbox|starred|sent|later|all|spam|trash)(?:\?|$)/.test(returnTo) ? returnTo : data.trashed ? '/trash' : data.spam ? '/spam' : data.archived ? '/all' : data.snoozedUntil ? '/later' : latest?.direction === 'outbound' ? '/sent' : '/inbox'
 	);
 
 	/**
@@ -124,6 +124,31 @@
 			await patch(id, { trashed: true });
 			showUndo('Moved to trash', async () => { await patch(id, { trashed: false }); await invalidateAll(); });
 			await goto(dest);
+		});
+	}
+	function archive() {
+		return act(async () => {
+			const id = latest?.id; if (!id) return;
+			const wasArchived = data.archived;
+			await patch(id, { isArchived: true });
+			showUndo('Conversation archived', async () => { await patch(id, { isArchived: wasArchived }); await invalidateAll(); });
+			await goto(backHref);
+		});
+	}
+	function moveInbox() {
+		return act(async () => {
+			if (!latest) return;
+			await patch(latest.id, { isArchived: false, isSpam: false, trashed: false, snoozedUntil: null });
+			await goto('/inbox');
+		});
+	}
+	function toggleSpam() {
+		return act(async () => {
+			const id = latest?.id; if (!id) return;
+			const wasSpam = data.spam;
+			await patch(id, { isSpam: !wasSpam });
+			showUndo(wasSpam ? 'Marked as not spam' : 'Moved to spam', async () => { await patch(id, { isSpam: wasSpam }); await invalidateAll(); });
+			await goto(backHref);
 		});
 	}
 	function restore() {
@@ -248,6 +273,11 @@
 		}
 		if (event.key === 'e' && !data.trashed) {
 			event.preventDefault();
+			if (!data.spam) void archive();
+			return;
+		}
+		if (event.key === '#' && !data.trashed) {
+			event.preventDefault();
 			void trash();
 			return;
 		}
@@ -292,15 +322,24 @@
 		</a>
 
 		<div class="toolbar-actions" aria-busy={actionBusy}>
+			{#if data.archived || data.spam}
+				<button type="button" class="icon-btn" aria-label="Move to inbox" title="Move to inbox" onclick={moveInbox}><Icon name="inbox-line" size={18} /></button>
+			{/if}
+			{#if !data.trashed && !data.spam}
+				<button type="button" class="icon-btn" aria-label="Archive" title="Archive (e)" onclick={archive}><Icon name="archive-line" size={18} /></button>
+			{/if}
+			{#if !data.trashed}
+				<button type="button" class="icon-btn" aria-label={data.spam ? 'Not spam' : 'Mark as spam'} title={data.spam ? 'Not spam' : 'Mark as spam'} onclick={toggleSpam}><Icon name="spam-2-line" size={18} /></button>
+			{/if}
 			<button
 				type="button"
 				class="icon-btn"
 				class:starred
-				aria-label={starred ? 'Remove flag' : 'Flag'}
-				title={starred ? 'Remove flag (s)' : 'Flag (s)'}
+				aria-label={starred ? 'Remove star' : 'Add star'}
+				title={starred ? 'Remove star (s)' : 'Add star (s)'}
 				onclick={toggleStar}
 			>
-				<Icon name={starred ? 'flag-fill' : 'flag-line'} size={16} />
+				<Icon name={starred ? 'star-fill' : 'star-line'} size={16} />
 			</button>
 			<button
 				type="button"

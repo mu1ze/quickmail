@@ -190,6 +190,7 @@ export type MailboxQuery = {
 };
 
 type ThreadMessageRow = {
+	is_archived: number;
 	id: string;
 	thread_id: string;
 	direction: 'inbound' | 'outbound';
@@ -285,7 +286,7 @@ export async function listMailbox(
 	const { results: messages } = await db
 		.prepare(
 			`SELECT m.id, COALESCE(m.thread_id, m.id) AS thread_id, m.direction, m.from_addr, m.to_addr,
-			        m.subject, m.is_read, m.is_starred, m.is_pinned, m.created_at, m.domain_id, m.status, m.snoozed_until,
+			        m.subject, m.is_read, m.is_starred, m.is_pinned, m.is_archived, m.created_at, m.domain_id, m.status, m.snoozed_until,
 			        m.auto_trashed_at,
 			        COALESCE(NULLIF(trim(m.body_text), ''), m.body_html, '') AS body_head,
 			        EXISTS(SELECT 1 FROM email_attachments a WHERE a.email_id = m.id) AS has_attachments
@@ -357,6 +358,7 @@ function toThreadSummary(messages: ThreadMessageRow[]): ThreadSummary {
 		participants,
 		message_count: messages.length,
 		is_read: messages.every((message) => message.is_read === 1),
+		is_archived: messages.every((message) => message.is_archived === 1),
 		is_starred: messages.some((message) => message.is_starred === 1),
 		is_pinned: messages.some((message) => message.is_pinned === 1),
 		is_draft: latest.status === 'draft',

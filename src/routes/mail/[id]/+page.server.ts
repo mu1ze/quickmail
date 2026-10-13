@@ -43,6 +43,8 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
 		/** The message that was linked to — expanded first when the page opens. */
 		focusId: email.id,
 		trashed: Boolean(email.deleted_at),
+		archived: Boolean(email.is_archived),
+		spam: Boolean(email.is_spam),
 		snoozedUntil: email.snoozed_until,
 		subject: displaySubject(messages[0]?.subject ?? email.subject),
 		replyFrom: replyIdentity?.address ?? null,
