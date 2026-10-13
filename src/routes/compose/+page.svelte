@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { beforeNavigate, goto } from '$app/navigation';
 	import Icon from '$lib/components/Icon.svelte';
 	import RichTextEditor from '$lib/components/RichTextEditor.svelte';
 	import AttachmentPicker from '$lib/components/AttachmentPicker.svelte';
@@ -26,7 +27,7 @@
 		addresses.find((address) => address.is_default)?.id ?? addresses[0]?.id ?? ''
 	);
 
-	let chosenAddressId = $state('');
+	let chosenAddressId = $state(untrack(() => data.addresses.find((address) => address.address === data.draft?.from_addr)?.id ?? ''));
 	const fromAddressId = $derived(chosenAddressId || defaultAddressId);
 
 	const draft = untrack(() => data.draft);
@@ -42,7 +43,9 @@
 	let bcc = $state(draft?.bcc_addr ?? '');
 	let subject = $state(draft?.subject ?? forward?.subject ?? '');
 	let html = $state(draft?.body_html ?? forward?.html ?? '');
-	let attachments = $state<OutboundAttachmentInput[]>([]);
+	let attachments = $state<OutboundAttachmentInput[]>(untrack(() => data.attachments));
+	let attachmentBusy = $state(false);
+	let picker = $state<{ addFiles: (files: File[]) => Promise<void> } | null>(null);
 	let error = $state('');
 	let sending = $state(false);
 	let savingDraft = $state(false);
@@ -55,9 +58,31 @@
 	);
 
 	const isEmpty = $derived(
-		!to.trim() && !cc.trim() && !bcc.trim() && !subject.trim() && isHtmlEmpty(html)
+		!to.trim() && !cc.trim() && !bcc.trim() && !subject.trim() && isHtmlEmpty(html) && attachments.length === 0
 	);
-	const canSend = $derived(Boolean(to.trim()) && !isHtmlEmpty(html) && !sending);
+	const canSend = $derived(Boolean(to.trim()) && Boolean(subject.trim()) &&
+		(!isHtmlEmpty(html) || attachments.length > 0) && !sending && !savingDraft && !attachmentBusy && Boolean(fromAddressId));
+	const draftPayload = $derived({ fromAddressId, to, cc, bcc, subject, html, attachments });
+	let lastSaved = $state.raw<typeof draftPayload | null>(untrack(() => draft ? draftPayload : null));
+	let failedSave = $state.raw<typeof draftPayload | null>(null);
+	const dirty = $derived(draftPayload !== lastSaved && (!isEmpty || Boolean(draftId)));
+	$effect(() => {
+		void draftPayload;
+		if (!dirty || savingDraft || sending || attachmentBusy || failedSave === draftPayload) return;
+		const timer = setTimeout(() => void saveDraft(), 1200);
+		return () => clearTimeout(timer);
+	});
+	beforeNavigate((navigation) => {
+		if ((!dirty && !attachmentBusy) || sending || !navigation.to) return;
+		navigation.cancel();
+		if (attachmentBusy) { error = 'Wait for your attachments to finish loading.'; return; }
+		const destination = navigation.to.url;
+		void saveDraft().then((saved) => {
+			if (!saved) return;
+			if (destination.origin !== window.location.origin) window.location.href = destination.href;
+			else void goto(destination);
+		});
+	});
 
 	const selectedAddress = $derived(addresses.find((address) => address.id === fromAddressId));
 	const fromLabel = $derived(
@@ -89,7 +114,9 @@
 	);
 
 	async function saveDraft() {
-		if (savingDraft || isEmpty) return;
+		if (savingDraft || attachmentBusy || sending) return false;
+		if (isEmpty && !draftId) return true;
+		const payload = draftPayload;
 		savingDraft = true;
 		error = '';
 
@@ -98,48 +125,56 @@
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
+					...payload,
+					attachments: lastSaved?.attachments === payload.attachments ? undefined : payload.attachments,
 					id: draftId,
-					fromAddressId,
-					to,
-					cc: cc.trim() || undefined,
-					bcc: bcc.trim() || undefined,
-					subject,
-					html,
-					text: isHtmlEmpty(html) ? '' : htmlToPlainText(html)
+					text: isHtmlEmpty(payload.html) ? '' : htmlToPlainText(payload.html)
 				})
 			});
 			const body = await res.json();
 			if (!res.ok) {
+				if (typeof body.id === 'string') draftId = body.id;
 				error = body.error ?? 'Could not save draft';
-				return;
+				failedSave = payload;
+				return false;
 			}
 			draftId = body.id;
+			lastSaved = payload;
+			failedSave = null;
 			savedAt = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+			return true;
 		} catch {
-			error = 'Network error';
+			error = 'Could not save your draft. Check your connection and try again.';
+			failedSave = payload;
+			return false;
 		} finally {
 			savingDraft = false;
 		}
 	}
 
-	function closeComposer() {
+	async function closeComposer() {
+		if (attachmentBusy) { error = 'Wait for your attachments to finish loading.'; return; }
+		if (dirty && !(await saveDraft())) return;
 		if (window.history.length > 1) window.history.back();
 		else window.location.href = '/inbox';
 	}
 
 	async function discardDraft() {
 		if (!draftId) {
+			lastSaved = draftPayload;
 			window.location.href = '/inbox';
 			return;
 		}
-		await fetch(`/api/drafts/${draftId}`, { method: 'DELETE' });
+		const response = await fetch(`/api/drafts/${draftId}`, { method: 'DELETE' });
+		if (!response.ok) { error = 'Could not discard this draft. Please try again.'; return; }
+		lastSaved = draftPayload;
 		window.location.href = '/drafts';
 	}
 
 	function submit(event: SubmitEvent) {
 		event.preventDefault();
 		if (sending || !canSend) return;
-		if (isHtmlEmpty(html)) {
+		if (isHtmlEmpty(html) && attachments.length === 0) {
 			error = 'Write a message';
 			return;
 		}
@@ -182,6 +217,7 @@
 </script>
 
 <svelte:window
+	onbeforeunload={(event) => { if (dirty && !sending) event.preventDefault(); }}
 	onkeydown={(event) => {
 		if (isMod(event) && event.key === 'Enter') {
 			event.preventDefault();
@@ -208,7 +244,7 @@
 			</button>
 
 			<div class="compose-toolbar-meta">
-				{#if savedAt}<span class="saved">Saved {savedAt}</span>{/if}
+			<span class="saved" role="status">{savingDraft ? 'Saving…' : dirty ? 'Unsaved changes' : savedAt ? `Saved ${savedAt}` : draftId ? 'Draft saved' : ''}</span>
 			</div>
 
 			<div class="compose-toolbar-actions">
@@ -262,6 +298,7 @@
 					id="compose-to"
 					label="To"
 					bind:value={to}
+					disabled={sending}
 					required
 					placeholder=""
 				/>
@@ -270,11 +307,11 @@
 			{#if showDetails}
 				<div class="compose-row">
 					<label class="compose-label" for="compose-cc">Cc:</label>
-					<RecipientField id="compose-cc" label="Cc" bind:value={cc} placeholder="" />
+						<RecipientField id="compose-cc" label="Cc" bind:value={cc} placeholder="" disabled={sending} />
 				</div>
 				<div class="compose-row">
 					<label class="compose-label" for="compose-bcc">Bcc:</label>
-					<RecipientField id="compose-bcc" label="Bcc" bind:value={bcc} placeholder="" />
+					<RecipientField id="compose-bcc" label="Bcc" bind:value={bcc} placeholder="" disabled={sending} />
 				</div>
 				<div class="compose-row">
 					<span class="compose-label">From:</span>
@@ -284,6 +321,7 @@
 							onchange={(event) => (chosenAddressId = event.currentTarget.value)}
 							class="compose-input compose-select"
 							aria-label="Send from"
+							disabled={sending}
 						>
 							{#each addresses as address (address.id)}
 								<option value={address.id}>
@@ -309,20 +347,22 @@
 					type="text"
 					bind:value={subject}
 					required
+					maxlength={200}
+					disabled={sending}
 					class="compose-input"
 				/>
 			</div>
 
 			<div class="compose-body">
-				<RichTextEditor bind:html embedded minHeight={280} placeholder="" />
+				<RichTextEditor bind:html {attachments} embedded minHeight={280} placeholder="Write your message…" disabled={sending} onFiles={(files) => picker?.addFiles(files)} />
 			</div>
 
 			<div class="compose-attachments">
-				<AttachmentPicker bind:attachments />
+				<AttachmentPicker bind:this={picker} bind:attachments bind:busy={attachmentBusy} disabled={sending} />
 			</div>
 			{#if data.signatures.length > 0}
 				<div class="compose-signature">
-					<SignaturePicker bind:value={selectedSignatureId} signatures={data.signatures} />
+					<SignaturePicker bind:value={selectedSignatureId} signatures={data.signatures} disabled={sending} />
 					{#if compiledSignature.html}
 						<SignaturePreview html={compiledSignature.html} />
 					{/if}
@@ -331,7 +371,7 @@
 		</div>
 
 		{#if error}
-			<p class="compose-error">{error}</p>
+			<p class="compose-error" role="alert">{error} <button type="button" onclick={saveDraft} disabled={savingDraft || sending}>Retry saving</button></p>
 		{/if}
 	</div>
 </form>

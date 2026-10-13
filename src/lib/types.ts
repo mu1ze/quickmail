@@ -228,4 +228,6 @@ export type OutboundAttachmentInput = {
 	filename: string;
 	type: string;
 	content: string;
+	contentId?: string;
+	disposition?: 'inline' | 'attachment';
 };

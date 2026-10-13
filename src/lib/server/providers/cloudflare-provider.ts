@@ -62,7 +62,8 @@ export function createCloudflareProvider(
 									filename: file.filename,
 									type: file.type,
 									content: base64ToArrayBuffer(file.content),
-									disposition: 'attachment' as const
+									disposition: file.contentId ? 'inline' as const : 'attachment' as const,
+									...(file.contentId ? { contentId: file.contentId } : {})
 								}))
 							}
 						: {})

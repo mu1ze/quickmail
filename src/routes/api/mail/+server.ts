@@ -77,7 +77,7 @@ export const POST: RequestHandler = async ({ request, locals, platform, url }) =
 
 	const body = (await request.json()) as SendMailBody;
 
-	if (!body.to?.trim() || !body.subject?.trim() || (!body.text?.trim() && !body.html?.trim())) {
+	if (!body.to?.trim() || !body.subject?.trim() || (!body.text?.trim() && !body.html?.trim() && !body.attachments?.length)) {
 		return json({ error: 'To, subject, and message are required' }, { status: 400 });
 	}
 
@@ -102,7 +102,7 @@ export const POST: RequestHandler = async ({ request, locals, platform, url }) =
 		);
 
 		if (body.draftId) {
-			await deleteDraft(db, locals.user.id, body.draftId);
+		await deleteDraft(db, locals.user.id, body.draftId, bucket);
 		}
 
 		return json({ ok: true, id: emailId });

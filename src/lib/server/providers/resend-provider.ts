@@ -41,7 +41,8 @@ export function createResendProvider(apiKey: string): EmailProvider {
 									attachments: input.attachments.map((file) => ({
 										filename: file.filename,
 										content: file.content,
-										content_type: file.type
+										content_type: file.type,
+										...(file.contentId ? { content_id: file.contentId } : {})
 									}))
 								}
 							: {})

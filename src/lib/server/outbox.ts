@@ -1,8 +1,8 @@
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
 import type { MailAddress, OutboundAttachmentInput, User } from '$lib/types';
 import { appendEmailSignature } from '$lib/email-signature';
-import { base64ByteLength, insertAttachments } from './attachments';
-import { MAX_TOTAL_ATTACHMENT_BYTES } from './constants';
+import { insertAttachments } from './attachments';
+import { validateAttachmentInputs } from '$lib/utils/attachment-input';
 import {
 	getAddressForUser,
 	getDefaultAddress,
@@ -147,7 +147,7 @@ export async function sendAndStore(
 	const bodyText = input.text?.trim() || (bodyHtml ? stripHtml(bodyHtml) : '');
 
 	// The automatic signature does not count as message content.
-	if (!bodyText && !bodyHtml) {
+	if (!bodyText && !bodyHtml && !input.attachments?.length) {
 		throw new Error('Message body is required');
 	}
 
@@ -170,13 +170,7 @@ export async function sendAndStore(
 		: { text: bodyText, html: bodyHtml };
 
 	const attachments = input.attachments ?? [];
-	const totalBytes = attachments.reduce(
-		(sum, file) => sum + base64ByteLength(file.content),
-		0
-	);
-	if (totalBytes > MAX_TOTAL_ATTACHMENT_BYTES) {
-		throw new Error('Attachments exceed the total size limit');
-	}
+	validateAttachmentInputs(attachments);
 
 	const { providerId } = await sendOutboundEmail(provider, {
 		from,

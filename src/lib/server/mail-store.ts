@@ -351,7 +351,7 @@ function toThreadSummary(messages: ThreadMessageRow[]): ThreadSummary {
 		thread_id: oldest.thread_id,
 		latest_id: latest.id,
 		// The conversation keeps the subject it started with, not "Re: Re: …".
-		subject: displaySubject(oldest.subject),
+		subject: latest.status === 'draft' ? latest.subject : displaySubject(oldest.subject),
 		preview: buildMessagePreview(latest.body_head),
 		participants,
 		message_count: messages.length,
@@ -737,11 +737,9 @@ export async function getDraft(
 	return row ?? null;
 }
 
-export async function deleteDraft(db: D1Database, userId: string, draftId: string): Promise<void> {
-	await db
-		.prepare("DELETE FROM emails WHERE id = ? AND user_id = ? AND status = 'draft'")
-		.bind(draftId, userId)
-		.run();
+export async function deleteDraft(db: D1Database, userId: string, draftId: string, bucket?: R2Bucket): Promise<void> {
+	const draft = await getDraft(db, userId, draftId);
+	if (draft) await deleteEmailsPermanently(db, bucket, userId, [draft.id]);
 }
 
 export async function getEmailForUser(
