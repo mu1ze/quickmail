@@ -15,15 +15,15 @@
 		confirmLabel?: string;
 		duration?: number;
 		disabled?: boolean;
-		onConfirm: () => void | Promise<void>;
+		onConfirm: () => void | boolean | Promise<void | boolean>;
 	} = $props();
 
-	let phase = $state<'idle' | 'holding' | 'committed'>('idle');
+	let phase = $state<'idle' | 'holding' | 'pending' | 'committed'>('idle');
 	let fill = $state(0);
 	let controls: { stop: () => void } | null = null;
 
 	const shown = $derived(
-		phase === 'committed' ? confirmLabel : phase === 'holding' ? holdLabel : label
+		phase === 'committed' ? confirmLabel : phase === 'pending' ? 'Working…' : phase === 'holding' ? holdLabel : label
 	);
 
 	function stop() {
@@ -32,7 +32,7 @@
 	}
 
 	function startHold() {
-		if (disabled || phase === 'committed') return;
+		if (disabled || phase === 'committed' || phase === 'pending' || phase === 'holding') return;
 		phase = 'holding';
 		stop();
 		if (prefersReducedMotion()) {
@@ -68,12 +68,17 @@
 	}
 
 	async function commit() {
-		if (phase === 'committed') return;
+		if (phase === 'committed' || phase === 'pending') return;
 		stop();
 		fill = 1;
-		phase = 'committed';
-		await onConfirm();
+		phase = 'pending';
+		try {
+			const result = await onConfirm();
+			if (result === false) { phase = 'idle'; fill = 0; }
+			else phase = 'committed';
+		} catch { phase = 'idle'; fill = 0; }
 	}
+	$effect(() => () => stop());
 </script>
 
 <button
@@ -81,8 +86,12 @@
 	class="hold"
 	class:holding={phase === 'holding'}
 	class:committed={phase === 'committed'}
-	disabled={disabled || phase === 'committed'}
+	disabled={disabled || phase === 'committed' || phase === 'pending'}
 	aria-label={shown}
+	aria-busy={phase === 'pending'}
+	onkeydown={(event) => { if ((event.key === 'Enter' || event.key === ' ') && !event.repeat) { event.preventDefault(); startHold(); } }}
+	onkeyup={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); abortHold(); } }}
+	onblur={abortHold}
 	onpointerdown={(event) => {
 		if (event.button !== 0) return;
 		event.currentTarget.setPointerCapture(event.pointerId);
@@ -97,9 +106,11 @@
 		<span class="face measure">{label}</span>
 		<span class="face measure">{holdLabel}</span>
 		<span class="face measure">{confirmLabel}</span>
+		<span class="face measure">Working…</span>
 		<span class="face" class:on={phase === 'idle'}>{label}</span>
 		<span class="face" class:on={phase === 'holding'}>{holdLabel}</span>
 		<span class="face" class:on={phase === 'committed'}>{confirmLabel}</span>
+		<span class="face" class:on={phase === 'pending'}>Working…</span>
 	</span>
 </button>
 

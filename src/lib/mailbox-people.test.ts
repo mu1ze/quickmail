@@ -25,6 +25,10 @@ function thread(participants: ThreadSummary['participants']): ThreadSummary {
 }
 
 describe('mailbox row headline', () => {
+	test('shows a sender-supplied display name without guessing one from the address', () => {
+		assert.equal(threadHeadline(thread([{ label: 'guess', address: '"Alex Chen" <alex@example.com>', self: false }]), 'inbox'), 'Alex Chen');
+		assert.equal(threadHeadline(thread([{ label: 'guess', address: 'alex@example.com', self: false }]), 'inbox'), 'alex@example.com');
+	});
 	test('inbox shows the sender email, not a guessed display name', () => {
 		assert.equal(
 			threadHeadline(

@@ -61,6 +61,8 @@ export const PATCH: RequestHandler = async ({ params, request, locals, platform 
 		isRead?: boolean;
 		isStarred?: boolean;
 		isPinned?: boolean;
+		isArchived?: boolean;
+		isSpam?: boolean;
 		trashed?: boolean;
 		snoozedUntil?: string | null;
 		/** Set to limit the change to this one message instead of the thread. */
@@ -75,6 +77,8 @@ export const PATCH: RequestHandler = async ({ params, request, locals, platform 
 		isRead: body.isRead,
 		isStarred: body.isStarred,
 		isPinned: body.isPinned,
+		isArchived: body.isArchived,
+		isSpam: body.isSpam,
 		trashed: body.trashed,
 		snoozedUntil: body.snoozedUntil
 	});
@@ -115,7 +119,7 @@ export const POST: RequestHandler = async ({ params, request, locals, platform, 
 	}
 
 	const body = (await request.json()) as ReplyBody;
-	if (!body.text?.trim() && !body.html?.trim()) {
+	if (!body.text?.trim() && !body.html?.trim() && !body.attachments?.length) {
 		return json({ error: 'Message body is required' }, { status: 400 });
 	}
 

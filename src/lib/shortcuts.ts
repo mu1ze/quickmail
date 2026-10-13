@@ -43,8 +43,9 @@ export const SHORTCUTS: Shortcut[] = [
 	{ keys: 'x', action: 'Select', group: 'Move' },
 	{ keys: '/', action: 'Search', group: 'Move' },
 	{ keys: '⌘K', action: 'Command palette', group: 'Move' },
-	{ keys: 'e', action: 'Move to trash', group: 'Act' },
-	{ keys: 's', action: 'Flag', group: 'Act' },
+	{ keys: 'e', action: 'Archive', group: 'Act' },
+	{ keys: '#', action: 'Move to trash', group: 'Act' },
+	{ keys: 's', action: 'Toggle star', group: 'Act' },
 	{ keys: 'p', action: 'Pin to top', group: 'Act' },
 	{ keys: 'u', action: 'Mark unread', group: 'Act' },
 	{ keys: 'b', action: 'Snooze', group: 'Act' },
@@ -59,6 +60,7 @@ export const SHORTCUTS: Shortcut[] = [
 	{ keys: 'g d', action: 'Go to drafts', group: 'Jump' },
 	{ keys: 'g t', action: 'Go to sent', group: 'Jump' },
 	{ keys: 'g b', action: 'Go to later', group: 'Jump' },
+	{ keys: 'g a', action: 'Go to all mail', group: 'Jump' },
 	{ keys: 'g e', action: 'Go to trash', group: 'Jump' },
 	{ keys: '?', action: 'This list', group: 'Jump' }
 ];

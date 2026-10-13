@@ -79,7 +79,7 @@ export type MailAddress = {
 };
 
 /** The mailboxes the sidebar can show. Drafts/Trash are flags, not folders. */
-export type MailboxView = 'inbox' | 'starred' | 'drafts' | 'sent' | 'later' | 'trash';
+export type MailboxView = 'inbox' | 'starred' | 'drafts' | 'sent' | 'later' | 'all' | 'spam' | 'trash';
 
 export type MailboxCounts = {
 	inbox: number;
@@ -119,6 +119,8 @@ export type EmailRow = {
 	is_starred: number;
 	is_pinned: number;
 	deleted_at: string | null;
+	is_archived: number;
+	is_spam: number;
 	/** When set and in the future, the conversation is hidden from the inbox. */
 	snoozed_until: string | null;
 	created_at: string;
@@ -151,6 +153,9 @@ export type ThreadParticipant = {
 
 /** One card in a mailbox grid: a whole conversation, not a single message. */
 export type ThreadSummary = {
+	labels?: MailLabel[];
+	/** Whether every message has been archived. */
+	is_archived?: boolean;
 	thread_id: string;
 	/** Newest message in the conversation — what the card opens. */
 	latest_id: string;
@@ -176,11 +181,14 @@ export type ThreadSummary = {
 };
 
 export type MailboxFilters = {
+	labelId?: string;
 	q: string;
 	unreadOnly: boolean;
 	starredOnly: boolean;
 	attachmentsOnly: boolean;
 };
+
+export type MailLabel = { id: string; name: string };
 
 export type MailboxPage = {
 	threads: ThreadSummary[];
@@ -220,10 +228,14 @@ export type EmailAttachmentMeta = {
 	content_type: string;
 	size_bytes: number;
 	created_at: string;
+	content_id?: string | null;
+	disposition?: string | null;
 };
 
 export type OutboundAttachmentInput = {
 	filename: string;
 	type: string;
 	content: string;
+	contentId?: string;
+	disposition?: 'inline' | 'attachment';
 };

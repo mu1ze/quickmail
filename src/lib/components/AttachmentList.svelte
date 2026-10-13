@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Icon from './Icon.svelte';
+	import AttachmentPreview from './AttachmentPreview.svelte';
 	import { formatFileSize } from '$lib/utils/html';
 	import {
 		attachmentHref,
@@ -19,6 +20,8 @@
 		/** Drops the divider/spacing so it can sit inside a reply bubble. */
 		compact?: boolean;
 	} = $props();
+	let previewIndex = $state<number | null>(null);
+	let broken = $state<string[]>([]);
 </script>
 
 {#if attachments.length > 0}
@@ -29,22 +32,26 @@
 		</h2>
 
 		<div class="attachments-grid">
-			{#each attachments as file (file.id)}
+			{#each attachments as file, index (file.id)}
 				{#if isImageType(file.content_type)}
 					<figure class="attachment-image">
-						<a
-							href={attachmentHref(emailId, file.id)}
-							target="_blank"
-							rel="noopener noreferrer"
+						<button type="button"
+							onclick={() => (previewIndex = index)}
+							aria-label={`Preview ${file.filename}`}
 							class="image-link"
 						>
+							{#if broken.includes(file.id)}
+								<span class="image-fallback"><Icon name="image-line" size={28} /> Preview unavailable</span>
+							{:else}
 							<img
 								src={attachmentHref(emailId, file.id)}
 								alt={file.filename}
 								loading="lazy"
 								decoding="async"
+								onerror={() => (broken = [...broken, file.id])}
 							/>
-						</a>
+							{/if}
+						</button>
 						<figcaption class="attachment-meta">
 							<span class="filename">{file.filename}</span>
 							<span class="size">{formatFileSize(file.size_bytes)}</span>
@@ -68,15 +75,13 @@
 						</div>
 						<div class="file-actions">
 							{#if isPreviewableInline(file.content_type)}
-								<a
-									href={attachmentHref(emailId, file.id)}
-									target="_blank"
-									rel="noopener noreferrer"
+								<button type="button"
+									onclick={() => (previewIndex = index)}
 									class="action"
 								>
 									<Icon name="external-link-line" size={14} />
-									Open
-								</a>
+									Preview
+								</button>
 							{/if}
 							<a
 								href={attachmentHref(emailId, file.id, true)}
@@ -92,6 +97,10 @@
 			{/each}
 		</div>
 	</section>
+{/if}
+
+{#if previewIndex !== null}
+	<AttachmentPreview {emailId} files={attachments} index={previewIndex} onClose={() => (previewIndex = null)} />
 {/if}
 
 <style>
@@ -118,8 +127,8 @@
 	}
 
 	.attachments-grid {
-		display: flex;
-		flex-direction: column;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
 		gap: 0.75rem;
 	}
 
@@ -132,13 +141,15 @@
 
 	.image-link {
 		display: block;
+		width: 100%;
+		cursor: zoom-in;
 		background: var(--color-surface-muted);
 	}
 
 	.image-link img {
 		display: block;
 		width: 100%;
-		max-height: 20rem;
+		height: 11rem;
 		object-fit: contain;
 	}
 
@@ -222,4 +233,6 @@
 		gap: 0.75rem;
 		flex-shrink: 0;
 	}
+	.image-fallback { display: grid; justify-items: center; align-content: center; gap: 0.5rem; min-height: 11rem; color: var(--color-muted); font-size: 0.75rem; }
+	@media (max-width: 600px) { .attachment-file { flex-wrap: wrap; } .file-actions { margin-left: auto; } }
 </style>

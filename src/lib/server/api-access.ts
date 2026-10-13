@@ -142,7 +142,12 @@ export const MAIL_ACTIONS = [
 	'snooze',
 	'unsnooze',
 	'pin',
-	'unpin'
+	'unpin',
+	'archive',
+	'unarchive',
+	'spam',
+	'not-spam',
+	'inbox'
 ] as const;
 
 export type MailAction = (typeof MAIL_ACTIONS)[number];
@@ -182,6 +187,11 @@ export function authorizeMailAction(input: {
 		case 'unpin':
 		case 'snooze':
 		case 'unsnooze':
+		case 'archive':
+		case 'unarchive':
+		case 'spam':
+		case 'not-spam':
+		case 'inbox':
 			if (!input.scopes.includes('mail:read')) {
 				return { ok: false, status: 403, error: 'This API key needs mail:read.' };
 			}

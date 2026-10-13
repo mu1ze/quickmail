@@ -4,10 +4,12 @@
 	import Logo from './Logo.svelte';
 	import DomainSwitcher from './DomainSwitcher.svelte';
 	import ThemeSwitcher from './ThemeSwitcher.svelte';
-	import type { Domain, MailboxCounts } from '$lib/types';
+	import LabelManager from './LabelManager.svelte';
+	import type { Domain, MailboxCounts, MailLabel } from '$lib/types';
 
 	let {
 		counts,
+		labels = [],
 		domains,
 		activeDomainId,
 		isAdmin,
@@ -16,6 +18,7 @@
 		onLogout
 	}: {
 		counts: MailboxCounts;
+		labels?: MailLabel[];
 		domains: Domain[];
 		activeDomainId: string | null;
 		isAdmin: boolean;
@@ -35,12 +38,12 @@
 
 	const mailboxes = $derived<NavItem[]>([
 		{ href: '/inbox', icon: 'inbox-line', label: 'Inbox', badge: counts.inbox_unread },
-		...(counts.later > 0 || $page.url.pathname === '/later'
-			? [{ href: '/later', icon: 'time-line', label: 'Later', count: counts.later }]
-			: []),
-		{ href: '/drafts', icon: 'draft-line', label: 'Drafts', count: counts.drafts },
-		{ href: '/sent', icon: 'send-plane-line', label: 'Sent' },
 		{ href: '/starred', icon: 'star-line', label: 'Starred', count: counts.starred },
+		{ href: '/later', icon: 'time-line', label: 'Snoozed', count: counts.later },
+		{ href: '/sent', icon: 'send-plane-line', label: 'Sent' },
+		{ href: '/drafts', icon: 'draft-line', label: 'Drafts', count: counts.drafts },
+		{ href: '/all', icon: 'mail-line', label: 'All mail' },
+		{ href: '/spam', icon: 'spam-2-line', label: 'Spam' },
 		{ href: '/trash', icon: 'delete-bin-line', label: 'Trash', count: counts.trash }
 	]);
 
@@ -50,6 +53,7 @@
 	]);
 
 	function isActive(href: string): boolean {
+		if (href === '/all' && $page.url.searchParams.has('label')) return false;
 		return $page.url.pathname === href || $page.url.pathname.startsWith(`${href}/`);
 	}
 
@@ -86,7 +90,7 @@
 
 	<a href="/compose" class="new-message" title="New message" onclick={() => (mobileOpen = false)}>
 		<Icon name="pencil-line" size={expanded ? 16 : 18} />
-		{#if expanded}<span>New message</span>{/if}
+		{#if expanded}<span>Compose</span><kbd>C</kbd>{/if}
 	</a>
 
 	<nav class="nav">
@@ -95,6 +99,7 @@
 				href={item.href}
 				class="nav-link"
 				class:active={isActive(item.href)}
+				aria-current={isActive(item.href) ? 'page' : undefined}
 				title={expanded ? undefined : item.label}
 				onclick={() => (mobileOpen = false)}
 			>
@@ -122,12 +127,22 @@
 		</div>
 	{/if}
 
+	<div class="labels-section">
+		<LabelManager {labels} collapsed={!expanded} />
+		<nav class="nav" aria-label="Labels">
+			{#each labels as label (label.id)}
+				<a href={`/all?label=${encodeURIComponent(label.id)}`} class="nav-link" class:active={$page.url.searchParams.get('label') === label.id} aria-current={$page.url.searchParams.get('label') === label.id ? 'page' : undefined} title={label.name} onclick={() => (mobileOpen = false)}><Icon name="price-tag-3-line" size={17} />{#if expanded}<span class="nav-label">{label.name}</span>{/if}</a>
+			{/each}
+		</nav>
+	</div>
+
 	<nav class="nav nav-tools">
 		{#each tools as item (item.href)}
 			<a
 				href={item.href}
 				class="nav-link"
 				class:active={isActive(item.href)}
+				aria-current={isActive(item.href) ? 'page' : undefined}
 				title={expanded ? undefined : item.label}
 				onclick={() => (mobileOpen = false)}
 			>
@@ -165,6 +180,7 @@
 
 <style>
 	.sidebar {
+		overflow-y: auto;
 		position: relative;
 		z-index: 40;
 		display: flex;
@@ -186,14 +202,15 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 0 0.25rem 0.875rem;
+		min-height: var(--topbar-height);
+		padding: 0 0.75rem 0.75rem;
 	}
 
 	.brand {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		font-size: 0.9375rem;
+		font-size: 1.15rem;
 		font-weight: 600;
 		letter-spacing: -0.02em;
 		color: var(--color-text);
@@ -202,12 +219,13 @@
 	.new-message {
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		gap: 0.4375rem;
-		height: 2.25rem;
-		margin-bottom: 0.75rem;
-		border-radius: 9px;
-		font-size: 13px;
+		justify-content: flex-start;
+		gap: 0.7rem;
+		height: 3.25rem;
+		padding: 0 1.2rem;
+		margin-bottom: 1.25rem;
+		border-radius: 16px;
+		font-size: 14px;
 		font-weight: 500;
 		color: var(--color-on-accent);
 		background: var(--color-accent);
@@ -218,6 +236,8 @@
 	.new-message:hover {
 		background: var(--color-accent-hover);
 	}
+	.new-message kbd { margin-left: auto; font-size: 0.625rem; padding: 0.1rem 0.3rem; border: 1px solid rgba(255,255,255,0.25); border-radius: 4px; opacity: 0.65; }
+	.sidebar.collapsed .new-message { justify-content: center; padding: 0; }
 
 	.nav {
 		display: flex;
@@ -230,15 +250,16 @@
 		padding-top: 0.75rem;
 		box-shadow: inset 0 1px 0 var(--color-line);
 	}
+	.labels-section { margin-top: 1rem; }
 
 	.nav-link {
 		position: relative;
 		display: flex;
 		align-items: center;
 		gap: 0.625rem;
-		height: 2.125rem;
-		padding: 0 0.625rem;
-		border-radius: 9px;
+		height: 2.5rem;
+		padding: 0 0.875rem;
+		border-radius: 12px;
 		font-size: 13px;
 		color: var(--color-text-secondary);
 		transition: background 0.15s, color 0.15s;
@@ -273,10 +294,10 @@
 	}
 
 	.nav-link.active {
-		background: var(--color-surface);
-		color: var(--color-text);
-		font-weight: 500;
-		box-shadow: var(--mat-panel);
+		background: var(--color-accent-soft);
+		color: var(--color-accent-text);
+		font-weight: 600;
+		box-shadow: none;
 	}
 
 	button.nav-link {
@@ -394,6 +415,7 @@
 			background: var(--color-surface);
 			box-shadow: var(--mat-float);
 			transform: translateX(-110%);
+			transition: transform 0.22s cubic-bezier(0.23, 1, 0.32, 1);
 		}
 
 		.sidebar.collapsed {

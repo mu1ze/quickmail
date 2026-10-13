@@ -4,19 +4,23 @@
 		placeholder = 'name@example.com',
 		required = false,
 		id = undefined,
-		label = undefined
+		label = undefined,
+		disabled = false
 	}: {
 		value: string;
 		placeholder?: string;
 		required?: boolean;
 		id?: string;
 		label?: string;
+		disabled?: boolean;
 	} = $props();
 
 	let open = $state(false);
 	let suggestions = $state<string[]>([]);
 	let active = $state(0);
 	let timer: ReturnType<typeof setTimeout> | null = null;
+	let controller: AbortController | null = null;
+	$effect(() => () => { if (timer) clearTimeout(timer); controller?.abort(); });
 
 	function currentToken(): { prefix: string; query: string } {
 		const caret = value;
@@ -27,18 +31,24 @@
 
 	function fetchSuggestions(query: string) {
 		if (timer) clearTimeout(timer);
+		controller?.abort();
 		if (query.length < 1) {
 			suggestions = [];
 			open = false;
 			return;
 		}
 		timer = setTimeout(async () => {
-			const res = await fetch(`/api/contacts?q=${encodeURIComponent(query)}`);
-			if (!res.ok) return;
-			const body = (await res.json()) as { contacts: { address: string }[] };
-			suggestions = body.contacts.map((contact) => contact.address);
-			active = 0;
-			open = suggestions.length > 0;
+			const request = new AbortController();
+			controller = request;
+			try {
+				const res = await fetch(`/api/contacts?q=${encodeURIComponent(query)}`, { signal: request.signal });
+				if (!res.ok || request.signal.aborted) return;
+				const body = (await res.json()) as { contacts: { address: string }[] };
+				if (request.signal.aborted || currentToken().query !== query) return;
+				suggestions = body.contacts.map((contact) => contact.address);
+				active = 0;
+				open = suggestions.length > 0;
+			} catch { /* Suggestions are optional; typing and sending still work offline. */ }
 		}, 80);
 	}
 
@@ -48,6 +58,8 @@
 	}
 
 	function choose(address: string) {
+		if (timer) clearTimeout(timer);
+		controller?.abort();
 		const { prefix } = currentToken();
 		value = `${prefix}${address}, `;
 		suggestions = [];
@@ -79,6 +91,7 @@
 		{value}
 		{placeholder}
 		{required}
+		{disabled}
 		aria-label={label ?? id}
 		autocomplete="off"
 		autocapitalize="none"

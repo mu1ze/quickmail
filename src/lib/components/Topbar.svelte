@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import Icon from './Icon.svelte';
-	import { isMailboxRoute } from '$lib/shell-chrome';
+	import AdvancedSearch from './AdvancedSearch.svelte';
 	import type { MailAddress } from '$lib/types';
 
 	let {
@@ -22,10 +22,11 @@
 	} = $props();
 
 	// Search applies to whichever mailbox is open; anywhere else it lands in Inbox.
-	const searchTarget = $derived(isMailboxRoute($page.url.pathname) ? $page.url.pathname : '/inbox');
+	const searchTarget = '/all';
 
 	let query = $state('');
 	let menuOpen = $state(false);
+	let advancedOpen = $state(false);
 
 	// Keep the field in step with the URL (back button, cleared search, …).
 	$effect(() => {
@@ -57,7 +58,14 @@
 		query = '';
 		goto(searchTarget, { keepFocus: true });
 	}
+	function advancedSearch(value: string) {
+		query = value;
+		void goto(`/all${value ? `?q=${encodeURIComponent(value)}` : ''}`);
+	}
 </script>
+
+<svelte:window onkeydown={(event) => { if (event.key === 'Escape') menuOpen = false; }} />
+<AdvancedSearch bind:open={advancedOpen} {query} onSearch={advancedSearch} />
 
 <header class="topbar">
 	<button type="button" class="nav-toggle" aria-label="Open navigation" onclick={onToggleNav}>
@@ -70,7 +78,7 @@
 			type="search"
 			bind:this={searchInput}
 			bind:value={query}
-			placeholder="Search messages"
+			placeholder="Search mail"
 			aria-label="Search messages"
 			enterkeyhint="search"
 		/>
@@ -79,9 +87,11 @@
 				<Icon name="close-line" size={15} />
 			</button>
 		{/if}
+		<button type="button" class="search-options" aria-label="Show search options" title="Advanced search" onclick={() => (advancedOpen = true)}><Icon name="equalizer-line" size={19} /></button>
 	</form>
 
 	<div class="topbar-actions">
+		<a href="/settings" class="icon-btn" aria-label="Settings" title="Settings"><Icon name="settings-3-line" size={20} /></a>
 		<div class="account">
 			<button
 				type="button"
@@ -132,11 +142,11 @@
 		height: var(--topbar-height);
 		padding: 0 1rem;
 		background: var(--color-surface);
-		box-shadow: var(--shadow-header);
+		box-shadow: none;
 	}
 
 	.nav-toggle {
-		display: none;
+		display: flex;
 		align-items: center;
 		justify-content: center;
 		width: 2rem;
@@ -150,14 +160,14 @@
 		display: flex;
 		align-items: center;
 		flex: 1;
-		max-width: 34rem;
-		height: 2.25rem;
+		max-width: 42rem;
+		height: 2.875rem;
 		padding: 0 0.75rem;
-		border: 2px solid var(--color-line-strong);
-		border-radius: 10px;
+		border: 1px solid transparent;
+		border-radius: 14px;
 		background: var(--color-well);
 		color: var(--color-muted);
-		box-shadow: var(--mat-well);
+		box-shadow: none;
 		transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 	}
 
@@ -194,6 +204,8 @@
 	.search-clear:hover {
 		color: var(--color-text);
 	}
+	.search-options { display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 8px; margin-left: 0.4rem; color: var(--color-text-secondary); }
+	.search-options:hover { background: var(--color-surface-hover); }
 
 	.topbar-actions {
 		display: flex;
@@ -245,9 +257,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 1.875rem;
-		height: 1.875rem;
-		border-radius: 9px;
+		width: 2.25rem;
+		height: 2.25rem;
+		border-radius: 50%;
 		font-size: 0.625rem;
 		font-weight: 600;
 		color: var(--color-text);

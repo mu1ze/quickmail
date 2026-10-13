@@ -54,6 +54,17 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 	let affected = 0;
 
 	switch (action) {
+		case 'archive':
+		case 'unarchive':
+			affected = await setEmailFlags(db, locals.user.id, ids, { isArchived: action === 'archive' });
+			break;
+		case 'spam':
+		case 'not-spam':
+			affected = await setEmailFlags(db, locals.user.id, ids, { isSpam: action === 'spam' });
+			break;
+		case 'inbox':
+			affected = await setEmailFlags(db, locals.user.id, ids, { isArchived: false, isSpam: false, trashed: false, snoozedUntil: null });
+			break;
 		case 'read':
 			affected = await setEmailFlags(db, locals.user.id, ids, { isRead: true });
 			break;

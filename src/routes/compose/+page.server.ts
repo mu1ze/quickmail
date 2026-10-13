@@ -2,6 +2,7 @@ import type { PageServerLoad } from './$types';
 import { getDraft, getEmailForUser } from '$lib/server/mail-store';
 import { listSignatures } from '$lib/server/email-signature';
 import { buildForwardBody, withForwardPrefix } from '$lib/utils/forward';
+import { loadComposeAttachments } from '$lib/server/attachments';
 
 export const load: PageServerLoad = async ({ locals, platform, url }) => {
 	const draftId = url.searchParams.get('draft');
@@ -37,5 +38,9 @@ export const load: PageServerLoad = async ({ locals, platform, url }) => {
 
 	const signatures = locals.user && db ? await listSignatures(db, locals.user.id) : [];
 
-	return { addresses, draft, forward, signatures };
+	const bucket = platform?.env.ATTACHMENTS;
+	const attachmentSource = draft ?? source;
+	const attachments = attachmentSource && db && bucket
+		? await loadComposeAttachments(db, bucket, attachmentSource.id) : [];
+	return { addresses, draft, forward, signatures, attachments };
 };

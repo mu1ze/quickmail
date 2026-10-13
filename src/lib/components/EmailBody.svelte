@@ -6,6 +6,8 @@
 		isRichHtml
 	} from '$lib/utils/email-html';
 	import { foldQuotedHtml } from '$lib/utils/quotes';
+	import { prepareEmailHtml } from '$lib/utils/email-content';
+	import type { EmailAttachmentMeta } from '$lib/types';
 	import { browser } from '$app/environment';
 	import {
 		readRemoteContentPreference,
@@ -15,14 +17,17 @@
 
 	const STYLE_ID = '__mail-frame-style';
 
-	let { html }: { html: string } = $props();
+	let { html, emailId = '', attachments = [] }: { html: string; emailId?: string; attachments?: EmailAttachmentMeta[] } = $props();
 
 	const rich = $derived(isRichHtml(html));
 	const remote = $derived(hasRemoteContent(html));
 	let preference = $state(browser ? readRemoteContentPreference() : false);
 	let messageOptIn = $state(false);
 	const allowRemote = $derived(shouldLoadRemoteContent(preference, messageOptIn));
-	const srcdoc = $derived(buildEmailDocument(html, { rich, allowRemote }));
+	const srcdoc = $derived(browser ? buildEmailDocument(prepareEmailHtml(html, emailId, attachments), {
+		rich, allowRemote,
+		localResourceBase: `${window.location.origin}/api/mail/${encodeURIComponent(emailId)}/attachments/`
+	}) : '');
 
 	$effect(() => {
 		preference = readRemoteContentPreference();
@@ -187,7 +192,7 @@
 	.frame {
 		display: block;
 		width: 100%;
-		min-height: 12rem;
+		min-height: 1px;
 		border: 0;
 		background: transparent;
 		/* Until the first measurement lands the height is a guess; hide the jump. */
@@ -198,4 +203,6 @@
 		opacity: 1;
 		transition: opacity 0.12s;
 	}
+	.frame.rich { background: #fff; border-radius: 0.5rem; }
+	@media (max-width: 600px) { .remote-notice { align-items: flex-start; flex-direction: column; } }
 </style>

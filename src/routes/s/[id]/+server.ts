@@ -23,7 +23,7 @@ export const GET: RequestHandler = async ({ params, platform }) => {
 		throw error(404, 'Not found');
 	}
 
-	return new Response(body, {
+	return new Response(await object.arrayBuffer(), {
 		headers: {
 			'Content-Type': asset.content_type,
 			'Content-Length': String(asset.byte_size),

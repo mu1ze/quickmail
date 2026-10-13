@@ -42,8 +42,8 @@
 		border-radius: 8px;
 		font-weight: 600;
 		font-size: 0.75rem;
-		color: var(--color-accent-text);
-		background: var(--color-accent-soft);
+		color: var(--color-surface);
+		background: color-mix(in srgb, var(--color-surface) 15%, transparent);
 	}
 
 	@media (max-width: 900px) {

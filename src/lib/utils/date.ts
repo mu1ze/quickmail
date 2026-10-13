@@ -1,6 +1,8 @@
-export function formatRelativeDate(value: string): string {
-	const date = new Date(value);
-	const now = new Date();
+import { fromSqliteDatetime } from '$lib/snooze';
+
+export function formatRelativeDate(value: string, now = new Date()): string {
+	const date = fromSqliteDatetime(value);
+	if (Number.isNaN(date.getTime())) return '';
 	const diffMs = now.getTime() - date.getTime();
 	const diffMins = Math.floor(diffMs / 60_000);
 	const diffHours = Math.floor(diffMs / 3_600_000);
@@ -14,11 +16,13 @@ export function formatRelativeDate(value: string): string {
 	if (diffDays < 7) {
 		return date.toLocaleDateString([], { weekday: 'short' });
 	}
-	return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+	return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: date.getFullYear() === now.getFullYear() ? undefined : 'numeric' });
 }
 
 export function formatFullDate(value: string): string {
-	return new Date(value).toLocaleString([], {
+	const date = fromSqliteDatetime(value);
+	if (Number.isNaN(date.getTime())) return '';
+	return date.toLocaleString([], {
 		weekday: 'short',
 		month: 'short',
 		day: 'numeric',

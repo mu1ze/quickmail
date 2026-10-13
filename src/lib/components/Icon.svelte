@@ -10,4 +10,4 @@
 	} = $props();
 </script>
 
-<i class="ri-{name} {className}" style="font-size: {size}px; line-height: 1;"></i>
+<i class="ri-{name} {className}" style="font-size: {size}px; line-height: 1;" aria-hidden="true"></i>

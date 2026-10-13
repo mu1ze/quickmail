@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { ProviderError } from '../email-provider';
 import { createResendProvider } from './resend-provider';
+import type { MailAddress } from '$lib/types';
 
 type ResendDomain = {
 	id: string;
@@ -72,6 +73,14 @@ function json(body: unknown, status = 200): Response {
 }
 
 describe('resend provider resolveDomain', () => {
+	test('keeps content IDs when forwarding an embedded image', async () => {
+		mockResend({});
+		let payload: { attachments?: { content_id?: string }[] } = {};
+		fetchImpl = async (_url, init) => { payload = JSON.parse(String(init?.body)); return json({ id: 'forward-1' }); };
+		await createResendProvider('re_test').send({ from: { address: 'me@example.com' } as MailAddress, senderName: 'Me', to: 'you@example.com', subject: 'Forward', text: 'Photo',
+			attachments: [{ filename: 'photo.png', type: 'image/png', content: 'aGVsbG8=', contentId: 'photo@sender' }] });
+		assert.equal(payload.attachments?.[0]?.content_id, 'photo@sender');
+	});
 	test('fetches by provider id', async () => {
 		mockResend({ get: { [existing.id]: existing } });
 		const domain = await createResendProvider('re_test').resolveDomain(existing.id);

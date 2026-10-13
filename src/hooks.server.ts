@@ -51,7 +51,9 @@ const CONTENT_SECURITY_POLICY = [
 ].join('; ');
 
 function secureResponse(response: Response): Response {
-	response.headers.set('Content-Security-Policy', CONTENT_SECURITY_POLICY);
+	if (!response.headers.has('Content-Security-Policy')) {
+		response.headers.set('Content-Security-Policy', CONTENT_SECURITY_POLICY);
+	}
 	response.headers.set('X-Content-Type-Options', 'nosniff');
 	response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
 	response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');

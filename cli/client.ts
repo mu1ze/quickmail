@@ -18,7 +18,7 @@ export class QuickMailError extends Error {
 	}
 }
 
-export type MailboxView = 'inbox' | 'starred' | 'drafts' | 'sent' | 'later' | 'trash';
+export type MailboxView = 'inbox' | 'starred' | 'drafts' | 'sent' | 'later' | 'all' | 'spam' | 'trash';
 
 export type ThreadSummary = {
 	thread_id: string;

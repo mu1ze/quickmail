@@ -6,7 +6,7 @@ describe('mailbox layout preference', () => {
 	test('only list and cards are valid', () => {
 		assert.equal(parseMailboxLayout('list'), 'list');
 		assert.equal(parseMailboxLayout('cards'), 'cards');
-		assert.equal(parseMailboxLayout(null), 'cards');
-		assert.equal(parseMailboxLayout('grid'), 'cards');
+		assert.equal(parseMailboxLayout(null), 'list');
+		assert.equal(parseMailboxLayout('grid'), 'list');
 	});
 });

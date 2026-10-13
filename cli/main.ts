@@ -19,7 +19,7 @@ Usage:
 Mail:
   quickmail inbox [--page N] [--unread] [--domain ID]
   quickmail later [--page N]
-  quickmail search <query> [--view inbox|sent|drafts|starred|later|trash]
+  quickmail search <query> [--view inbox|sent|drafts|starred|later|all|spam|trash]
   quickmail read <thread-or-message-id>
   quickmail send --to <addr> --subject <text> [--cc <addr>] [--bcc <addr>] [--body <text>] [--from <address-id>]
   quickmail reply <id> [--body <text>]
@@ -166,12 +166,14 @@ function mailboxView(value: string | undefined): MailboxView {
 		case 'drafts':
 		case 'sent':
 		case 'later':
+		case 'all':
+		case 'spam':
 		case 'trash':
 			return value;
 		case undefined:
 			return 'inbox';
 		default:
-			throw new Error('view must be inbox, sent, drafts, starred, later, or trash');
+			throw new Error('view must be inbox, sent, drafts, starred, later, all, spam, or trash');
 	}
 }
 

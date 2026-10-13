@@ -1,6 +1,7 @@
 import type { LayoutServerLoad } from './$types';
 import { getMailboxCounts } from '$lib/server/mail-store';
 import type { MailboxCounts } from '$lib/types';
+import { listMailLabels } from '$lib/server/mail-labels';
 
 const EMPTY_COUNTS: MailboxCounts = {
 	inbox: 0,
@@ -22,6 +23,7 @@ export const load: LayoutServerLoad = async ({ locals, platform }) => {
 			: EMPTY_COUNTS;
 
 	return {
+		labels: db && locals.user ? await listMailLabels(db, locals.user.id) : [],
 		user: locals.user,
 		domains: locals.domains,
 		addresses: locals.addresses,

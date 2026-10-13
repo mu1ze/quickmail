@@ -7,7 +7,7 @@ export const DELETE: RequestHandler = async ({ params, locals, platform }) => {
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}
 
-	await deleteDraft(db, locals.user.id, params.id!);
+	await deleteDraft(db, locals.user.id, params.id!, platform?.env.ATTACHMENTS);
 
 	return json({ ok: true });
 };

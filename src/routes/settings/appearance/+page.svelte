@@ -2,6 +2,7 @@
 	import HubShell from '$lib/components/hub/HubShell.svelte';
 	import GroupedPanel from '$lib/components/hub/GroupedPanel.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import { readMailboxLayout, setMailboxLayout, watchMailboxLayout, readMailboxDensity, setMailboxDensity, watchMailboxDensity, type MailboxLayout, type MailboxDensity } from '$lib/mailbox-layout';
 	import {
 		readThemePreference,
 		setThemePreference,
@@ -17,6 +18,14 @@
 
 	let theme = $state<ThemePreference>('system');
 	let loadRemote = $state(false);
+	let layout = $state<MailboxLayout>('list');
+	let density = $state<MailboxDensity>('comfortable');
+	$effect(() => {
+		layout = readMailboxLayout(); density = readMailboxDensity();
+		const stopLayout = watchMailboxLayout((next) => { layout = next; });
+		const stopDensity = watchMailboxDensity((next) => { density = next; });
+		return () => { stopLayout(); stopDensity(); };
+	});
 	$effect(() => {
 		theme = readThemePreference();
 		loadRemote = readRemoteContentPreference();
@@ -96,9 +105,20 @@
 			/>
 		</label>
 	</GroupedPanel>
+	<GroupedPanel hint="Mailbox layout on this device. Phone layouts stay optimized for touch.">
+		<div class="layout-settings">
+			<div><h2>Mailbox layout</h2><div class="choices" role="group" aria-label="Mailbox layout">{#each ['list', 'cards'] as option}<button type="button" class:chosen={layout === option} aria-pressed={layout === option} onclick={() => setMailboxLayout(option as MailboxLayout)}>{option === 'list' ? 'List' : 'Cards'}</button>{/each}</div></div>
+			<div><h2>List density</h2><div class="choices" role="group" aria-label="List density">{#each ['comfortable', 'compact'] as option}<button type="button" class:chosen={density === option} aria-pressed={density === option} onclick={() => setMailboxDensity(option as MailboxDensity)}>{option === 'comfortable' ? 'Comfortable' : 'Compact'}</button>{/each}</div></div>
+		</div>
+	</GroupedPanel>
 </HubShell>
 
 <style>
+	.layout-settings { display: flex; flex-wrap: wrap; gap: 1.5rem 2.5rem; }
+	.layout-settings h2 { font-size: 0.875rem; font-weight: 500; margin-bottom: 0.6rem; }
+	.choices { display: flex; padding: 0.25rem; background: var(--color-well); border-radius: 10px; }
+	.choices button { padding: 0.5rem 0.8rem; color: var(--color-text-secondary); border-radius: 7px; font-size: 0.8125rem; }
+	.choices button.chosen { background: var(--color-surface); color: var(--color-accent-text); box-shadow: var(--shadow-xs); }
 	.theme-options {
 		display: grid;
 		grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -32,6 +32,8 @@ function mailboxView(url: URL): MailboxView {
 		case 'sent':
 		case 'later':
 		case 'trash':
+		case 'all':
+		case 'spam':
 			return view;
 		default:
 			break;
@@ -56,6 +58,7 @@ export const GET: RequestHandler = async ({ locals, platform, url }) => {
 	}
 
 	const mailbox = await listMailbox(db, locals.user.id, {
+		labelId: url.searchParams.get('label') ?? undefined,
 		view: mailboxView(url),
 		domainId: locals.activeDomainId,
 		q: url.searchParams.get('q'),
@@ -77,7 +80,7 @@ export const POST: RequestHandler = async ({ request, locals, platform, url }) =
 
 	const body = (await request.json()) as SendMailBody;
 
-	if (!body.to?.trim() || !body.subject?.trim() || (!body.text?.trim() && !body.html?.trim())) {
+	if (!body.to?.trim() || !body.subject?.trim() || (!body.text?.trim() && !body.html?.trim() && !body.attachments?.length)) {
 		return json({ error: 'To, subject, and message are required' }, { status: 400 });
 	}
 
@@ -102,7 +105,7 @@ export const POST: RequestHandler = async ({ request, locals, platform, url }) =
 		);
 
 		if (body.draftId) {
-			await deleteDraft(db, locals.user.id, body.draftId);
+		await deleteDraft(db, locals.user.id, body.draftId, bucket);
 		}
 
 		return json({ ok: true, id: emailId });
