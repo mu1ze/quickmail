@@ -56,7 +56,7 @@ export async function insertAttachmentBytes(
 	db: D1Database,
 	bucket: R2Bucket,
 	emailId: string,
-	input: { filename: string; type: string; bytes: Uint8Array }
+	input: { filename: string; type: string; bytes: Uint8Array; contentId?: string | null; disposition?: string | null }
 ): Promise<void> {
 	if (input.bytes.byteLength > MAX_ATTACHMENT_BYTES) {
 		const limitMb = MAX_ATTACHMENT_BYTES / (1024 * 1024);
@@ -74,10 +74,11 @@ export async function insertAttachmentBytes(
 	await db
 		.prepare(
 			`INSERT INTO email_attachments (
-				id, email_id, filename, content_type, size_bytes, content_base64, storage_key
-			) VALUES (?, ?, ?, ?, ?, ?, ?)`
+				id, email_id, filename, content_type, size_bytes, content_base64, storage_key, content_id, disposition
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 		)
-		.bind(id, emailId, input.filename, input.type, input.bytes.byteLength, '', storageKey)
+		.bind(id, emailId, input.filename, input.type, input.bytes.byteLength, '', storageKey,
+			input.contentId ?? null, input.disposition ?? null)
 		.run();
 }
 
@@ -87,7 +88,7 @@ export async function listAttachments(
 ): Promise<EmailAttachmentMeta[]> {
 	const { results } = await db
 		.prepare(
-			`SELECT id, email_id, filename, content_type, size_bytes, created_at
+			`SELECT id, email_id, filename, content_type, size_bytes, created_at, content_id, disposition
 			 FROM email_attachments
 			 WHERE email_id = ?
 			 ORDER BY created_at ASC`

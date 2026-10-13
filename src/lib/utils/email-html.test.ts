@@ -22,7 +22,24 @@ describe('received email remote content', () => {
 			rich: true,
 			allowRemote: true
 		});
-		assert.doesNotMatch(document, /Content-Security-Policy/);
+		assert.match(document, /Content-Security-Policy/);
+		assert.match(document, /img-src data: blob: https: http:/);
+		assert.match(document, /script-src 'none'/);
+	});
+
+	test('allows stored media only from this message while blocking remote images', () => {
+		const document = buildEmailDocument('<img src="cid:photo">', {
+			rich: false, localResourceBase: 'https://mail.example/api/mail/123/attachments/'
+		});
+		assert.match(document, /img-src data: blob: https:\/\/mail.example\/api\/mail\/123\/attachments\//);
+		assert.doesNotMatch(document, /blob: https: http:/);
+	});
+
+	test('rejects a resource base that could inject CSP directives', () => {
+		const document = buildEmailDocument('<p>Hello</p>', {
+			rich: false, localResourceBase: "https://mail.example/; script-src *"
+		});
+		assert.doesNotMatch(document, /script-src \*/);
 	});
 
 	test('places the blocking policy before a complete document', () => {

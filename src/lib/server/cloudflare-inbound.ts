@@ -114,6 +114,8 @@ async function storeInboundAttachments(
 			await insertAttachmentBytes(env.DB, env.ATTACHMENTS, emailId, {
 				filename: attachment.filename || 'attachment',
 				type: attachment.mimeType || 'application/octet-stream',
+				contentId: attachment.contentId,
+				disposition: attachment.disposition,
 				bytes
 			});
 		} catch (error) {

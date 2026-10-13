@@ -1,7 +1,14 @@
 import { stripQuotedText } from './quotes';
 
 function decodeEntities(value: string): string {
+	const decodeCodePoint = (code: number) => Number.isInteger(code) && code >= 0 && code <= 0x10ffff &&
+		!(code >= 0xd800 && code <= 0xdfff) ? String.fromCodePoint(code) : '\uFFFD';
 	return value
+		.replace(/&(?:zwnj|zwj|shy|ZeroWidthSpace);/gi, '')
+		.replace(/&(?:ndash|mdash);/gi, '—')
+		.replace(/&(?:lsquo|rsquo);/gi, "'")
+		.replace(/&(?:ldquo|rdquo);/gi, '"')
+		.replace(/&hellip;/gi, '…')
 		.replace(/&nbsp;/gi, ' ')
 		.replace(/&amp;/gi, '&')
 		.replace(/&lt;/gi, '<')
@@ -10,11 +17,11 @@ function decodeEntities(value: string): string {
 		.replace(/&#39;|&apos;/gi, "'")
 		.replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
 			const code = Number.parseInt(hex, 16);
-			return Number.isFinite(code) ? String.fromCharCode(code) : '';
+			return decodeCodePoint(code);
 		})
 		.replace(/&#(\d+);/g, (_, code) => {
 			const number = Number(code);
-			return Number.isFinite(number) ? String.fromCharCode(number) : '';
+			return decodeCodePoint(number);
 		});
 }
 
@@ -44,7 +51,10 @@ function tidyHtmlPreviewText(value: string): string {
 		.replace(/https?:\/\/[^\s)]+/gi, ' ')
 		.replace(/\(\s*\)/g, ' ')
 		.replace(/[<>]/g, ' ')
-		.replace(/\s+/g, ' ')
+		.replace(/[\u200b-\u200d\ufeff\u00ad]/g, '')
+		.replace(/[^\S\n]+/g, ' ')
+		.replace(/ *\n */g, '\n')
+		.replace(/\n+/g, '\n')
 		.trim();
 }
 
@@ -57,7 +67,7 @@ function isLeftoverMarkup(text: string): boolean {
 }
 
 /** Turn a stored HTML fragment into readable words for a mailbox snippet. */
-export function htmlToPreviewText(html: string): string {
+function previewHtmlLines(html: string): string {
 	const text = html
 		.replace(new RegExp(`<style\\b[^>]*>[\\s\\S]*?(?:</style>|${BEFORE_BODY})`, 'gi'), ' ')
 		.replace(new RegExp(`<script\\b[^>]*>[\\s\\S]*?(?:</script>|${BEFORE_BODY})`, 'gi'), ' ')
@@ -76,11 +86,21 @@ export function htmlToPreviewText(html: string): string {
 	return tidyHtmlPreviewText(decoded);
 }
 
+export function htmlToPreviewText(html: string): string {
+	return previewHtmlLines(html).replace(/\s+/g, ' ').trim();
+}
+
 /** Newest message's own words — quoted history and markup are dropped. */
 export function buildMessagePreview(bodyHead: string | null | undefined): string {
 	if (!bodyHead) return '';
 	const html = looksLikeHtml(bodyHead);
-	const source = html ? htmlToPreviewText(bodyHead) : bodyHead;
+	let body = bodyHead;
+	if (html) {
+		// Cut quoted HTML before whitespace normalization erases line boundaries.
+		const boundary = /<blockquote\b|<[^>]+(?:class\s*=\s*["'][^"']*(?:gmail_quote|yahoo_quoted)|id\s*=\s*["']?(?:appendonsend|divRplyFwdMsg))/i.exec(body);
+		if (boundary && htmlToPreviewText(body.slice(0, boundary.index))) body = body.slice(0, boundary.index);
+	}
+	const source = html ? previewHtmlLines(body) : body;
 	const text = stripQuotedText(source).replace(/\s+/g, ' ').trim().slice(0, 220);
 	if (html && isLeftoverMarkup(text)) return '';
 	return text;

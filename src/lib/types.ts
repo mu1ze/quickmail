@@ -220,6 +220,8 @@ export type EmailAttachmentMeta = {
 	content_type: string;
 	size_bytes: number;
 	created_at: string;
+	content_id?: string | null;
+	disposition?: string | null;
 };
 
 export type OutboundAttachmentInput = {

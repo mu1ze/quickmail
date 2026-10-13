@@ -1,7 +1,7 @@
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
 import type { DeliveryStatus } from '$lib/types';
 import { insertAttachmentBytes } from './attachments';
-import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_EMAIL, MAX_BODY_BYTES } from './constants';
+import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_EMAIL } from './constants';
 import { collectInboundRecipients, parseEmailAddress } from './email-address';
 import { recordUnroutedEmail, resolveInboundRoute } from './domains';
 import { emailExistsByProviderId, insertEmail, updateEmailStatusByProviderId } from './mail-store';
@@ -83,13 +83,7 @@ async function handleInboundEmail(
 	}
 
 	// Webhooks carry metadata only — the body and attachments come from the API.
-	let received = await client.getReceivedEmail(providerId, 'data_uri');
-
-	// Inline images inflate data-URI HTML past what we store; fall back to `cid`
-	// so the body stays intact and the images remain as attachments.
-	if ((received.html?.length ?? 0) > MAX_BODY_BYTES) {
-		received = await client.getReceivedEmail(providerId, 'cid');
-	}
+	const received = await client.getReceivedEmail(providerId, 'cid');
 
 	const recipients = collectInboundRecipients({
 		received_for: (event.data?.received_for as string[] | undefined) ?? received.received_for,
@@ -174,6 +168,8 @@ async function storeInboundAttachments(
 			await insertAttachmentBytes(env.DB, env.ATTACHMENTS, emailId, {
 				filename: attachment.filename || 'attachment',
 				type: attachment.content_type || 'application/octet-stream',
+				contentId: attachment.content_id,
+				disposition: attachment.content_disposition,
 				bytes
 			});
 		} catch (error) {

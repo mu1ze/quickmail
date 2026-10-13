@@ -3,6 +3,18 @@ import { describe, test } from 'node:test';
 import { buildMessagePreview, htmlToPreviewText, looksLikeHtml } from './message-preview';
 
 describe('message previews', () => {
+	test('reads content after long stylesheets instead of truncating the HTML first', () => {
+		assert.equal(buildMessagePreview(`<html><head><style>${'.layout{color:red}'.repeat(400)}</style></head><body>Your flight is confirmed.</body></html>`), 'Your flight is confirmed.');
+	});
+	test('removes quoted HTML and attribution before flattening lines', () => {
+		assert.equal(buildMessagePreview('<p>Sounds good.</p><p>On Tuesday, someone wrote:</p><blockquote>Old message</blockquote>'), 'Sounds good.');
+	});
+	test('decodes emoji entities without truncating Unicode code points', () => {
+		assert.equal(buildMessagePreview('<p>Confirmed &#x1F44D; &#128640;</p>'), 'Confirmed 👍 🚀');
+	});
+	test('invalid Unicode entities cannot crash mailbox rendering', () => {
+		assert.equal(buildMessagePreview('<p>Hello &#999999999;</p>'), 'Hello �');
+	});
 	test('plain text is collapsed to a single readable line', () => {
 		assert.equal(buildMessagePreview('Hello\n\nthere.'), 'Hello there.');
 	});

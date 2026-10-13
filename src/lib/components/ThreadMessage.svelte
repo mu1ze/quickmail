@@ -5,6 +5,7 @@
 	import EmailBody from './EmailBody.svelte';
 	import { formatFullDate, formatRelativeDate } from '$lib/utils/date';
 	import { splitQuotedText } from '$lib/utils/quotes';
+	import { buildMessagePreview } from '$lib/utils/message-preview';
 	import type { ThreadMessage } from '$lib/types';
 
 	let {
@@ -25,7 +26,7 @@
 	const text = $derived(splitQuotedText(message.body_text ?? ''));
 
 	/** One-line teaser for the collapsed state — the reply, not its quotes. */
-	const snippet = $derived(text.body.replace(/\s+/g, ' ').trim().slice(0, 140));
+	const snippet = $derived(buildMessagePreview(message.body_text?.trim() || message.body_html).slice(0, 140));
 
 	let quoteOpen = $state(false);
 </script>
@@ -57,7 +58,7 @@
 		<div class="body mail-body">
 			{#if message.body_html}
 				{#key message.id}
-					<EmailBody html={message.body_html} />
+					<EmailBody html={message.body_html} emailId={message.id} attachments={message.attachments} />
 				{/key}
 			{:else if text.body}
 				<p class="whitespace-pre-wrap">{text.body}</p>
@@ -163,6 +164,7 @@
 	}
 
 	.route {
+		overflow-wrap: anywhere;
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.125rem 0.75rem;
@@ -180,6 +182,8 @@
 	}
 
 	.body {
+		min-width: 0;
+		overflow-wrap: anywhere;
 		margin-top: 1rem;
 		font-size: 0.9375rem;
 	}
@@ -217,7 +221,7 @@
 	}
 
 	.summary .name {
-		flex-shrink: 0;
+		max-width: 35%;
 		font-size: 0.875rem;
 		color: var(--color-text-secondary);
 	}

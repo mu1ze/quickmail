@@ -71,6 +71,8 @@ html, body { height: auto !important; }
 html { overflow-x: auto; overflow-y: hidden; background: transparent; }
 html:not([data-theme='dark']) { color-scheme: light; }
 body {
+	display: flow-root;
+	min-height: 0 !important;
 	margin: 0;
 	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 	font-size: 15px;
@@ -82,6 +84,9 @@ p { margin: 0 0 1em; }
 ul { list-style: disc outside; margin: 0.5em 0; padding-left: 1.5em; }
 ol { list-style: decimal outside; margin: 0.5em 0; padding-left: 1.5em; }
 pre { white-space: pre-wrap; }
+img, video, svg { max-width: 100% !important; height: auto; }
+audio { max-width: 100%; }
+table { max-width: 100% !important; }
 .quote-toggle {
 	display: inline-flex;
 	align-items: center;
@@ -135,7 +140,8 @@ blockquote { border-color: rgba(0, 0, 0, 0.12) !important; }
  * its contents flip.
  */
 const RICH_CSS = `
-body { color: #18181b; background: transparent; padding: 0; }
+:root { color-scheme: light !important; background: #fff; }
+body { color: #18181b; background: #fff; padding: 0; }
 a { color: #1a56db; }
 .quote-toggle { color: #52525b; background: #f0f0f0; }
 .quote-toggle:hover { background: #e6e6e6; }
@@ -144,10 +150,6 @@ a { color: #1a56db; }
 export function emailCss(rich: boolean): string {
 	return BASE_CSS + (rich ? RICH_CSS : SIMPLE_CSS);
 }
-
-const BLOCK_REMOTE_CSP =
-	"default-src 'none'; img-src data: blob:; media-src data: blob:; style-src 'unsafe-inline'; " +
-	"font-src data:; form-action 'none'; object-src 'none'; base-uri 'none'";
 
 export function hasRemoteContent(html: string): boolean {
 	return (
@@ -158,8 +160,15 @@ export function hasRemoteContent(html: string): boolean {
 	);
 }
 
-function remoteContentPolicy(): string {
-	return `<meta http-equiv="Content-Security-Policy" content="${BLOCK_REMOTE_CSP}">`;
+function remoteContentPolicy(allowRemote: boolean, localResourceBase?: string): string {
+	// Only this message's attachment endpoint may load without remote opt-in.
+	const local = localResourceBase && /^https?:\/\/[^\s"'<>;]+\/api\/mail\/[^/]+\/attachments\/$/.test(localResourceBase)
+		? ` ${localResourceBase}` : '';
+	const remote = allowRemote ? ' https: http:' : '';
+	const policy = `default-src 'none'; img-src data: blob:${local}${remote}; media-src data: blob:${local}${remote}; ` +
+		`style-src 'unsafe-inline'; font-src data:; script-src 'none'; frame-src 'none'; ` +
+		`form-action 'none'; object-src 'none'; base-uri 'none'`;
+	return `<meta http-equiv="Content-Security-Policy" content="${policy}">`;
 }
 
 /** Senders differ on whether the HTML part is a fragment or a whole document. */
@@ -169,16 +178,21 @@ function isFullDocument(html: string): boolean {
 
 export function buildEmailDocument(
 	html: string,
-	options: { rich: boolean; allowRemote?: boolean }
+	options: { rich: boolean; allowRemote?: boolean; localResourceBase?: string }
 ): string {
-	const policy = options.allowRemote ? '' : remoteContentPolicy();
+	const policy = remoteContentPolicy(Boolean(options.allowRemote), options.localResourceBase);
 	// A complete document is left as the sender wrote it — nesting it inside
 	// another one drops its <head>, and with it any <style> the layout needs.
 	// Its stylesheet is added after load instead. Prefixing a meta policy causes
 	// the HTML parser to create the document head around it before it encounters
 	// any sender-controlled markup or remote resource.
 	if (isFullDocument(html)) {
-		return `${policy}${html}`;
+		// Insert into the actual head so browsers enforce the policy on full documents.
+		const head = /<head\b[^>]*>/i;
+		if (head.test(html)) return html.replace(head, (match) => `${match}${policy}<style>${emailCss(options.rich)}</style>`);
+		return html.replace(/<(html|body)\b[^>]*>/i, (match, tag: string) =>
+			tag.toLowerCase() === 'html' ? `${match}<head>${policy}<style>${emailCss(options.rich)}</style></head>`
+				: `<head>${policy}<style>${emailCss(options.rich)}</style></head>${match}`);
 	}
 
 	// `base target=_blank` keeps links from trying to navigate the app, which the

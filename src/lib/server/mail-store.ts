@@ -286,7 +286,7 @@ export async function listMailbox(
 			`SELECT m.id, COALESCE(m.thread_id, m.id) AS thread_id, m.direction, m.from_addr, m.to_addr,
 			        m.subject, m.is_read, m.is_starred, m.is_pinned, m.created_at, m.domain_id, m.status, m.snoozed_until,
 			        m.auto_trashed_at,
-			        substr(COALESCE(NULLIF(trim(m.body_text), ''), m.body_html, ''), 1, 4000) AS body_head,
+			        COALESCE(NULLIF(trim(m.body_text), ''), m.body_html, '') AS body_head,
 			        EXISTS(SELECT 1 FROM email_attachments a WHERE a.email_id = m.id) AS has_attachments
 			 FROM emails m
 			 WHERE m.user_id = ? AND COALESCE(m.thread_id, m.id) IN (${placeholders}) AND ${display}
@@ -397,7 +397,7 @@ export async function listEmails(
 		.prepare(
 			`SELECT e.id, e.direction, e.from_addr, e.to_addr, e.subject, e.is_read, e.is_starred,
 			        e.created_at, e.domain_id, e.status,
-			        substr(COALESCE(NULLIF(trim(e.body_text), ''), e.body_html, ''), 1, 4000) AS body_head,
+			        COALESCE(NULLIF(trim(e.body_text), ''), e.body_html, '') AS body_head,
 			        EXISTS(SELECT 1 FROM email_attachments a WHERE a.email_id = e.id) AS has_attachments
 			 FROM emails e
 			 WHERE ${where}
@@ -800,7 +800,7 @@ export async function listThreadMessages(
 	const placeholders = results.map(() => '?').join(', ');
 	const { results: files } = await db
 		.prepare(
-			`SELECT id, email_id, filename, content_type, size_bytes, created_at
+			`SELECT id, email_id, filename, content_type, size_bytes, created_at, content_id, disposition
 			 FROM email_attachments
 			 WHERE email_id IN (${placeholders})
 			 ORDER BY created_at ASC`
