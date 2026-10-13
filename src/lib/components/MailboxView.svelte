@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
+	import { mailboxContextMenu, rowMenuPosition } from '$lib/actions/mailbox-context-menu';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page as currentPage } from '$app/stores';
 	import Icon from './Icon.svelte';
@@ -184,6 +185,15 @@
 		rowMenuFor = rowMenuFor === id ? null : id;
 	}
 
+	function openRowMenu(id: string, index: number) {
+		moreOpen = false;
+		selectMenuOpen = false;
+		bulkSnoozeOpen = false;
+		snoozeFor = null;
+		focused = index;
+		rowMenuFor = id;
+	}
+
 	function submitSearch(event: SubmitEvent) {
 		event.preventDefault();
 		searchOpen = false;
@@ -286,7 +296,12 @@
 	function onListKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
 			if (document.querySelector('dialog[open]')) return;
-			moreOpen = false; selectMenuOpen = false; rowMenuFor = null; snoozeFor = null; bulkSnoozeOpen = false; selected = []; selectMode = false; selectionAnchor = null; return;
+			const menuId = rowMenuFor;
+			moreOpen = false; selectMenuOpen = false; rowMenuFor = null; snoozeFor = null; bulkSnoozeOpen = false;
+			if (menuId) {
+				void tick().then(() => document.querySelector<HTMLAnchorElement>(`a.card-link[data-message-id="${menuId}"]`)?.focus({ preventScroll: true }));
+			} else { selected = []; selectMode = false; selectionAnchor = null; }
+			return;
 		}
 		if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return;
 		if (event.key === 'Enter' && event.target instanceof Element && event.target.closest('button, a:not(.card-link)')) return;
@@ -751,6 +766,8 @@
 						class:focused={index === focused}
 						class:pinned={thread.is_pinned}
 						class:select-mode={selectMode}
+						class:menu-open={rowMenuFor === thread.latest_id}
+						use:mailboxContextMenu={() => openRowMenu(thread.latest_id, index)}
 					>
 						<span class="ios-unread-dot" class:visible={!thread.is_read} aria-hidden="true"></span>
 
@@ -765,6 +782,7 @@
 
 						<a
 							class="card-link"
+							data-message-id={thread.latest_id}
 							href={href(thread)}
 							onfocus={() => (focused = index)}
 							onclick={(event) => {
@@ -867,13 +885,14 @@
 										snoozeFor = null;
 									}}
 								></button>
+								<div class="row-options" data-overlay="" use:rowMenuPosition>
 								{#if snoozeFor === thread.latest_id}
 									<SnoozeMenu
 										onPick={(until) => snoozeIds([thread.latest_id], until)}
 										onClose={() => (snoozeFor = null)}
 									/>
 								{:else}
-									<div class="menu menu-right" role="menu">
+									<div class="menu menu-right" role="menu" aria-label="Conversation options">
 										<LabelPicker {labels} ids={[thread.latest_id]} existing={[thread.labels ?? []]} disabled={busy} caption="Labels…" />
 										{#if view === 'spam' || view === 'all' || view === 'later'}
 											<button type="button" class="menu-item" disabled={busy} onclick={() => run('inbox', [thread.latest_id])}><Icon name="inbox-line" size={16} />Move to inbox</button>
@@ -969,6 +988,7 @@
 										{/if}
 									</div>
 								{/if}
+								</div>
 							{/if}
 						</div>
 					</li>
@@ -1059,6 +1079,10 @@
 	.tag-draft { color: var(--color-danger); }
 	.tag-label { max-width: 5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--color-accent-soft); color: var(--color-accent-text); }
 	.card-actions { position: absolute; right: 0.5rem; top: 0.7rem; display: flex; align-items: center; border-radius: 9px; }
+	.row-options { position: fixed; z-index: 46; width: 14rem; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; border: 1px solid var(--color-line); border-radius: 12px; background: var(--color-surface); box-shadow: var(--mat-float); }
+	.card-actions .row-options :global(.menu) { position: static; min-width: 0; width: 100%; border: 0; box-shadow: none; }
+	.card-link { -webkit-touch-callout: none; }
+	@media (pointer: coarse) { .card-link { -webkit-user-select: none; user-select: none; } }
 	.row-quick-actions { display: flex; opacity: 0; pointer-events: none; background: var(--color-surface-hover); border-radius: 9px; }
 	.card:hover .row-quick-actions, .card:focus-within .row-quick-actions { opacity: 1; pointer-events: auto; }
 	.list-foot { display: flex; justify-content: flex-end; padding: 0.5rem 1.5rem 1rem; font-size: 0.75rem; color: var(--color-text-secondary); }
@@ -1078,7 +1102,7 @@
 	.cards.layout-list .preview { display: block; white-space: nowrap; text-overflow: ellipsis; grid-column: 3; grid-row: 1; }
 	.cards.layout-list .card-meta { grid-column: 4; grid-row: 1; }
 	.cards.layout-list .date { grid-column: 5; grid-row: 1; text-align: right; }
-	.cards.layout-list .card-actions { top: 50%; transform: translateY(-50%); right: 0.5rem; }
+	.cards.layout-list .card-actions { top: 50%; margin-top: -1.0625rem; right: 0.5rem; }
 	.cards.layout-list .card-actions > .tool-btn { background: var(--color-well); }
 	.cards.layout-list .unread .card-actions > .tool-btn { background: var(--color-surface); }
 	.card:hover .card-actions > .tool-btn { background: var(--color-surface-hover); }
@@ -1127,7 +1151,7 @@
 		.preview, .cards.layout-list .preview { display: -webkit-box; white-space: normal; font-size: 0.8125rem; line-height: 1.45; }
 		.card-meta { font-size: 0.75rem; }
 		.cards.layout-list .date { text-align: right; font-size: 0.6875rem; }
-		.card-actions, .cards.layout-list .card-actions { position: relative; top: auto; right: auto; transform: none; grid-column: 2; }
+		.card-actions, .cards.layout-list .card-actions { position: relative; top: auto; right: auto; margin-top: 0; grid-column: 2; }
 		.card-actions > .tool-btn { background: transparent !important; width: 2rem; height: 2.75rem; }
 		.card-actions .menu { position: fixed; top: auto; bottom: calc(var(--mobile-dock-height) + env(safe-area-inset-bottom) + 1rem); left: 1rem; right: 1rem; max-height: 60dvh; overflow-y: auto; }
 		.ios-unread-dot { display: block; position: absolute; left: 0.3rem; top: 1.8rem; width: 0.35rem; height: 0.35rem; border-radius: 50%; }
@@ -1135,7 +1159,7 @@
 		.ios-select-toggle { display: flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; }
 		.ios-select-circle { display: flex; align-items: center; justify-content: center; width: 1.375rem; height: 1.375rem; border: 2px solid var(--color-line-strong); border-radius: 50%; }
 		.ios-select-circle.checked { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-on-accent); }
-		.card.select-mode .card-actions { display: none; }
+		.card.select-mode:not(.menu-open) .card-actions { display: none; }
 		.list-foot { justify-content: center; padding-bottom: 0.5rem; }
 		.mobile-pager { display: flex; }
 		.mobile-pager a { display: flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; }
