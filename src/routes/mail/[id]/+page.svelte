@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
+	import { untrack } from 'svelte';
+	import { requireOk, requestError } from '$lib/utils/request';
 	import Icon from '$lib/components/Icon.svelte';
 	import RichTextEditor from '$lib/components/RichTextEditor.svelte';
 	import AttachmentPicker from '$lib/components/AttachmentPicker.svelte';
@@ -28,6 +30,9 @@
 	let replyCc = $state('');
 	let replyBcc = $state('');
 	let sending = $state(false);
+	let actionBusy = $state(false);
+	let attachmentBusy = $state(false);
+	let picker = $state<{ addFiles: (files: File[]) => Promise<void> } | null>(null);
 	let error = $state('');
 	let snoozeOpen = $state(false);
 	let selectedSignatureId = $state('');
@@ -51,8 +56,9 @@
 	const starred = $derived(messages.some((message) => message.is_starred));
 	const pinned = $derived(messages.some((message) => message.is_pinned));
 
+	const returnTo = $derived($page.url.searchParams.get('return'));
 	const backHref = $derived(
-		data.trashed ? '/trash' : data.snoozedUntil ? '/later' : latest?.direction === 'outbound' ? '/sent' : '/inbox'
+		returnTo && /^\/(?:inbox|starred|sent|later|trash)(?:\?|$)/.test(returnTo) ? returnTo : data.trashed ? '/trash' : data.snoozedUntil ? '/later' : latest?.direction === 'outbound' ? '/sent' : '/inbox'
 	);
 
 	/**
@@ -61,8 +67,10 @@
 	 */
 	let opened = $state(new Set<string>());
 
+	let previousThread = '';
 	$effect(() => {
-		const initial = new Set<string>();
+		const initial = data.threadId === previousThread ? untrack(() => new Set(opened)) : new Set<string>();
+		previousThread = data.threadId;
 		if (data.focusId) initial.add(data.focusId);
 		const last = data.messages[data.messages.length - 1];
 		if (last) initial.add(last.id);
@@ -71,7 +79,7 @@
 
 	function toggleMessage(id: string) {
 		const next = new Set(opened);
-		if (next.has(id) && next.size > 1) next.delete(id);
+		if (next.has(id)) next.delete(id);
 		else next.add(id);
 		opened = next;
 	}
@@ -82,79 +90,72 @@
 
 	const collapsedCount = $derived(messages.filter((message) => !opened.has(message.id)).length);
 
-	/** Flags apply to the conversation, not to the message that opened it. */
+	/** Keep the reader in place when a server action fails. */
+	async function act(operation: () => Promise<void>) {
+		if (actionBusy) return;
+		actionBusy = true;
+		error = '';
+		try { await operation(); }
+		catch (cause) { error = requestError(cause); }
+		finally { actionBusy = false; }
+	}
+
 	async function patch(id: string, body: Record<string, unknown>) {
-		await fetch(`/api/mail/${id}`, {
-			method: 'PATCH',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(body)
+		const response = await fetch(`/api/mail/${id}`, {
+			method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+		});
+		await requireOk(response);
+	}
+
+	function toggleStar() {
+		return act(async () => { if (!latest) return; await patch(latest.id, { isStarred: !starred }); await invalidateAll(); });
+	}
+	function togglePin() {
+		return act(async () => { if (!latest) return; await patch(latest.id, { isPinned: !pinned }); await invalidateAll(); });
+	}
+	function forwardLatest() { if (latest) void goto(`/compose?forward=${latest.id}`); }
+	function markUnread() {
+		return act(async () => { if (!latest) return; await patch(latest.id, { isRead: false }); await goto(backHref); });
+	}
+	function trash() {
+		return act(async () => {
+			const id = latest?.id; if (!id) return;
+			const dest = backHref;
+			await patch(id, { trashed: true });
+			showUndo('Moved to trash', async () => { await patch(id, { trashed: false }); await invalidateAll(); });
+			await goto(dest);
+		});
+	}
+	function restore() {
+		return act(async () => { if (!latest) return; await patch(latest.id, { trashed: false }); await goto('/inbox'); });
+	}
+	function destroy() {
+		return act(async () => {
+			if (!latest) return;
+			await requireOk(await fetch(`/api/mail/${latest.id}`, { method: 'DELETE' }));
+			await goto('/trash');
+		});
+	}
+	function snooze(until: string) {
+		return act(async () => {
+			const id = latest?.id; if (!id) return;
+			snoozeOpen = false;
+			await patch(id, { snoozedUntil: until });
+			showUndo('Snoozed until later', async () => { await patch(id, { snoozedUntil: null }); await invalidateAll(); });
+			await goto('/inbox');
+		});
+	}
+	function unsnooze() {
+		return act(async () => {
+			const id = latest?.id; const until = data.snoozedUntil; if (!id) return;
+			await patch(id, { snoozedUntil: null });
+			showUndo('Moved to inbox', async () => { if (until) await patch(id, { snoozedUntil: until }); await invalidateAll(); });
+			await goto('/inbox');
 		});
 	}
 
-	async function toggleStar() {
-		if (!latest) return;
-		await patch(latest.id, { isStarred: !starred });
-		await invalidateAll();
-	}
-
-	async function togglePin() {
-		if (!latest) return;
-		await patch(latest.id, { isPinned: !pinned });
-		await invalidateAll();
-	}
-
-	function forwardLatest() {
-		if (!latest) return;
-		void goto(`/compose?forward=${latest.id}`);
-	}
-
-	async function markUnread() {
-		if (!latest) return;
-		await patch(latest.id, { isRead: false });
-		goto(backHref);
-	}
-
-	async function trash() {
-		const id = latest?.id;
-		if (!id) return;
-		const dest = backHref;
-		await patch(id, { trashed: true });
-		showUndo('Moved to trash', () => patch(id, { trashed: false }));
-		goto(dest);
-	}
-
-	async function restore() {
-		if (!latest) return;
-		await patch(latest.id, { trashed: false });
-		goto('/inbox');
-	}
-
-	async function destroy() {
-		if (!latest) return;
-		await fetch(`/api/mail/${latest.id}`, { method: 'DELETE' });
-		goto('/trash');
-	}
-
-	async function snooze(until: string) {
-		const id = latest?.id;
-		if (!id) return;
-		snoozeOpen = false;
-		await patch(id, { snoozedUntil: until });
-		showUndo('Snoozed until later', () => patch(id, { snoozedUntil: null }));
-		goto('/inbox');
-	}
-
-	async function unsnooze() {
-		const id = latest?.id;
-		const until = data.snoozedUntil;
-		if (!id) return;
-		await patch(id, { snoozedUntil: null });
-		showUndo('Moved to inbox', () => (until ? patch(id, { snoozedUntil: until }) : Promise.resolve()));
-		goto('/inbox');
-	}
-
 	function seedReply(mode: ReplyRecipientMode) {
-		if (!latest) return;
+		if (!latest || sending) return;
 		const recipients = buildReplyRecipients({
 			direction: latest.direction,
 			from: latest.from_addr,
@@ -177,7 +178,7 @@
 	}
 
 	function queueReply() {
-		if (!latest || isHtmlEmpty(replyHtml) || sending) return;
+		if (!latest || (isHtmlEmpty(replyHtml) && replyAttachments.length === 0) || sending || attachmentBusy) return;
 		if (!replyTo.trim()) {
 			error = 'Add at least one recipient';
 			return;
@@ -188,6 +189,7 @@
 		const to = replyTo;
 		const cc = replyCc;
 		const bcc = replyBcc;
+		const signatureId = selectedSignatureId;
 		sending = true;
 		error = '';
 		queueMailSend({
@@ -202,8 +204,8 @@
 						html,
 						text: htmlToPlainText(html),
 						attachments,
-						signatureId: data.signatures.length ? selectedSignatureId || null : undefined,
-						includeSignature: Boolean(selectedSignatureId)
+						signatureId: data.signatures.length ? signatureId || null : undefined,
+						includeSignature: Boolean(signatureId)
 					})
 				});
 				const body = await res.json();
@@ -227,13 +229,13 @@
 	}
 
 	function onThreadKeydown(event: KeyboardEvent) {
-		if (isTypingTarget(event.target) || document.querySelector('[data-overlay]')) return;
+		if (document.querySelector('[data-overlay]') || event.defaultPrevented) return;
 		if (isMod(event) && event.key === 'Enter') {
 			event.preventDefault();
 			if (replyOpen) queueReply();
 			return;
 		}
-		if (event.metaKey || event.ctrlKey || event.altKey) return;
+		if (isTypingTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
 		if (event.key === 'r') {
 			event.preventDefault();
 			seedReply('reply');
@@ -289,7 +291,7 @@
 			<Icon name="arrow-left-line" size={18} />
 		</a>
 
-		<div class="toolbar-actions">
+		<div class="toolbar-actions" aria-busy={actionBusy}>
 			<button
 				type="button"
 				class="icon-btn"
@@ -378,6 +380,7 @@
 	</header>
 
 	<div class="mail-reading">
+		{#if error}<p class="reply-status" role="alert">{error}</p>{/if}
 		<div class="subject-row">
 			<h1>{data.subject}</h1>
 			{#if messages.length > 1}
@@ -406,15 +409,15 @@
 				<div class="reply-fields">
 					<div class="field-row">
 						<span class="field-label">To</span>
-						<RecipientField id="reply-to" label="To" bind:value={replyTo} required placeholder="Add recipients" />
+						<RecipientField id="reply-to" label="To" bind:value={replyTo} required placeholder="Add recipients" disabled={sending} />
 					</div>
 					<div class="field-row">
 						<span class="field-label">Cc</span>
-						<RecipientField id="reply-cc" label="Cc" bind:value={replyCc} placeholder="People who should see this" />
+						<RecipientField id="reply-cc" label="Cc" bind:value={replyCc} placeholder="People who should see this" disabled={sending} />
 					</div>
 					<div class="field-row">
 						<span class="field-label">Bcc</span>
-						<RecipientField id="reply-bcc" label="Bcc" bind:value={replyBcc} placeholder="Hidden copies" />
+						<RecipientField id="reply-bcc" label="Bcc" bind:value={replyBcc} placeholder="Hidden copies" disabled={sending} />
 					</div>
 				</div>
 				{#if data.replyFrom}
@@ -426,7 +429,7 @@
 					</p>
 				{/if}
 
-				<RichTextEditor bind:html={replyHtml} embedded minHeight={160} placeholder="Reply…" />
+				<RichTextEditor bind:html={replyHtml} embedded minHeight={160} placeholder="Reply…" disabled={sending} onFiles={(files) => picker?.addFiles(files)} />
 
 				{#if selectedSignatureId && compiledReplySignature.html}
 					<div class="signature-preview">
@@ -435,7 +438,7 @@
 				{/if}
 
 				<div class="reply-footer">
-					<AttachmentPicker bind:attachments={replyAttachments} />
+					<AttachmentPicker bind:this={picker} bind:attachments={replyAttachments} bind:busy={attachmentBusy} disabled={sending} />
 					<div class="reply-actions">
 						{#if data.signatures.length > 0}
 							<SignaturePicker
@@ -443,21 +446,19 @@
 								signatures={data.signatures}
 								noneLabel="No signature"
 								compact
+								disabled={sending}
 							/>
 						{/if}
-						<button type="button" class="btn-ghost" onclick={() => (replyOpen = false)}>
+						<button type="button" class="btn-ghost" disabled={sending} onclick={() => (replyOpen = false)}>
 							Cancel
 						</button>
-						<button type="submit" class="btn-primary" disabled={sending}>
+						<button type="submit" class="btn-primary" disabled={sending || attachmentBusy || (isHtmlEmpty(replyHtml) && replyAttachments.length === 0)}>
 							<Icon name="send-plane-2-fill" size={16} />
 							{sending ? 'Sending…' : 'Send'}
 						</button>
 					</div>
 				</div>
 
-				{#if error}
-					<p class="reply-status">{error}</p>
-				{/if}
 			</form>
 		{:else}
 			<button type="button" class="reply-prompt" onclick={() => seedReply('reply')}>
@@ -469,6 +470,7 @@
 </div>
 
 <style>
+	.toolbar-actions[aria-busy="true"] { opacity: 0.6; }
 	.mail-page {
 		display: flex;
 		flex-direction: column;

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page as currentPage } from '$app/stores';
 	import Icon from './Icon.svelte';
@@ -15,6 +16,7 @@
 	import { onSearchFocus } from '$lib/search-focus';
 	import { handleMailboxRowClick, toggleSelection } from '$lib/mailbox-select';
 	import { threadHeadline } from '$lib/mailbox-people';
+	import { requireOk, requestError } from '$lib/utils/request';
 	import {
 		readMailboxLayout,
 		setMailboxLayout,
@@ -59,6 +61,7 @@
 	let items = $state<ThreadSummary[]>([]);
 	let selected = $state<string[]>([]);
 	let busy = $state(false);
+	let actionError = $state('');
 	let filterOpen = $state(false);
 	let moreOpen = $state(false);
 	let selectMenuOpen = $state(false);
@@ -115,11 +118,11 @@
 
 	$effect(() => {
 		items = mailbox.threads;
-		selected = [];
+		selected = untrack(() => selected.filter((id) => mailbox.threads.some((row) => row.latest_id === id)));
 		snoozeFor = null;
 		rowMenuFor = null;
 		bulkSnoozeOpen = false;
-		if (focused >= mailbox.threads.length) focused = Math.max(0, mailbox.threads.length - 1);
+		focused = untrack(() => Math.max(0, Math.min(focused, mailbox.threads.length - 1)));
 	});
 
 	const allSelected = $derived(items.length > 0 && selected.length === items.length);
@@ -181,7 +184,8 @@
 
 	/** Cards carry the newest message; opening one opens the whole conversation. */
 	function href(thread: ThreadSummary): string {
-		return thread.is_draft ? `/compose?draft=${thread.latest_id}` : `/mail/${thread.latest_id}`;
+		const returnTo = encodeURIComponent($currentPage.url.pathname + $currentPage.url.search);
+		return thread.is_draft ? `/compose?draft=${thread.latest_id}` : `/mail/${thread.latest_id}?return=${returnTo}`;
 	}
 
 	function toggle(id: string) {
@@ -205,13 +209,15 @@
 	) {
 		if (busy) return;
 		busy = true;
+		actionError = '';
 		const target = ids;
 		try {
-			await fetch('/api/mail/actions', {
+			const response = await fetch('/api/mail/actions', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ action, ids: target, ...extra })
 			});
+			await requireOk(response);
 			selected = [];
 			snoozeFor = null;
 			rowMenuFor = null;
@@ -226,6 +232,8 @@
 				showUndo('Snoozed until later', () => revert('unsnooze', target));
 			}
 			await invalidateAll();
+		} catch (cause) {
+			actionError = requestError(cause);
 		} finally {
 			busy = false;
 			moreOpen = false;
@@ -233,11 +241,12 @@
 	}
 
 	async function revert(action: string, ids: string[]) {
-		await fetch('/api/mail/actions', {
+		const response = await fetch('/api/mail/actions', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ action, ids })
 		});
+		await requireOk(response);
 		await invalidateAll();
 	}
 
@@ -248,6 +257,8 @@
 	}
 
 	function onListKeydown(event: KeyboardEvent) {
+		if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return;
+		if (event.key === 'Enter' && event.target instanceof Element && event.target.closest('button, a:not(.card-link)')) return;
 		if (
 			isTypingTarget(event.target) ||
 			isGoChordArmed() ||
@@ -293,7 +304,7 @@
 		if (key === 'e' || key === '#') {
 			event.preventDefault();
 			const ids = focusedIds();
-			if (view === 'trash') void run('delete', ids);
+			if (view === 'trash') actionError = 'Use Delete forever in the actions menu to permanently delete a conversation.';
 			else void run('trash', ids);
 			return;
 		}
@@ -333,33 +344,51 @@
 	}
 
 	async function toggleStar(thread: ThreadSummary) {
+		if (busy) return;
+		busy = true;
+		actionError = '';
 		const isStarred = !thread.is_starred;
 		rowMenuFor = null;
 		items = items.map((row) =>
 			row.thread_id === thread.thread_id ? { ...row, is_starred: isStarred } : row
 		);
 
-		await fetch(`/api/mail/${thread.latest_id}`, {
-			method: 'PATCH',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ isStarred })
-		});
-		await invalidateAll();
+		try {
+			const response = await fetch(`/api/mail/${thread.latest_id}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ isStarred })
+			});
+			await requireOk(response);
+			await invalidateAll();
+		} catch (cause) {
+			items = items.map((row) => row.thread_id === thread.thread_id ? { ...row, is_starred: thread.is_starred } : row);
+			actionError = requestError(cause);
+		} finally { busy = false; }
 	}
 
 	async function togglePin(thread: ThreadSummary) {
+		if (busy) return;
+		busy = true;
+		actionError = '';
 		const isPinned = !thread.is_pinned;
 		rowMenuFor = null;
 		items = items.map((row) =>
 			row.thread_id === thread.thread_id ? { ...row, is_pinned: isPinned } : row
 		);
 
-		await fetch(`/api/mail/${thread.latest_id}`, {
-			method: 'PATCH',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ isPinned })
-		});
-		await invalidateAll();
+		try {
+			const response = await fetch(`/api/mail/${thread.latest_id}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ isPinned })
+			});
+			await requireOk(response);
+			await invalidateAll();
+		} catch (cause) {
+			items = items.map((row) => row.thread_id === thread.thread_id ? { ...row, is_pinned: thread.is_pinned } : row);
+			actionError = requestError(cause);
+		} finally { busy = false; }
 	}
 
 	function chooseLayout(next: MailboxLayout) {
@@ -393,16 +422,21 @@
 	);
 	const rangeEnd = $derived(Math.min(mailbox.page * mailbox.pageSize, mailbox.total));
 
-	/** Two cards on a phone, three on a wider mailbox. */
+	/** Match keyboard movement to the columns actually displayed. */
 	function cardColumns(): number {
 		if (typeof window === 'undefined') return 3;
-		return window.matchMedia('(max-width: 900px)').matches ? 2 : 3;
+		const grid = document.querySelector('.cards');
+		if (!grid) return 1;
+		const columns = getComputedStyle(grid).gridTemplateColumns;
+		return columns === 'none' ? 1 : columns.split(' ').length;
 	}
 
 	function moveFocus(delta: number) {
 		focused = Math.max(0, Math.min(items.length - 1, focused + delta));
 		queueMicrotask(() => {
-			document.querySelector<HTMLElement>('.card.focused')?.scrollIntoView({
+			const card = document.querySelector<HTMLElement>('.card.focused');
+			card?.querySelector<HTMLAnchorElement>('.card-link')?.focus({ preventScroll: true });
+			card?.scrollIntoView({
 				block: 'nearest',
 				inline: 'nearest'
 			});
@@ -413,6 +447,9 @@
 <svelte:window onkeydown={onListKeydown} />
 
 <section class="mailbox">
+	{#if actionError}
+		<div class="action-error" role="alert"><span>{actionError}</span><button type="button" aria-label="Dismiss error" onclick={() => (actionError = '')}><Icon name="close-line" size={18} /></button></div>
+	{/if}
 	<header class="ios-header">
 		<button type="button" class="ios-back" aria-label="Open menu" onclick={() => shell?.openNav()}>
 			<Icon name="arrow-left-s-line" size={22} />
@@ -875,6 +912,9 @@
 				<a
 					class="pager-btn"
 					class:disabled={mailbox.page <= 1}
+					aria-disabled={mailbox.page <= 1}
+					tabindex={mailbox.page <= 1 ? -1 : 0}
+					onclick={(event) => { if (mailbox.page <= 1) event.preventDefault(); }}
 					href={withParams({ page: mailbox.page - 1 })}
 					aria-label="Previous page"
 				>
@@ -884,6 +924,9 @@
 				<a
 					class="pager-btn"
 					class:disabled={mailbox.page >= mailbox.pageCount}
+					aria-disabled={mailbox.page >= mailbox.pageCount}
+					tabindex={mailbox.page >= mailbox.pageCount ? -1 : 0}
+					onclick={(event) => { if (mailbox.page >= mailbox.pageCount) event.preventDefault(); }}
 					href={withParams({ page: mailbox.page + 1 })}
 					aria-label="Next page"
 				>
@@ -905,8 +948,11 @@
 		{#if items.length === 0}
 			<EmptyState
 				icon={filters.q ? 'search-line' : meta.icon}
-				title={filters.q ? 'No messages match that search' : meta.empty}
+				title={filters.q ? 'No messages match that search' : activeFilterCount ? 'No conversations match these filters' : meta.empty}
 			/>
+			{#if filters.q || activeFilterCount}
+				<div class="empty-actions"><a class="btn-ghost" href={withParams({ q: null, unread: null, starred: null, attachments: null })}>Clear filters</a></div>
+			{/if}
 		{:else}
 			<ul class="cards" class:layout-list={layout === 'list'} class:ios-list={true}>
 				{#each items as thread, index (thread.thread_id)}
@@ -933,6 +979,7 @@
 						<a
 							class="card-link"
 							href={href(thread)}
+							onfocus={() => (focused = index)}
 							onclick={(event) => {
 								if (handleMailboxRowClick(selectMode, () => event.preventDefault()) === 'toggle') {
 									toggle(thread.latest_id);
@@ -962,7 +1009,7 @@
 
 								<span class="subject">{thread.subject || '(no subject)'}</span>
 								<span class="preview">
-									{thread.preview || 'No preview'}
+									{thread.preview || (thread.has_attachments ? 'Attached files' : 'No message text')}
 								</span>
 
 								<span class="card-meta">
@@ -1130,6 +1177,8 @@
 </section>
 
 <style>
+	.empty-actions { display: flex; justify-content: center; margin-top: -2rem; margin-bottom: 2rem; }
+	.action-error { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 0.75rem 1rem; padding: 0.75rem 1rem; border: 1px solid var(--color-line); border-radius: 0.625rem; color: var(--color-danger); background: var(--color-surface); font-size: 0.8125rem; }
 	.mailbox {
 		display: flex;
 		flex-direction: column;

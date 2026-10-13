@@ -115,7 +115,7 @@ export const POST: RequestHandler = async ({ params, request, locals, platform, 
 	}
 
 	const body = (await request.json()) as ReplyBody;
-	if (!body.text?.trim() && !body.html?.trim()) {
+	if (!body.text?.trim() && !body.html?.trim() && !body.attachments?.length) {
 		return json({ error: 'Message body is required' }, { status: 400 });
 	}
 

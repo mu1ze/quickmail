@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { requestError } from './utils/request';
 
 export type UndoToast = {
 	message: string;
@@ -33,5 +34,8 @@ export function dismissUndo(): void {
 export async function runUndo(): Promise<void> {
 	const undo = currentUndo;
 	dismissUndo();
-	if (undo) await undo();
+	if (undo) {
+		try { await undo(); }
+		catch (cause) { showUndo(requestError(cause)); }
+	}
 }

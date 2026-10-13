@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Icon from './Icon.svelte';
+	import PdfPreview from './PdfPreview.svelte';
 	import { attachmentHref, attachmentPreviewKind } from '$lib/utils/attachments';
 	import { formatFileSize } from '$lib/utils/html';
 	import type { EmailAttachmentMeta } from '$lib/types';
@@ -11,6 +12,12 @@
 	let text = $state('');
 	let loading = $state(true);
 	let error = $state('');
+	let zoom = $state(1);
+	let imageWidth = $state(0);
+	let imageHeight = $state(0);
+	let areaWidth = $state(0);
+	let areaHeight = $state(0);
+	const fit = $derived(Math.max(0.01, Math.min(1, (areaWidth - 32) / (imageWidth || 1), (areaHeight - 32) / (imageHeight || 1))));
 	const file = $derived(files[index]);
 	const kind = $derived(attachmentPreviewKind(file?.content_type ?? ''));
 	const source = $derived(file ? attachmentHref(emailId, file.id) : '');
@@ -22,6 +29,9 @@
 		loading = true;
 		error = '';
 		text = '';
+		zoom = 1;
+		imageWidth = 0;
+		imageHeight = 0;
 		if (kind === 'text') {
 			// Source files are displayed as text, never interpreted as page HTML.
 			void fetch(href, { signal: controller.signal, headers: { Range: 'bytes=0-262143' } })
@@ -33,7 +43,7 @@
 				.catch((cause) => {
 					if (!controller.signal.aborted) { error = cause.message; loading = false; }
 				});
-		} else if (!kind || kind === 'audio') loading = false;
+		} else if (!kind || kind === 'audio' || kind === 'pdf') loading = false;
 		return () => controller.abort();
 	});
 	function move(delta: number) { index = (index + delta + files.length) % files.length; }
@@ -43,6 +53,12 @@
 		if (event.key === 'ArrowRight') { event.preventDefault(); move(1); }
 	}
 	function failed() { loading = false; error = 'Preview unavailable. You can still download this file.'; }
+	function imageLoaded(event: Event) {
+		const image = event.currentTarget as HTMLImageElement;
+		imageWidth = image.naturalWidth;
+		imageHeight = image.naturalHeight;
+		loading = false;
+	}
 </script>
 
 <dialog bind:this={dialog} class="preview-dialog" data-overlay aria-labelledby="attachment-preview-title"
@@ -62,12 +78,16 @@
 					<Icon name="close-line" size={22} />
 				</button>
 			</header>
-			<div class="preview-content" aria-busy={loading}>
+			<div class="preview-content" class:preview-image={kind === 'image'} aria-busy={loading} bind:clientWidth={areaWidth} bind:clientHeight={areaHeight}>
 				{#if loading}<p class="preview-status" role="status">Loading preview…</p>{/if}
 				{#if error}<p class="preview-status" role="alert">{error}</p>{/if}
 				{#key source}
 					{#if kind === 'image'}
-						<img src={source} alt={file.filename} onload={() => (loading = false)} onerror={failed} />
+						<div class="image-stage" style:width={`${Math.max(areaWidth, imageWidth * fit * zoom + 32)}px`} style:height={`${Math.max(areaHeight, imageHeight * fit * zoom + 32)}px`}>
+							<img src={source} alt={file.filename} onload={imageLoaded} onerror={failed}
+								style:width={imageWidth ? `${imageWidth * fit * zoom}px` : undefined}
+								style:height={imageHeight ? `${imageHeight * fit * zoom}px` : undefined} />
+						</div>
 					{:else if kind === 'video'}
 						<video src={source} controls playsinline preload="metadata" onloadedmetadata={() => (loading = false)} onerror={failed}>
 							<track kind="captions" />
@@ -77,7 +97,7 @@
 							<audio src={source} controls preload="metadata" onerror={failed}></audio>
 						</div>
 					{:else if kind === 'pdf'}
-						<iframe src={source} title={`Preview of ${file.filename}`} onload={() => (loading = false)}></iframe>
+						<PdfPreview {source} filename={file.filename} />
 					{:else if kind === 'text'}
 						<pre>{text}</pre>
 					{:else}
@@ -89,7 +109,13 @@
 				<button type="button" class="preview-button" disabled={files.length < 2} onclick={() => move(-1)} aria-label="Previous attachment">
 					<Icon name="arrow-left-s-line" size={20} /> Previous
 				</button>
-				<span>{kind === 'text' && file.size_bytes > 262144 ? 'Showing the first 256 KB' : 'Use ← → to browse · Esc to close'}</span>
+				{#if kind === 'image'}
+					<div class="zoom-controls">
+						<button type="button" class="preview-button" aria-label="Zoom out" disabled={zoom <= 1} onclick={() => (zoom = Math.max(1, zoom - 0.5))}><Icon name="subtract-line" size={16} /></button>
+						<button type="button" class="preview-button" aria-label="Fit image" onclick={() => (zoom = 1)}>{zoom === 1 ? 'Fit' : `${Math.round(zoom * 100)}%`}</button>
+						<button type="button" class="preview-button" aria-label="Zoom in" disabled={zoom >= 4} onclick={() => (zoom = Math.min(4, zoom + 0.5))}><Icon name="add-line" size={16} /></button>
+					</div>
+				{:else}<span>{kind === 'text' && file.size_bytes > 262144 ? 'Showing the first 256 KB' : 'Use ← → to browse · Esc to close'}</span>{/if}
 				<button type="button" class="preview-button" disabled={files.length < 2} onclick={() => move(1)} aria-label="Next attachment">
 					Next <Icon name="arrow-right-s-line" size={20} />
 				</button>
@@ -112,11 +138,14 @@
 	.preview-button:disabled { opacity: 0.4; cursor: default; }
 	.preview-content { position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 18rem; height: min(65dvh, 680px); overflow: auto; background: var(--color-surface-muted); }
 	.preview-content img, video { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
-	.preview-content iframe { width: 100%; height: 100%; flex: 1; border: 0; background: white; }
-	.preview-status { padding: 1rem; text-align: center; }
+	.preview-status { position: absolute; inset: 0; z-index: 1; display: grid; align-content: center; padding: 1rem; text-align: center; background: var(--color-surface-muted); pointer-events: none; }
 	pre { align-self: stretch; margin: 0; padding: 1.5rem; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.8125rem; }
 	.audio-preview { display: grid; justify-items: center; gap: 2rem; padding: 1rem; width: 100%; }
 	audio { width: min(100%, 28rem); }
 	footer { justify-content: space-between; border-top: 1px solid var(--color-line); }
+	.zoom-controls { display: flex; gap: 0.25rem; }
+	.preview-content.preview-image { display: block; }
+	.image-stage { display: grid; place-items: center; padding: 1rem; }
+	.image-stage img { max-width: none; max-height: none; }
 	@media (max-width: 600px) { .preview-dialog { width: calc(100vw - 1rem); } header { gap: 0.25rem; padding: 0.75rem; } header a span, footer span { display: none; } footer { padding: 0.5rem; } }
 </style>

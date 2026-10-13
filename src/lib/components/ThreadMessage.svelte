@@ -3,6 +3,7 @@
 	import AttachmentList from './AttachmentList.svelte';
 	import DeliveryStatus from './DeliveryStatus.svelte';
 	import EmailBody from './EmailBody.svelte';
+	import PlainTextBody from './PlainTextBody.svelte';
 	import { formatFullDate, formatRelativeDate } from '$lib/utils/date';
 	import { splitQuotedText } from '$lib/utils/quotes';
 	import { buildMessagePreview } from '$lib/utils/message-preview';
@@ -29,6 +30,7 @@
 	const snippet = $derived(buildMessagePreview(message.body_text?.trim() || message.body_html).slice(0, 140));
 
 	let quoteOpen = $state(false);
+	let plain = $state(false);
 </script>
 
 <article class="message" class:collapsed={!expanded}>
@@ -36,7 +38,7 @@
 		<header class="head">
 			<div class="avatar" class:self={outbound}>{outbound ? 'me' : initial}</div>
 
-			<button type="button" class="who" onclick={onToggle}>
+			<button type="button" class="who" onclick={onToggle} aria-expanded={expanded} aria-label={`Collapse message from ${sender}`}>
 				<p class="name">{sender}</p>
 				<p class="route">
 					<span>to {message.to_addr}</span>
@@ -54,14 +56,17 @@
 				<DeliveryStatus status={message.status} detail={message.status_detail} />
 			{/if}
 		</header>
+		{#if message.body_html && message.body_text?.trim()}
+			<button type="button" class="content-mode" aria-pressed={plain} onclick={() => (plain = !plain)}>{plain ? 'View formatted message' : 'View plain text'}</button>
+		{/if}
 
 		<div class="body mail-body">
-			{#if message.body_html}
+			{#if message.body_html && !plain}
 				{#key message.id}
 					<EmailBody html={message.body_html} emailId={message.id} attachments={message.attachments} />
 				{/key}
 			{:else if text.body}
-				<p class="whitespace-pre-wrap">{text.body}</p>
+				<PlainTextBody text={text.body} />
 				{#if text.quoted}
 					<button
 						type="button"
@@ -73,7 +78,7 @@
 						···
 					</button>
 					{#if quoteOpen}
-						<p class="whitespace-pre-wrap quoted">{text.quoted}</p>
+						<div class="quoted"><PlainTextBody text={text.quoted} /></div>
 					{/if}
 				{/if}
 			{:else}
@@ -90,7 +95,7 @@
 			</p>
 		{/if}
 	{:else}
-		<button type="button" class="summary" onclick={onToggle}>
+		<button type="button" class="summary" onclick={onToggle} aria-expanded={expanded} aria-label={`Expand message from ${sender}`}>
 			<span class="avatar small" class:self={outbound}>{outbound ? 'me' : initial}</span>
 			<span class="name">{sender}</span>
 			<span class="snippet">{snippet}</span>
@@ -103,6 +108,7 @@
 </article>
 
 <style>
+	.content-mode { margin-top: 0.75rem; color: var(--color-muted); font-size: 0.75rem; text-decoration: underline; text-underline-offset: 2px; }
 	.message {
 		padding: 1.25rem 0;
 		box-shadow: inset 0 -1px 0 var(--color-line);

@@ -394,6 +394,7 @@
 			background: var(--color-surface);
 			box-shadow: var(--mat-float);
 			transform: translateX(-110%);
+			transition: transform 0.22s cubic-bezier(0.23, 1, 0.32, 1);
 		}
 
 		.sidebar.collapsed {
