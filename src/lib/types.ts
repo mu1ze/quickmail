@@ -146,6 +146,8 @@ export type EmailSummary = {
 /** Who took part in a conversation, in the order they first appear. */
 export type ThreadParticipant = {
 	label: string;
+	/** Display name supplied in an inbound From header, when available. */
+	name?: string | null;
 	address: string;
 	/** True for messages this user sent — rendered as "me". */
 	self: boolean;

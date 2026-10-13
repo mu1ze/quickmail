@@ -17,7 +17,7 @@
 	import { getShellContext } from '$lib/shell-context';
 	import { onSearchFocus } from '$lib/search-focus';
 	import { handleMailboxRowClick, toggleSelection } from '$lib/mailbox-select';
-	import { threadHeadline } from '$lib/mailbox-people';
+	import { participantName, threadHeadline } from '$lib/mailbox-people';
 	import { requireOk, requestError } from '$lib/utils/request';
 	import {
 		readMailboxLayout,
@@ -143,7 +143,7 @@
 
 	/**
 	 * Who to show on the card. Sent and Drafts are about where a message went;
-	 * everywhere else names the senders. Always the email, not a guessed name.
+	 * everywhere else names the senders, with the address as a fallback.
 	 */
 	function people(thread: ThreadSummary): string {
 		return threadHeadline(thread, view);
@@ -151,7 +151,8 @@
 
 	function initial(thread: ThreadSummary): string {
 		const external = thread.participants.find((participant) => !participant.self);
-		return ((external ?? thread.participants[0])?.address[0] ?? '?').toUpperCase();
+		const participant = external ?? thread.participants[0];
+		return (participant ? participantName(participant)[0] : '?')?.toUpperCase() || '?';
 	}
 
 	function avatarSeed(thread: ThreadSummary): string {

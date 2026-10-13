@@ -35,6 +35,7 @@ export async function insertEmail(
 		userId: string;
 		direction: 'inbound' | 'outbound';
 		from: string;
+		fromName?: string | null;
 		to: string;
 		cc?: string | null;
 		bcc?: string | null;
@@ -72,17 +73,18 @@ export async function insertEmail(
 	await db
 		.prepare(
 			`INSERT INTO emails (
-				id, user_id, direction, from_addr, to_addr, cc_addr, bcc_addr, subject,
+				id, user_id, direction, from_addr, from_name, to_addr, cc_addr, bcc_addr, subject,
 				body_text, body_html, message_id, in_reply_to, references_header,
 				reply_to_email_id, thread_id, thread_key,
 				domain_id, provider_id, status, status_at, is_read
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)`
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)`
 		)
 		.bind(
 			id,
 			input.userId,
 			input.direction,
 			input.from,
+			input.fromName?.trim() || null,
 			input.to,
 			input.cc ?? null,
 			input.bcc ?? null,
@@ -197,6 +199,7 @@ type ThreadMessageRow = {
 	thread_id: string;
 	direction: 'inbound' | 'outbound';
 	from_addr: string;
+	from_name: string | null;
 	to_addr: string;
 	subject: string;
 	body_head: string | null;
@@ -293,7 +296,7 @@ export async function listMailbox(
 	const placeholders = threadIds.map(() => '?').join(', ');
 	const { results: messages } = await db
 		.prepare(
-			`SELECT m.id, COALESCE(m.thread_id, m.id) AS thread_id, m.direction, m.from_addr, m.to_addr,
+			`SELECT m.id, COALESCE(m.thread_id, m.id) AS thread_id, m.direction, m.from_addr, m.from_name, m.to_addr,
 			        m.subject, m.is_read, m.is_starred, m.is_pinned, m.is_archived, m.created_at, m.domain_id, m.status, m.snoozed_until,
 			        m.auto_trashed_at,
 			        COALESCE(NULLIF(trim(m.body_text), ''), m.body_html, '') AS body_head,
@@ -351,12 +354,15 @@ function toThreadSummary(messages: ThreadMessageRow[]): ThreadSummary {
 		}
 
 		const address = message.from_addr;
-		const seen = participants.some(
+		const seen = participants.find(
 			(entry) => !entry.self && entry.address.toLowerCase() === address.toLowerCase()
 		);
-		if (seen) continue;
+		if (seen) {
+			if (message.from_name?.trim()) seen.name = message.from_name.trim();
+			continue;
+		}
 
-		participants.push({ label: displayNameFor(address), address, self: false });
+		participants.push({ label: displayNameFor(address), name: message.from_name, address, self: false });
 	}
 
 	return {
@@ -386,7 +392,7 @@ function toThreadSummary(messages: ThreadMessageRow[]): ThreadSummary {
 	};
 }
 
-/** Keep a short label for APIs; the mailbox row shows the address instead. */
+/** Legacy short label for APIs; supplied names are kept separately. */
 function displayNameFor(address: string): string {
 	if (!address) return 'Unknown';
 	const [local] = address.split('@');

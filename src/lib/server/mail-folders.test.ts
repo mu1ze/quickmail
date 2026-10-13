@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { D1Database } from '@cloudflare/workers-types';
 import { expandToThreads, getMailboxCounts, listMailbox, setEmailFlags } from './mail-store';
+import { threadHeadline } from '../mailbox-people';
+import { handleCloudflareInbound } from './cloudflare-inbound';
+import { handleResendWebhook } from './inbound';
 import { authorizeMailAction } from './api-access';
 import { applyMailLabels, listMailLabels } from './mail-labels';
 
@@ -44,6 +47,29 @@ beforeEach(() => {
 afterEach(() => sqlite.close());
 
 describe('mail folders', () => {
+	test('Cloudflare inbound preserves the MIME sender name separately from the envelope address', async () => {
+		sqlite.exec("UPDATE users SET is_admin=1 WHERE id='owner'; INSERT INTO domains(id,name) VALUES('test-domain','example.com'); INSERT INTO addresses(id,user_id,domain_id,address) VALUES('test-address','owner','test-domain','owner@example.com')");
+		const raw = new Response('From: =?UTF-8?Q?Jos=C3=A9?= <jose@example.com>\r\nTo: owner@example.com\r\nSubject: MIME name\r\nMessage-ID: <mime-name@example.com>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHello from José.').body!;
+		await handleCloudflareInbound({
+			from: 'bounce@mailer.example.com', to: 'owner@example.com', raw,
+			headers: new Headers(), setReject() { throw new Error('Unexpected rejection'); }
+		}, { DB: db, ATTACHMENTS: {} } as Parameters<typeof handleCloudflareInbound>[1]);
+		const message = (await listMailbox(db, 'owner', { view: 'inbox' })).threads.find((entry) => entry.subject === 'MIME name')!;
+		assert.equal(threadHeadline(message, 'inbox'), 'José');
+		assert.equal(message.participants[0].address, 'jose@example.com');
+	});
+	test('Resend inbound uses the header name when its API returns only a bare from address', async () => {
+		sqlite.exec("UPDATE users SET is_admin=1 WHERE id='owner'; INSERT INTO domains(id,name) VALUES('test-domain','example.com'); INSERT INTO addresses(id,user_id,domain_id,address) VALUES('test-address','owner','test-domain','owner@example.com')");
+		await handleResendWebhook({ type: 'email.received', data: { email_id: 'resend-test' } },
+			{ DB: db, ATTACHMENTS: {} } as Parameters<typeof handleResendWebhook>[1],
+			{
+				async getReceivedEmail() { return { from: 'hello@m.paystack.com', headers: { From: 'Paystack <hello@m.paystack.com>' }, to: ['owner@example.com'], subject: 'Resend name', text: 'Hello', html: null }; },
+				async listReceivedAttachments() { return []; }
+			} as unknown as Parameters<typeof handleResendWebhook>[2]);
+		const message = (await listMailbox(db, 'owner', { view: 'inbox' })).threads.find((entry) => entry.subject === 'Resend name')!;
+		assert.equal(threadHeadline(message, 'inbox'), 'Paystack');
+		assert.equal(message.participants[0].address, 'hello@m.paystack.com');
+	});
 	test('archive preserves the conversation, sent mail and stars, and can be undone', async () => {
 		const ids = await expandToThreads(db, 'owner', ['reply']);
 		assert.deepEqual(ids.sort(), ['received', 'reply']);

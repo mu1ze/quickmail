@@ -25,6 +25,18 @@ function thread(participants: ThreadSummary['participants']): ThreadSummary {
 }
 
 describe('mailbox row headline', () => {
+	test('prefers the stored sender name and keeps the address as a fallback', () => {
+		assert.equal(threadHeadline(thread([{ label: 'hello', name: 'Paystack', address: 'hello@m.paystack.com', self: false }]), 'inbox'), 'Paystack');
+		assert.equal(threadHeadline(thread([{ label: 'uber', name: 'Uber', address: 'uber@uber.com', self: false }]), 'inbox'), 'Uber');
+		assert.equal(threadHeadline(thread([{ label: 'hello', name: '  ', address: 'hello@example.com', self: false }]), 'inbox'), 'hello@example.com');
+	});
+	test('names multiple senders without including our own identity', () => {
+		assert.equal(threadHeadline(thread([
+			{ label: 'me', address: 'owner@example.com', self: true },
+			{ label: 'alex', name: 'Alex Chen', address: 'alex@example.com', self: false },
+			{ label: 'jo', name: 'Jo', address: 'jo@example.com', self: false }
+		]), 'inbox'), 'Alex Chen, Jo');
+	});
 	test('shows a sender-supplied display name without guessing one from the address', () => {
 		assert.equal(threadHeadline(thread([{ label: 'guess', address: '"Alex Chen" <alex@example.com>', self: false }]), 'inbox'), 'Alex Chen');
 		assert.equal(threadHeadline(thread([{ label: 'guess', address: 'alex@example.com', self: false }]), 'inbox'), 'alex@example.com');

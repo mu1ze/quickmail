@@ -12,8 +12,8 @@ QUICKMAIL_LOCAL_BINDINGS=1 bun run dev
 ```
 
 Apply all pending migrations to the deployment database before deploying these
-changes: `0019_attachment_content_ids.sql`, `0020_mailbox_folders.sql`, and
-`0021_mail_labels.sql`. Use `bun run db:migrate:remote` with Cloudflare
+changes: `0019_attachment_content_ids.sql`, `0020_mailbox_folders.sql`,
+`0021_mail_labels.sql`, and `0022_sender_names.sql`. Use `bun run db:migrate:remote` with Cloudflare
 authentication and network access available. Local migration success does not
 establish that these were applied remotely.
 
@@ -57,6 +57,7 @@ themes. Intercept send requests or use a test provider to avoid real delivery.
 | Spam | Move a conversation to Spam. Ordinary mailboxes exclude it. Use Not spam or Move to inbox to recover it. Search can explicitly include Spam/Trash with `in:spam`, `in:trash` or `in:anywhere`. |
 | Search | Search globally from the topbar or mobile search, and through the native search-options dialog. Combine `from:`, `to:`, `subject:`, `is:unread`, `has:attachment`, `filename:`, `label:`, `after:` and `before:`. Quoted phrases and negations work. Escape closes the dialog and restores focus. |
 | Labels | Create a label in the sidebar, select conversations and apply it. Verify the sidebar filter, row badges, search and reader state. Remove it from a conversation and delete it from the manager; deleting labels preserves messages. Duplicate names show an error; failed apply retains changes for retry. |
+| Sender names | Receive messages with named From headers via both providers. Mailbox rows use the decoded sender name and retain the address when no name exists. Older messages whose names were discarded keep their address fallback. |
 | Density | Switch between comfortable/compact list spacing. Reload and verify persistence; Appearance settings use the same preference. Card view remains available. |
 | Pagination | With more than 25 conversations, navigate forward/back on desktop and mobile. Preserve search and label filters across pages. |
 | Action failure | Reject bulk/flag/pin/trash requests. An error appears, selection/flags remain correct, and the reader does not navigate away. |

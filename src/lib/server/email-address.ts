@@ -1,3 +1,14 @@
+import { addressParser } from 'postal-mime';
+
+/** Keep the decoded sender-supplied name separately from the routing address. */
+export function senderDisplayName(header: string | null | undefined, address: string): string | null {
+	if (!header) return null;
+	const sender = addressParser(header, { flatten: true }).find(
+		(entry) => entry.address?.toLowerCase() === address.toLowerCase()
+	);
+	return sender?.name?.replace(/[\r\n\t]+/g, ' ').trim() || null;
+}
+
 export function parseEmailAddress(value: string): string {
 	const trimmed = value.trim();
 	const bracketMatch = trimmed.match(/<([^>]+)>/);

@@ -3,7 +3,7 @@ import PostalMime, { type Address, type Attachment } from 'postal-mime';
 import { insertAttachmentBytes } from './attachments';
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_EMAIL } from './constants';
 import { recordUnroutedEmail, resolveInboundRoute } from './domains';
-import { collectInboundRecipients, parseEmailAddress, visibleInboundFrom } from './email-address';
+import { collectInboundRecipients, parseEmailAddress, senderDisplayName, visibleInboundFrom } from './email-address';
 import { emailExistsByProviderId, insertEmail } from './mail-store';
 import { scheduleNewMailNotification, type PushNotificationEnv } from './push-notifications';
 import { normalizeMessageId } from './send-mail';
@@ -78,6 +78,8 @@ export async function handleCloudflareInbound(
 		userId: route.userId,
 		direction: 'inbound',
 		from,
+		fromName: parsed.from?.address?.toLowerCase() === from && parsed.from.name?.trim()
+			? parsed.from.name.trim() : senderDisplayName(message.headers.get('from'), from),
 		to: route.address,
 		cc: mailboxAddresses(parsed.cc).join(', ') || null,
 		subject,
