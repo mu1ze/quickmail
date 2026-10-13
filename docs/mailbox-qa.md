@@ -47,6 +47,7 @@ themes. Intercept send requests or use a test provider to avoid real delivery.
 | Plain text | Switch between formatted and plain text. Links work, line breaks remain, and quoted history can be expanded. |
 | Selection | Select a conversation with `x`, move focus with `j`/`k`, and check selection is retained. Native modified shortcuts and button activation still work. |
 | Action failure | Reject bulk/flag/pin/trash requests. An error appears, selection/flags remain correct, and the reader does not navigate away. |
+| Empty trash | Hold with a pointer or Enter/Space. The control shows progress while awaiting the server, reports success only after completion, and remains retryable when the request fails. |
 | Navigation | Open mail from a searched/filtered inbox and use Back. The same mailbox, filters, and page are restored. |
 | Replies | Type a reply, attach a file, and use Ctrl/Cmd+Enter while the editor is focused. Failed delivery retains text and files. |
 | Mobile | Sidebar stays outside the reading area, content has no page overflow, and attachment actions remain usable. |

@@ -207,7 +207,7 @@
 		ids: string[] = selected,
 		extra: Record<string, unknown> = {}
 	) {
-		if (busy) return;
+		if (busy) return false;
 		busy = true;
 		actionError = '';
 		const target = ids;
@@ -232,8 +232,10 @@
 				showUndo('Snoozed until later', () => revert('unsnooze', target));
 			}
 			await invalidateAll();
+			return true;
 		} catch (cause) {
 			actionError = requestError(cause);
+			return false;
 		} finally {
 			busy = false;
 			moreOpen = false;
@@ -304,7 +306,7 @@
 		if (key === 'e' || key === '#') {
 			event.preventDefault();
 			const ids = focusedIds();
-			if (view === 'trash') actionError = 'Use Delete forever in the actions menu to permanently delete a conversation.';
+			if (view === 'trash') actionError = 'Use Delete permanently in the actions menu to delete a conversation.';
 			else void run('trash', ids);
 			return;
 		}
