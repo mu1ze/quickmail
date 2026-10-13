@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { invalidateAll } from '$app/navigation';
+	import { tooltip } from '$lib/actions/tooltip';
 	import Icon from './Icon.svelte';
 	import Check from './Check.svelte';
 	import { requireOk, requestError } from '$lib/utils/request';
@@ -21,7 +22,7 @@
 	}
 </script>
 
-<button type="button" class="trigger" class:caption={Boolean(caption)} aria-label={caption || 'Label conversations'} title="Label conversations" disabled={disabled || !ids.length} onclick={() => { changes = {}; error = ''; dialog?.showModal(); }}><Icon name="price-tag-3-line" size={19} />{#if caption}<span>{caption}</span>{/if}</button>
+<button type="button" class="trigger" class:caption={Boolean(caption)} aria-label={caption || 'Label conversations'} use:tooltip={caption ? '' : 'Label conversations'} disabled={disabled || !ids.length} onclick={() => { changes = {}; error = ''; dialog?.showModal(); }}><Icon name="price-tag-3-line" size={19} />{#if caption}<span>{caption}</span>{/if}</button>
 <dialog bind:this={dialog} aria-labelledby={`${dialogId}-title`}>
 	<form onsubmit={apply}>
 		<header><div><h2 id={`${dialogId}-title`}>Label conversations</h2><p>{ids.length} conversation{ids.length === 1 ? '' : 's'} selected</p></div><button type="button" class="icon-btn" aria-label="Close label picker" onclick={() => dialog?.close()}><Icon name="close-line" size={20} /></button></header>

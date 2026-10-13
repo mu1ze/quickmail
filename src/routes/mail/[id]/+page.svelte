@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
 	import { untrack } from 'svelte';
+	import { tooltip } from '$lib/actions/tooltip';
 	import { requireOk, requestError } from '$lib/utils/request';
 	import Icon from '$lib/components/Icon.svelte';
 	import RichTextEditor from '$lib/components/RichTextEditor.svelte';
@@ -318,27 +319,27 @@
 
 <div class="mail-page">
 	<header class="mail-toolbar">
-		<a href={backHref} class="btn-ghost" aria-label="Back">
+		<a href={backHref} class="btn-ghost" aria-label="Back" use:tooltip={'Back'}>
 			<Icon name="arrow-left-line" size={18} />
 		</a>
 
 		<div class="toolbar-actions" aria-busy={actionBusy}>
 			<LabelPicker labels={data.labels} ids={latest ? [latest.id] : []} existing={[data.threadLabels]} disabled={actionBusy} />
 			{#if data.archived || data.spam}
-				<button type="button" class="icon-btn" aria-label="Move to inbox" title="Move to inbox" onclick={moveInbox}><Icon name="inbox-line" size={18} /></button>
+				<button type="button" class="icon-btn" aria-label="Move to inbox" use:tooltip={'Move to inbox'} onclick={moveInbox}><Icon name="inbox-line" size={18} /></button>
 			{/if}
 			{#if !data.trashed && !data.spam}
-				<button type="button" class="icon-btn" aria-label="Archive" title="Archive (e)" onclick={archive}><Icon name="archive-line" size={18} /></button>
+				<button type="button" class="icon-btn" aria-label="Archive" use:tooltip={'Archive (e)'} onclick={archive}><Icon name="archive-line" size={18} /></button>
 			{/if}
 			{#if !data.trashed}
-				<button type="button" class="icon-btn" aria-label={data.spam ? 'Not spam' : 'Mark as spam'} title={data.spam ? 'Not spam' : 'Mark as spam'} onclick={toggleSpam}><Icon name="spam-2-line" size={18} /></button>
+				<button type="button" class="icon-btn" aria-label={data.spam ? 'Not spam' : 'Mark as spam'} use:tooltip={data.spam ? 'Not spam' : 'Mark as spam'} onclick={toggleSpam}><Icon name="spam-2-line" size={18} /></button>
 			{/if}
 			<button
 				type="button"
 				class="icon-btn"
 				class:starred
 				aria-label={starred ? 'Remove star' : 'Add star'}
-				title={starred ? 'Remove star (s)' : 'Add star (s)'}
+				use:tooltip={starred ? 'Remove star (s)' : 'Add star (s)'}
 				onclick={toggleStar}
 			>
 				<Icon name={starred ? 'star-fill' : 'star-line'} size={16} />
@@ -348,7 +349,7 @@
 				class="icon-btn"
 				class:pinned
 				aria-label={pinned ? 'Unpin' : 'Pin to top'}
-				title={pinned ? 'Unpin (p)' : 'Pin to top (p)'}
+				use:tooltip={pinned ? 'Unpin (p)' : 'Pin to top (p)'}
 				onclick={togglePin}
 			>
 				<Icon name={pinned ? 'pushpin-2-fill' : 'pushpin-2-line'} size={16} />
@@ -357,30 +358,31 @@
 				type="button"
 				class="icon-btn"
 				aria-label="Forward"
-				title="Forward (f)"
+				use:tooltip={'Forward (f)'}
 				onclick={forwardLatest}
 			>
 				<Icon name="share-forward-line" size={16} />
 			</button>
 
 			{#if data.trashed}
-				<button type="button" class="icon-btn" aria-label="Restore" onclick={restore}>
+				<button type="button" class="icon-btn" aria-label="Restore" use:tooltip={'Restore'} onclick={restore}>
 					<Icon name="arrow-go-back-line" size={16} />
 				</button>
 				<button
 					type="button"
 					class="icon-btn danger"
 					aria-label="Delete permanently"
+					use:tooltip={'Delete permanently'}
 					onclick={destroy}
 				>
 					<Icon name="delete-bin-2-line" size={16} />
 				</button>
 			{:else}
-				<button type="button" class="icon-btn" aria-label="Mark as unread" onclick={markUnread}>
+				<button type="button" class="icon-btn" aria-label="Mark as unread" use:tooltip={'Mark as unread (u)'} onclick={markUnread}>
 					<Icon name="mail-line" size={16} />
 				</button>
 				{#if data.snoozedUntil}
-					<button type="button" class="icon-btn" aria-label="Move to inbox" onclick={unsnooze}>
+					<button type="button" class="icon-btn" aria-label="Move to inbox" use:tooltip={'Move to inbox (b)'} onclick={unsnooze}>
 						<Icon name="inbox-line" size={16} />
 					</button>
 				{:else}
@@ -389,6 +391,8 @@
 							type="button"
 							class="icon-btn"
 							aria-label="Snooze"
+							use:tooltip={'Snooze (b)'}
+							aria-expanded={snoozeOpen}
 							onclick={() => (snoozeOpen = !snoozeOpen)}
 						>
 							<Icon name="time-line" size={16} />
@@ -404,7 +408,7 @@
 						{/if}
 					</div>
 				{/if}
-				<button type="button" class="icon-btn" aria-label="Move to trash" onclick={trash}>
+				<button type="button" class="icon-btn" aria-label="Move to trash" use:tooltip={'Move to trash (#)'} onclick={trash}>
 					<Icon name="delete-bin-line" size={16} />
 				</button>
 			{/if}
