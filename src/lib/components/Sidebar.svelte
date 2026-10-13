@@ -4,10 +4,12 @@
 	import Logo from './Logo.svelte';
 	import DomainSwitcher from './DomainSwitcher.svelte';
 	import ThemeSwitcher from './ThemeSwitcher.svelte';
-	import type { Domain, MailboxCounts } from '$lib/types';
+	import LabelManager from './LabelManager.svelte';
+	import type { Domain, MailboxCounts, MailLabel } from '$lib/types';
 
 	let {
 		counts,
+		labels = [],
 		domains,
 		activeDomainId,
 		isAdmin,
@@ -16,6 +18,7 @@
 		onLogout
 	}: {
 		counts: MailboxCounts;
+		labels?: MailLabel[];
 		domains: Domain[];
 		activeDomainId: string | null;
 		isAdmin: boolean;
@@ -50,6 +53,7 @@
 	]);
 
 	function isActive(href: string): boolean {
+		if (href === '/all' && $page.url.searchParams.has('label')) return false;
 		return $page.url.pathname === href || $page.url.pathname.startsWith(`${href}/`);
 	}
 
@@ -123,6 +127,15 @@
 		</div>
 	{/if}
 
+	<div class="labels-section">
+		<LabelManager {labels} collapsed={!expanded} />
+		<nav class="nav" aria-label="Labels">
+			{#each labels as label (label.id)}
+				<a href={`/all?label=${encodeURIComponent(label.id)}`} class="nav-link" class:active={$page.url.searchParams.get('label') === label.id} aria-current={$page.url.searchParams.get('label') === label.id ? 'page' : undefined} title={label.name} onclick={() => (mobileOpen = false)}><Icon name="price-tag-3-line" size={17} />{#if expanded}<span class="nav-label">{label.name}</span>{/if}</a>
+			{/each}
+		</nav>
+	</div>
+
 	<nav class="nav nav-tools">
 		{#each tools as item (item.href)}
 			<a
@@ -167,6 +180,7 @@
 
 <style>
 	.sidebar {
+		overflow-y: auto;
 		position: relative;
 		z-index: 40;
 		display: flex;
@@ -236,6 +250,7 @@
 		padding-top: 0.75rem;
 		box-shadow: inset 0 1px 0 var(--color-line);
 	}
+	.labels-section { margin-top: 1rem; }
 
 	.nav-link {
 		position: relative;

@@ -41,6 +41,10 @@ export function parseMailSearch(query: string): MailSearch {
 				condition = `e.${operator === 'from' ? 'from_addr' : 'subject'} LIKE ? ESCAPE '\\'`;
 				bindings.push(like(value));
 			}
+		} else if (operator === 'label' && value) {
+			condition = `EXISTS(SELECT 1 FROM email_labels el JOIN mail_labels l ON l.id = el.label_id JOIN emails labeled ON labeled.id = el.email_id
+				WHERE l.user_id = e.user_id AND labeled.user_id = e.user_id AND l.name = ? COLLATE NOCASE AND COALESCE(labeled.thread_id, labeled.id) = COALESCE(e.thread_id, e.id))`;
+			bindings.push(value);
 		} else if (operator === 'is' && ['unread', 'read', 'starred', 'pinned', 'archived'].includes(value)) {
 			condition = { unread: 'e.is_read = 0', read: 'e.is_read = 1', starred: 'e.is_starred = 1', pinned: 'e.is_pinned = 1', archived: 'e.is_archived = 1' }[value]!;
 		} else if (operator === 'has' && value === 'attachment') {

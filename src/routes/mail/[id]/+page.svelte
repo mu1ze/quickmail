@@ -8,6 +8,7 @@
 	import RecipientField from '$lib/components/RecipientField.svelte';
 	import ThreadMessage from '$lib/components/ThreadMessage.svelte';
 	import SnoozeMenu from '$lib/components/SnoozeMenu.svelte';
+	import LabelPicker from '$lib/components/LabelPicker.svelte';
 	import SignaturePreview from '$lib/components/SignaturePreview.svelte';
 	import SignaturePicker from '$lib/components/SignaturePicker.svelte';
 	import { queueMailSend } from '$lib/pending-send';
@@ -254,7 +255,7 @@
 	}
 
 	function onThreadKeydown(event: KeyboardEvent) {
-		if (document.querySelector('[data-overlay]') || event.defaultPrevented) return;
+		if (document.querySelector('[data-overlay], dialog[open]') || event.defaultPrevented) return;
 		if (isMod(event) && event.key === 'Enter') {
 			event.preventDefault();
 			if (replyOpen) queueReply();
@@ -322,6 +323,7 @@
 		</a>
 
 		<div class="toolbar-actions" aria-busy={actionBusy}>
+			<LabelPicker labels={data.labels} ids={latest ? [latest.id] : []} existing={[data.threadLabels]} disabled={actionBusy} />
 			{#if data.archived || data.spam}
 				<button type="button" class="icon-btn" aria-label="Move to inbox" title="Move to inbox" onclick={moveInbox}><Icon name="inbox-line" size={18} /></button>
 			{/if}

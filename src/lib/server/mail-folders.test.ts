@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import type { D1Database } from '@cloudflare/workers-types';
 import { expandToThreads, getMailboxCounts, listMailbox, setEmailFlags } from './mail-store';
 import { authorizeMailAction } from './api-access';
+import { applyMailLabels, listMailLabels } from './mail-labels';
 
 let sqlite: Database;
 let db: D1Database;
@@ -18,6 +19,11 @@ beforeEach(() => {
 	}
 	// Execute the production SQL against SQLite, as D1 does.
 	db = {
+		async batch(statements: { run: () => Promise<unknown> }[]) {
+			sqlite.exec('BEGIN');
+			try { const result = []; for (const statement of statements) result.push(await statement.run()); sqlite.exec('COMMIT'); return result; }
+			catch (cause) { sqlite.exec('ROLLBACK'); throw cause; }
+		},
 		prepare(sql: string) {
 			let values: any[] = [];
 			return {
@@ -95,5 +101,28 @@ describe('mail folders', () => {
 		await setEmailFlags(db, 'owner', ids, { trashed: true });
 		assert.equal((await listMailbox(db, 'owner', { view: 'all', q: 'in:trash Project' })).total, 1);
 		assert.equal((await listMailbox(db, 'owner', { view: 'all', q: 'in:anywhere Project' })).total, 1);
+	});
+
+	test('labels apply to whole conversations, remain on new replies and can be removed', async () => {
+		sqlite.exec("INSERT INTO mail_labels(id,user_id,name) VALUES('projects','owner','Projects'),('foreign-label','other','Private')");
+		assert.equal(await applyMailLabels(db, 'owner', ['reply'], [{ labelId: 'projects', apply: true }]), true);
+		assert.equal((await listMailbox(db, 'owner', { view: 'all', labelId: 'projects' })).total, 1);
+		sqlite.exec("INSERT INTO emails(id,user_id,direction,from_addr,to_addr,subject,thread_id) VALUES('new-reply','owner','inbound','alex@example.com','owner@example.com','Re: Project','thread')");
+		const mailbox = await listMailbox(db, 'owner', { view: 'all', q: 'label:projects' });
+		assert.equal(mailbox.total, 1);
+		assert.deepEqual(mailbox.threads[0].labels, [{ id: 'projects', name: 'Projects' }]);
+		assert.equal(await applyMailLabels(db, 'owner', ['new-reply'], [{ labelId: 'projects', apply: false }]), true);
+		assert.equal((await listMailbox(db, 'owner', { view: 'all', labelId: 'projects' })).total, 0);
+	});
+
+	test('labels cannot be assigned across accounts; deleting a label preserves mail', async () => {
+		sqlite.exec("INSERT INTO mail_labels(id,user_id,name) VALUES('projects','owner','Projects'),('foreign-label','other','Private')");
+		assert.deepEqual(await listMailLabels(db, 'owner'), [{ id: 'projects', name: 'Projects' }]);
+		assert.equal(await applyMailLabels(db, 'owner', ['received'], [{ labelId: 'foreign-label', apply: true }]), false);
+		assert.equal(await applyMailLabels(db, 'owner', ['foreign'], [{ labelId: 'projects', apply: true }]), false);
+		assert.equal(await applyMailLabels(db, 'owner', ['received'], [{ labelId: 'projects', apply: true }]), true);
+		sqlite.exec("DELETE FROM mail_labels WHERE id = 'projects' AND user_id = 'owner'");
+		assert.equal((await listMailbox(db, 'owner', { view: 'all' })).total, 1);
+		assert.deepEqual(sqlite.query('SELECT * FROM email_labels').all(), []);
 	});
 });

@@ -153,6 +153,7 @@ export type ThreadParticipant = {
 
 /** One card in a mailbox grid: a whole conversation, not a single message. */
 export type ThreadSummary = {
+	labels?: MailLabel[];
 	/** Whether every message has been archived. */
 	is_archived?: boolean;
 	thread_id: string;
@@ -180,11 +181,14 @@ export type ThreadSummary = {
 };
 
 export type MailboxFilters = {
+	labelId?: string;
 	q: string;
 	unreadOnly: boolean;
 	starredOnly: boolean;
 	attachmentsOnly: boolean;
 };
+
+export type MailLabel = { id: string; name: string };
 
 export type MailboxPage = {
 	threads: ThreadSummary[];

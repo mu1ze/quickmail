@@ -58,6 +58,7 @@ export const GET: RequestHandler = async ({ locals, platform, url }) => {
 	}
 
 	const mailbox = await listMailbox(db, locals.user.id, {
+		labelId: url.searchParams.get('label') ?? undefined,
 		view: mailboxView(url),
 		domainId: locals.activeDomainId,
 		q: url.searchParams.get('q'),

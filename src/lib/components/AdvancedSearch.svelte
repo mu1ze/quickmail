@@ -3,11 +3,13 @@
 	import { searchValue } from '$lib/mail-search';
 	let { open = $bindable(false), query = '', onSearch }: { open?: boolean; query?: string; onSearch: (query: string) => void } = $props();
 	let dialog = $state<HTMLDialogElement>();
+	const dialogId = $props.id();
 	let from = $state('');
 	let to = $state('');
 	let subject = $state('');
 	let words = $state('');
 	let filename = $state('');
+	let label = $state('');
 	let after = $state('');
 	let before = $state('');
 	let folder = $state('all');
@@ -22,7 +24,7 @@
 	function search(event: SubmitEvent) {
 		event.preventDefault();
 		const parts = [words.trim()];
-		for (const [key, value] of Object.entries({ from, to, subject, filename })) {
+		for (const [key, value] of Object.entries({ from, to, subject, filename, label })) {
 			if (value.trim()) parts.push(`${key}:${searchValue(value.trim())}`);
 		}
 		if (after) parts.push(`after:${after}`);
@@ -35,15 +37,16 @@
 	}
 </script>
 
-<dialog bind:this={dialog} onclose={() => (open = false)} aria-labelledby="advanced-search-title" data-overlay={open ? true : undefined}>
+<dialog bind:this={dialog} onclose={() => (open = false)} aria-labelledby={`${dialogId}-title`} data-overlay={open ? true : undefined}>
 	<form onsubmit={search}>
-		<header><div><h2 id="advanced-search-title">Find the right message</h2><p>Search across your mailbox.</p></div><button type="button" class="icon-btn" aria-label="Close search options" onclick={() => (open = false)}><Icon name="close-line" size={20} /></button></header>
+		<header><div><h2 id={`${dialogId}-title`}>Find the right message</h2><p>Search across your mailbox.</p></div><button type="button" class="icon-btn" aria-label="Close search options" onclick={() => (open = false)}><Icon name="close-line" size={20} /></button></header>
 		<div class="fields">
 			<label>From<input bind:value={from} placeholder="Sender name or email" /></label>
 			<label>To<input bind:value={to} placeholder="Recipient name or email" /></label>
 			<label>Subject<input bind:value={subject} placeholder="Subject contains…" /></label>
 			<label>Has the words<input bind:value={words} placeholder="Words or search operators" /></label>
 			<label>Filename<input bind:value={filename} placeholder="e.g. proposal.pdf" /></label>
+			<label>Label<input bind:value={label} placeholder="Label name" /></label>
 			<label>Search in<select bind:value={folder}><option value="all">All mail</option><option value="inbox">Inbox</option><option value="sent">Sent</option><option value="drafts">Drafts</option><option value="starred">Starred</option><option value="snoozed">Snoozed</option><option value="spam">Spam</option><option value="trash">Trash</option><option value="anywhere">Anywhere, including Spam and Trash</option></select></label>
 			<div class="dates"><label>On or after<input type="date" bind:value={after} max={before || undefined} /></label><label>Before<input type="date" bind:value={before} min={after || undefined} /></label></div>
 		</div>

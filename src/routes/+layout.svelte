@@ -108,9 +108,9 @@
 	};
 
 	function onWindowKeydown(event: KeyboardEvent) {
-		if (event.key === 'Escape' && mobileOpen) mobileOpen = false;
+		if (event.key === 'Escape' && mobileOpen && !document.querySelector('dialog[open]')) mobileOpen = false;
 		if (!showShell) return;
-		if (isTypingTarget(event.target) || document.querySelector('[data-overlay]')) return;
+		if (isTypingTarget(event.target) || document.querySelector('[data-overlay], dialog[open]')) return;
 
 		if (isMod(event) && event.key.toLowerCase() === 'k') {
 			event.preventDefault();
@@ -229,6 +229,7 @@
 	>
 		<Sidebar
 			counts={data.counts}
+			labels={data.labels}
 			domains={data.domains}
 			activeDomainId={data.activeDomainId}
 			isAdmin={data.user!.is_admin}

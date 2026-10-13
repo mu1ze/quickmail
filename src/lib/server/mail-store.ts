@@ -1,4 +1,5 @@
 import { parseMailSearch } from '$lib/mail-search';
+import { loadThreadLabels } from './mail-labels';
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
 import { MAILBOX_PAGE_SIZE } from '$lib/constants';
 import { MAX_BODY_BYTES } from './constants';
@@ -177,6 +178,7 @@ function displayFilter(view: MailboxView | 'anywhere', alias: string): string {
 }
 
 export type MailboxQuery = {
+	labelId?: string;
 	view: MailboxView;
 	/** Restrict to one connected domain; omit for the combined view. */
 	domainId?: string | null;
@@ -218,6 +220,12 @@ function buildScope(userId: string, query: MailboxQuery): { where: string; bindi
 	if (query.domainId) {
 		filters.push('e.domain_id = ?');
 		bindings.push(query.domainId);
+	}
+	if (query.labelId) {
+		filters.push(`EXISTS(SELECT 1 FROM email_labels el JOIN emails labeled ON labeled.id = el.email_id
+			JOIN mail_labels l ON l.id = el.label_id WHERE el.label_id = ? AND l.user_id = e.user_id
+			AND labeled.user_id = e.user_id AND COALESCE(labeled.thread_id, labeled.id) = COALESCE(e.thread_id, e.id))`);
+		bindings.push(query.labelId);
 	}
 
 	filters.push(...search.conditions);
@@ -314,7 +322,9 @@ export async function listMailbox(
 		userId,
 		threads.map((thread) => thread.thread_id)
 	);
+	const labels = await loadThreadLabels(db, userId, threadIds);
 	for (const thread of threads) {
+		thread.labels = labels.get(thread.thread_id) ?? [];
 		const summary = summaries.get(thread.thread_id);
 		if (summary && summary.source_latest_id === thread.latest_id) {
 			thread.preview = summary.summary;

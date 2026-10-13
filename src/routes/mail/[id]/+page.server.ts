@@ -5,6 +5,7 @@ import { listSignatures } from '$lib/server/email-signature';
 import { maybeRefreshThreadSummary } from '$lib/server/mail-summaries';
 import { resolveReplyFromAddress } from '$lib/server/outbox';
 import { displaySubject } from '$lib/server/threads';
+import { loadThreadLabels } from '$lib/server/mail-labels';
 
 export const load: PageServerLoad = async ({ params, locals, platform }) => {
 	if (!locals.user || !platform?.env.DB) {
@@ -39,6 +40,7 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
 	}
 
 	return {
+		threadLabels: (await loadThreadLabels(platform.env.DB, locals.user.id, [email.thread_id ?? email.id])).get(email.thread_id ?? email.id) ?? [],
 		threadId: email.thread_id ?? email.id,
 		/** The message that was linked to — expanded first when the page opens. */
 		focusId: email.id,

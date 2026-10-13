@@ -8,6 +8,7 @@
 	import DeliveryStatus from './DeliveryStatus.svelte';
 	import SnoozeMenu from './SnoozeMenu.svelte';
 	import AdvancedSearch from './AdvancedSearch.svelte';
+	import LabelPicker from './LabelPicker.svelte';
 	import HoldToConfirm from '$lib/interior/HoldToConfirm.svelte';
 	import { formatRelativeDate } from '$lib/utils/date';
 	import { formatSnoozeUntil } from '$lib/snooze';
@@ -24,7 +25,7 @@
 		watchMailboxLayout,
 		type MailboxLayout
 	} from '$lib/mailbox-layout';
-	import type { MailboxCounts, MailboxFilters, MailboxPage, MailboxView, ThreadSummary } from '$lib/types';
+	import type { MailboxCounts, MailboxFilters, MailboxPage, MailboxView, ThreadSummary, MailLabel } from '$lib/types';
 
 	const shell = getShellContext();
 
@@ -80,6 +81,8 @@
 	let searchInput = $state<HTMLInputElement | null>(null);
 
 	const counts = $derived(($currentPage.data.counts ?? {}) as MailboxCounts);
+	const labels = $derived(($currentPage.data.labels ?? []) as MailLabel[]);
+	const activeLabel = $derived(labels.find((label) => label.id === filters.labelId));
 
 	$effect(() => {
 		return onSearchFocus(() => {
@@ -280,7 +283,7 @@
 		if (
 			isTypingTarget(event.target) ||
 			isGoChordArmed() ||
-			document.querySelector('[data-overlay]')
+			document.querySelector('[data-overlay], dialog[open]')
 		) {
 			return;
 		}
@@ -483,7 +486,7 @@
 		</button>
 
 		<div class="ios-title-block">
-			<h1 class="ios-title">{meta.title}</h1>
+			<h1 class="ios-title">{activeLabel?.name ?? meta.title}</h1>
 			<p class="ios-subtitle">{subtitle}</p>
 		</div>
 
@@ -542,6 +545,7 @@
 		<div class="ios-bulk-bar">
 			<span class="ios-bulk-count">{selected.length} selected</span>
 			<div class="ios-bulk-actions">
+				<LabelPicker {labels} ids={selected} existing={items.filter((row) => selected.includes(row.latest_id)).map((row) => row.labels ?? [])} disabled={busy} />
 				{#if view !== 'trash' && view !== 'spam' && view !== 'drafts'}<button type="button" class="ios-icon-btn" aria-label="Archive selected" disabled={busy} onclick={() => run('archive')}><Icon name="archive-line" size={18} /></button>{/if}
 				{#if view === 'spam' || view === 'all' || view === 'trash' || view === 'later'}<button type="button" class="ios-icon-btn" aria-label="Move selected to inbox" disabled={busy} onclick={() => run('inbox')}><Icon name="inbox-line" size={18} /></button>{/if}
 				<button type="button" class="ios-icon-btn" title="Mark as read" disabled={busy} onclick={() => run('read')}>
@@ -623,7 +627,7 @@
 	{/if}
 
 	<div class="mailbox-heading">
-		<div><p class="eyebrow">YOUR MAILBOX</p><h1>{filters.q ? 'Search results' : meta.title}<span>{mailbox.total} conversation{mailbox.total === 1 ? '' : 's'}</span></h1></div>
+		<div><p class="eyebrow">YOUR MAILBOX</p><h1>{filters.q ? 'Search results' : activeLabel?.name ?? meta.title}<span>{mailbox.total} conversation{mailbox.total === 1 ? '' : 's'}</span></h1></div>
 		<a href="/compose" class="heading-compose"><Icon name="add-line" size={16} />New message</a>
 	</div>
 	<header class="toolbar" aria-label="Mailbox tools" aria-busy={busy}>
@@ -655,6 +659,7 @@
 					{/if}
 					<button type="button" class="tool-btn" title={view === 'trash' ? 'Delete permanently' : 'Move to trash (#)'} aria-label={view === 'trash' ? 'Delete permanently' : 'Move to trash'} disabled={busy} onclick={() => run(view === 'trash' ? 'delete' : 'trash')}><Icon name="delete-bin-line" size={19} /></button>
 					<span class="tool-divider"></span>
+					<LabelPicker {labels} ids={selected} existing={items.filter((row) => selected.includes(row.latest_id)).map((row) => row.labels ?? [])} disabled={busy} />
 					<button type="button" class="tool-btn" title="Mark as read" aria-label="Mark as read" disabled={busy} onclick={() => run('read')}><Icon name="mail-open-line" size={19} /></button>
 					<button type="button" class="tool-btn" title="Mark as unread" aria-label="Mark as unread" disabled={busy} onclick={() => run('unread')}><Icon name="mail-unread-line" size={19} /></button>
 					{#if view !== 'trash' && view !== 'spam' && view !== 'drafts'}
@@ -784,6 +789,8 @@
 								</span>
 
 								<span class="card-meta">
+									{#each (thread.labels ?? []).slice(0, 2) as label (label.id)}<span class="tag tag-label" title={label.name}>{label.name}</span>{/each}
+									{#if (thread.labels?.length ?? 0) > 2}<span class="tag" title={thread.labels?.map((label) => label.name).join(', ')}>+{thread.labels!.length - 2}</span>{/if}
 									<span class="indicators">
 										{#if thread.is_starred}
 											<Icon name="star-fill" size={13} />
@@ -856,6 +863,7 @@
 									/>
 								{:else}
 									<div class="menu menu-right" role="menu">
+										<LabelPicker {labels} ids={[thread.latest_id]} existing={[thread.labels ?? []]} disabled={busy} caption="Labels…" />
 										{#if view === 'spam' || view === 'all' || view === 'later'}
 											<button type="button" class="menu-item" disabled={busy} onclick={() => run('inbox', [thread.latest_id])}><Icon name="inbox-line" size={16} />Move to inbox</button>
 										{/if}
@@ -972,6 +980,8 @@
 	.mailbox-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.1rem 1.5rem 1.25rem; }
 	.eyebrow { font-size: 0.625rem; font-weight: 600; letter-spacing: 0.13em; color: var(--color-text-secondary); margin-bottom: 0.45rem; }
 	.mailbox-heading h1 { display: flex; align-items: baseline; gap: 0.8rem; font-size: 1.65rem; font-weight: 600; letter-spacing: -0.045em; }
+	.mailbox-heading > div { min-width: 0; }
+	.mailbox-heading h1 { flex-wrap: wrap; overflow-wrap: anywhere; }
 	.mailbox-heading h1 span { font-size: 0.75rem; font-weight: 400; letter-spacing: 0; color: var(--color-text-secondary); }
 	.heading-compose { display: flex; align-items: center; gap: 0.35rem; font-size: 0.8125rem; color: var(--color-accent-text); }
 	.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 3.5rem; padding: 0.4rem 1.2rem; border-top: 1px solid var(--color-line); }
@@ -1032,9 +1042,11 @@
 	.subject { font-size: 0.875rem; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.preview { font-size: 0.8125rem; color: var(--color-text-secondary); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.5; }
 	.date { flex-shrink: 0; font-size: 0.7rem; color: var(--color-text-secondary); white-space: nowrap; }
-	.card-meta, .indicators { display: flex; align-items: center; gap: 0.35rem; color: var(--color-text-secondary); }
+	.card-meta, .indicators { display: flex; align-items: center; gap: 0.35rem; color: var(--color-text-secondary); min-width: 0; }
+	.card-meta { max-width: 12rem; overflow: hidden; }
 	.tag { font-size: 0.625rem; padding: 0.1rem 0.3rem; border-radius: 4px; background: var(--color-well); color: var(--color-text-secondary); }
 	.tag-draft { color: var(--color-danger); }
+	.tag-label { max-width: 5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--color-accent-soft); color: var(--color-accent-text); }
 	.card-actions { position: absolute; right: 0.5rem; top: 0.7rem; display: flex; align-items: center; border-radius: 9px; }
 	.row-quick-actions { display: flex; opacity: 0; pointer-events: none; background: var(--color-surface-hover); border-radius: 9px; }
 	.card:hover .row-quick-actions, .card:focus-within .row-quick-actions { opacity: 1; pointer-events: auto; }
@@ -1072,6 +1084,7 @@
 		.ios-back, .ios-icon-btn { display: flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; border-radius: 12px; color: var(--color-text-secondary); }
 		.ios-back:hover, .ios-icon-btn:hover { background: var(--color-well); }
 		.ios-title { font-size: 1.3rem; font-weight: 600; letter-spacing: -0.035em; }
+		.ios-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 		.ios-subtitle { font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 0.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 		.ios-title-block { min-width: 0; }
 		.ios-actions, .ios-bulk-actions { display: flex; align-items: center; gap: 0.15rem; }
