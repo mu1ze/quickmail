@@ -17,6 +17,15 @@ if (!existsSync(generated)) {
 	throw new Error('Expected .svelte-kit/cloudflare/_worker.js after `vite build`.');
 }
 
+// Resolve the generated Worker through its declaration, rather than type-checking
+// the entire bundled SvelteKit runtime when `checkJs` is enabled.
+await writeFile(sveltekit.replace(/\.js$/, '.d.ts'), `
+declare const worker: {
+  fetch(request: Request, env: Env, ctx: import('@cloudflare/workers-types').ExecutionContext): Promise<Response>;
+};
+export default worker;
+`);
+
 const current = await readFile(generated, 'utf8');
 if (current.includes(MARKER)) {
 	process.exit(0);

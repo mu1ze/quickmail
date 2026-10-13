@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { HTMLInputAttributes } from 'svelte/elements';
 	let {
 		id,
 		label,
@@ -14,7 +15,7 @@
 		label: string;
 		value?: string;
 		type?: string;
-		autocomplete?: string;
+		autocomplete?: HTMLInputAttributes['autocomplete'];
 		required?: boolean;
 		invalid?: boolean;
 		message?: string;

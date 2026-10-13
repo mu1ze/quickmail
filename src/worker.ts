@@ -6,7 +6,7 @@ import {
 } from './lib/server/cloudflare-inbound';
 import { runWeeklyMailAutomations } from './lib/server/mail-automations';
 // Renamed from `_worker.js` by `scripts/wrap-cloudflare-worker.mjs` after `vite build`.
-// @ts-expect-error file is created at build time
+// @ts-ignore file and its declaration are created at build time
 import sveltekit from '../.svelte-kit/cloudflare/_sveltekit.js';
 
 type SvelteKitWorker = {
