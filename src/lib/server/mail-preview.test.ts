@@ -76,3 +76,14 @@ test('saving a draft refreshes its preview', async () => {
 	await saveDraft(db, 'owner', { id, from: 'owner@example.com', to: 'b@example.com', subject: 'Draft', bodyText: 'second version' });
 	assert.equal(stored(id), 'second version');
 });
+
+test('conversation lookups use the COALESCE(thread_id, id) index instead of scanning the account', () => {
+	const plan = sqlite
+		.query<{ detail: string }, []>(
+			"EXPLAIN QUERY PLAN SELECT m.id FROM emails m WHERE m.user_id = 'owner' AND COALESCE(m.thread_id, m.id) IN ('a','b')"
+		)
+		.all()
+		.map((row) => row.detail)
+		.join('\n');
+	assert.match(plan, /idx_emails_thread_coalesce \(user_id=\? AND <expr>=\?\)/);
+});
