@@ -1,5 +1,9 @@
 <script lang="ts">
 	import { tick, untrack } from 'svelte';
+	import { flip } from 'svelte/animate';
+	import { slide } from 'svelte/transition';
+	import { swipeRow } from '$lib/actions/swipe-row';
+	import { motionDuration } from '$lib/interior/motion';
 	import { mailboxContextMenu, rowMenuPosition } from '$lib/actions/mailbox-context-menu';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page as currentPage } from '$app/stores';
@@ -69,7 +73,7 @@
 	const meta = $derived(META[view]);
 
 	// Local copy so stars and reads can flip before the server round trip lands.
-	let items = $state<ThreadSummary[]>([]);
+	let items = $state<ThreadSummary[]>(untrack(() => mailbox.threads));
 	let selected = $state<string[]>([]);
 	let busy = $state(false);
 	let actionError = $state('');
@@ -237,7 +241,21 @@
 		selectMenuOpen = false;
 	}
 
-	/** One entry point for every list action, so the UI always refreshes after. */
+	/** Actions whose result unambiguously removes the row from the mailbox being viewed. */
+	function leavesView(action: string): boolean {
+		switch (action) {
+			case 'trash': return view !== 'trash';
+			case 'archive': return view === 'inbox';
+			case 'snooze': return view === 'inbox';
+			case 'spam': return view !== 'spam';
+			case 'not-spam': return view === 'spam';
+			case 'restore': case 'delete': return view === 'trash';
+			case 'unsnooze': return view === 'later';
+			default: return false;
+		}
+	}
+
+	/** One entry point for every list action; the list updates first, the server confirms after. */
 	async function run(
 		action: string,
 		ids: string[] = selected,
@@ -248,6 +266,11 @@
 		actionError = '';
 		const target = ids;
 		const unarchived = items.filter((row) => target.includes(row.latest_id) && !row.is_archived).map((row) => row.latest_id);
+		// Apply the outcome immediately; the server confirms afterwards and a failure rolls back.
+		const before = items;
+		const leaving = leavesView(action) ? target : [];
+		if (leaving.length) items = items.filter((row) => !leaving.includes(row.latest_id));
+		else if (action === 'read' || action === 'unread') items = items.map((row) => target.includes(row.latest_id) ? { ...row, is_read: action === 'read' } : row);
 		try {
 			const response = await fetch('/api/mail/actions', {
 				method: 'POST',
@@ -272,9 +295,11 @@
 			} else if (action === 'snooze') {
 				showUndo('Snoozed until later', () => revert('unsnooze', target));
 			}
-			await invalidateAll();
+			// Counts and pagination reconcile in the background; the list already shows the result.
+			void invalidateAll();
 			return true;
 		} catch (cause) {
+			items = before;
 			actionError = requestError(cause);
 			return false;
 		} finally {
@@ -394,6 +419,23 @@
 		}
 	}
 
+	/** Left swipe archives where that makes sense, otherwise trashes; trash and drafts have none. */
+	function swipeLeftAction(thread: ThreadSummary): 'archive' | 'trash' | null {
+		if (thread.is_draft || view === 'trash' || view === 'drafts') return null;
+		return view === 'inbox' || view === 'all' || view === 'starred' || view === 'later' ? 'archive' : 'trash';
+	}
+
+	function swipeFor(thread: ThreadSummary) {
+		return {
+			left: swipeLeftAction(thread) !== null,
+			right: !thread.is_draft,
+			onSwipe: (direction: 'left' | 'right') => {
+				if (direction === 'right') void run(thread.is_read ? 'unread' : 'read', [thread.latest_id]);
+				else { const action = swipeLeftAction(thread); if (action) void run(action, [thread.latest_id]); }
+			}
+		};
+	}
+
 	function snoozeIds(ids: string[], until: string) {
 		void run('snooze', ids, { until });
 	}
@@ -505,6 +547,17 @@
 </script>
 
 <svelte:window onkeydown={onListKeydown} />
+{#snippet filterControls()}
+		<nav class="filter-tabs" aria-label="Filter conversations">
+			<button type="button" class:active={filters.unreadOnly} aria-pressed={filters.unreadOnly} onclick={() => apply({ unread: filters.unreadOnly ? null : '1' })}><Icon name="mail-unread-line" size={15} />Unread</button>
+			<button type="button" class:active={filters.starredOnly} aria-pressed={filters.starredOnly} onclick={() => apply({ starred: filters.starredOnly ? null : '1' })}><Icon name="star-line" size={15} />Starred</button>
+			<button type="button" class:active={filters.attachmentsOnly} aria-pressed={filters.attachmentsOnly} onclick={() => apply({ attachments: filters.attachmentsOnly ? null : '1' })}><Icon name="attachment-2" size={15} />Attachments</button>
+		</nav>
+		<label class="attention-filter"><Icon name="focus-3-line" size={15} /><select aria-label="Filter email attention" value={filters.needs ?? ''} onchange={(e)=>apply({needs:e.currentTarget.value || null})}>
+			<option value="">Any attention level</option><option value="attention">Needs attention</option><option value="review">Review</option><option value="reply">Reply suggested</option><option value="deadline">Deadline mentioned</option>
+		</select><Icon name="arrow-down-s-line" size={14} /></label>
+		{#if activeFilterCount}<button type="button" class="reset-filters" onclick={() => apply({ unread: null, starred: null, attachments: null, category: null, needs: null })} aria-label="Clear all filters"><Icon name="close-line" size={14} /><span>Reset</span></button>{/if}
+{/snippet}
 <AdvancedSearch bind:open={advancedOpen} query={filters.q} onSearch={(query) => { searchOpen = false; void goto(`/all${query ? `?q=${encodeURIComponent(query)}` : ''}`); }} />
 
 <section class="mailbox">
@@ -611,8 +664,9 @@
 		</form>
 	{/if}
 
+	<div class="mailbox-head">
 	<div class="mailbox-heading">
-		<div><p class="eyebrow">YOUR SPACE, AT YOUR PACE</p><h1>{filters.q ? 'Search results' : activeLabel?.name ?? meta.title}<span>{mailbox.total} conversation{mailbox.total === 1 ? '' : 's'}</span></h1></div>
+		<div><h1>{filters.q ? 'Search results' : activeLabel?.name ?? meta.title}<span>{mailbox.total} conversation{mailbox.total === 1 ? '' : 's'}</span></h1></div>
 		{#if view === 'inbox' && counts.inbox_unread > 0}<span class="unread-summary"><span></span>{counts.inbox_unread} unread in your inbox</span>{/if}
 	</div>
 	<MailCategories value={filters.category ?? ''} onChange={(category) => apply({ category })} />
@@ -680,6 +734,7 @@
 				{/if}
 			</div>
 		</div>
+		<div class="toolbar-filters">{@render filterControls()}</div>
 		<div class="toolbar-right">
 			<button type="button" class="tool-btn density-toggle" aria-label="Compact density" aria-pressed={density === 'compact'} title={density === 'compact' ? 'Switch to comfortable spacing' : 'Switch to compact spacing'} onclick={() => setMailboxDensity(density === 'compact' ? 'comfortable' : 'compact')}><Icon name={density === 'compact' ? 'contract-up-down-line' : 'expand-up-down-line'} size={18} /></button>
 			<div class="layout-toggle" role="group" aria-label="Mailbox layout">
@@ -693,16 +748,7 @@
 			</div>
 		</div>
 	</header>
-	<div class="refine-bar">
-		<nav class="filter-tabs" aria-label="Filter conversations">
-			<button type="button" class:active={filters.unreadOnly} aria-pressed={filters.unreadOnly} onclick={() => apply({ unread: filters.unreadOnly ? null : '1' })}><Icon name="mail-unread-line" size={15} />Unread</button>
-			<button type="button" class:active={filters.starredOnly} aria-pressed={filters.starredOnly} onclick={() => apply({ starred: filters.starredOnly ? null : '1' })}><Icon name="star-line" size={15} />Starred</button>
-			<button type="button" class:active={filters.attachmentsOnly} aria-pressed={filters.attachmentsOnly} onclick={() => apply({ attachments: filters.attachmentsOnly ? null : '1' })}><Icon name="attachment-2" size={15} />Attachments</button>
-		</nav>
-		<label class="attention-filter"><Icon name="focus-3-line" size={15} /><select aria-label="Filter email attention" value={filters.needs ?? ''} onchange={(e)=>apply({needs:e.currentTarget.value || null})}>
-			<option value="">Any attention level</option><option value="attention">Needs attention</option><option value="review">Review</option><option value="reply">Reply suggested</option><option value="deadline">Deadline mentioned</option>
-		</select><Icon name="arrow-down-s-line" size={14} /></label>
-		{#if activeFilterCount}<button type="button" class="reset-filters" onclick={() => apply({ unread: null, starred: null, attachments: null, category: null, needs: null })} aria-label="Clear all filters"><Icon name="close-line" size={14} /><span>Reset</span></button>{/if}
+	<div class="refine-bar">{@render filterControls()}</div>
 	</div>
 	{#if filters.q}
 		<div class="search-note">
@@ -733,7 +779,12 @@
 						class:select-mode={selectMode}
 						class:menu-open={rowMenuFor === thread.latest_id}
 						use:mailboxContextMenu={() => openRowMenu(thread.latest_id, index)}
+						use:swipeRow={swipeFor(thread)}
+						animate:flip={{ duration: motionDuration(220) }}
+						out:slide={{ duration: motionDuration(200) }}
 					>
+						<span class="swipe-under swipe-under-right" aria-hidden="true"><Icon name={thread.is_read ? 'mail-unread-line' : 'mail-open-line'} size={20} />{thread.is_read ? 'Unread' : 'Read'}</span>
+						<span class="swipe-under swipe-under-left" class:danger={swipeLeftAction(thread) === 'trash'} aria-hidden="true"><Icon name={swipeLeftAction(thread) === 'trash' ? 'delete-bin-line' : 'archive-line'} size={20} />{swipeLeftAction(thread) === 'trash' ? 'Trash' : 'Archive'}</span>
 						<span class="ios-unread-dot" class:visible={!thread.is_read} aria-hidden="true"></span>
 
 						<div class="card-bar">
@@ -978,22 +1029,24 @@
 <style>
 
 	.mailbox { display: flex; flex-direction: column; min-height: 100%; }
-	.mailbox-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.7rem 1.7rem 1.5rem; }
-	.eyebrow { font-size: 0.625rem; font-weight: 600; letter-spacing: 0.13em; color: var(--color-text-secondary); margin-bottom: 0.45rem; }
-	.mailbox-heading h1 { display: flex; align-items: baseline; gap: 0.8rem; font-size: 2.5rem; font-weight: 600; letter-spacing: -0.045em; }
+	.mailbox-head { position: sticky; top: 0; z-index: 20; background: var(--color-surface); }
+	.mailbox-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.35rem 0.75rem 0.5rem; }
+	.mailbox-heading h1 { display: flex; align-items: baseline; gap: 0.6rem; font-size: 1.6rem; font-weight: 650; letter-spacing: -0.035em; }
 	.mailbox-heading > div { min-width: 0; }
 	.mailbox-heading h1 { flex-wrap: wrap; overflow-wrap: anywhere; }
 	.mailbox-heading h1 span { margin-left: 0.3rem; font-size: 0.75rem; font-weight: 400; letter-spacing: 0; color: var(--color-text-secondary); }
 	.unread-summary { display: flex; align-items: center; gap: 0.5rem; flex: none; color: var(--color-text-secondary); font-size: 0.75rem; }
 	.unread-summary > span { width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent); box-shadow: 0 0 0 4px var(--color-accent-soft); }
-	.refine-bar { display: flex; align-items: center; gap: 0.65rem; margin: 0 1.5rem; padding: 0.4rem 0 0.8rem; border-bottom: 1px solid var(--color-line); }
+	.refine-bar { display: none; align-items: center; gap: 0.65rem; margin: 0 1.5rem; padding: 0.4rem 0 0.8rem; border-bottom: 1px solid var(--color-line); }
+	.toolbar-filters { display: flex; align-items: center; gap: 0.6rem; margin: 0 auto 0 0.75rem; min-width: 0; }
+	.toolbar-filters .attention-filter { margin-left: 0; }
 	.attention-filter { display: flex; align-items: center; gap: 0.4rem; margin-left: auto; color: var(--color-text-secondary); font-size: 0.75rem; min-width: 0; }
 	.attention-filter select { appearance: none; background: transparent; color: var(--color-text-secondary); min-height: 2.25rem; padding: 0 0.15rem; max-width: 100%; min-width: 0; cursor: pointer; }
 	.attention-filter select option { background: var(--color-surface); color: var(--color-text); }
 	.reset-filters { display: flex; align-items: center; gap: 0.25rem; color: var(--color-muted); font-size: 0.7rem; min-height: 2rem; }
-	.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 3.5rem; padding: 0.4rem 1.2rem;  }
+	.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 2.75rem; padding: 0.2rem 0.75rem; border-bottom: 1px solid var(--color-line); }
 	.toolbar-left, .toolbar-right, .bulk-actions, .select-all, .pager, .layout-toggle { display: flex; align-items: center; gap: 0.2rem; min-width: 0; }
-	.toolbar-right { gap: 1rem; }
+	.toolbar-right { gap: 0.6rem; }
 	.select-all { position: relative; padding-right: 0.5rem; }
 	.caret { display: flex; align-items: center; color: var(--color-text-secondary); width: 1rem; }
 	.tool-btn { display: flex; align-items: center; justify-content: center; width: 2.125rem; height: 2.125rem; flex-shrink: 0; border-radius: 9px; color: var(--color-text-secondary); transition: background 0.15s, color 0.15s; }
@@ -1010,7 +1063,7 @@
 	.pager-btn:hover { background: var(--color-well); }
 	.pager-btn.disabled { opacity: 0.3; pointer-events: none; }
 	.filter-tabs { display: flex; gap: 0.35rem; flex-wrap: wrap; }
-	.filter-tabs button { display: flex; align-items: center; gap: 0.4rem; min-height: 2rem; padding: 0 0.7rem; border-radius: 7px; font-size: 0.75rem; color: var(--color-muted); }
+	.filter-tabs button { display: flex; align-items: center; gap: 0.4rem; min-height: 1.85rem; padding: 0 0.65rem; border-radius: 999px; font-size: 0.75rem; color: var(--color-muted); }
 	.filter-tabs button:hover { background: var(--color-well); color: var(--color-text); }
 	.filter-tabs button.active { color: var(--color-accent-text); background: var(--color-accent-soft); font-weight: 500; }
 
@@ -1029,7 +1082,7 @@
 	.search-note { display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; color: var(--color-text-secondary); background: var(--color-well); font-size: 0.8125rem; }
 	.search-clear { margin-left: auto; color: var(--color-accent-text); }
 	.empty-actions { display: flex; justify-content: center; margin-top: -2rem; margin-bottom: 2rem; }
-	.list { padding: 0.5rem 1.5rem 1rem; }
+	.list { padding: 0 0.75rem 1rem; }
 	.cards { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 0.75rem; list-style: none; margin: 0; padding: 0; }
 	.card { position: relative; display: grid; grid-template-columns: auto auto 1fr; align-content: start; min-width: 0; min-height: 10rem; gap: 0.5rem; padding: 0.875rem; background: var(--color-well); border: 1px solid var(--color-line); border-radius: 14px; transition: background 0.15s, box-shadow 0.15s; }
 	.card.unread { background: var(--color-surface); }
@@ -1083,7 +1136,7 @@
 	.cards.layout-list .card-actions > .tool-btn { background: var(--color-well); }
 	.cards.layout-list .unread .card-actions > .tool-btn { background: var(--color-surface); }
 	.card:hover .card-actions > .tool-btn { background: var(--color-surface-hover); }
-	.ios-header, .ios-search, .ios-bulk-bar, .ios-unread-dot, .ios-select-toggle { display: none; }
+	.ios-header, .ios-search, .ios-bulk-bar, .ios-unread-dot, .ios-select-toggle, .swipe-under { display: none; }
 	@media (min-width:901px) and (max-width:1150px) {
 		.cards { grid-template-columns: repeat(2,minmax(0,1fr)); }
 		.cards.layout-list .card-body { grid-template-columns: minmax(6rem,9rem) minmax(7rem,1fr) auto 3rem; gap: 0.5rem; }
@@ -1094,8 +1147,17 @@
 		.density-toggle { display: none; }
 	}
 	@media (max-width:900px) {
+		.mailbox-head { position: static; }
 		.mailbox-heading, .toolbar { display: none; }
-		.refine-bar { margin: 0 1rem; padding: 0 0 0.6rem; flex-wrap: wrap; gap: 0.25rem 0.5rem; }
+		.refine-bar { display: flex; margin: 0 1rem; padding: 0 0 0.6rem; flex-wrap: wrap; gap: 0.25rem 0.5rem; }
+		.card { position: relative; overflow: hidden; touch-action: pan-y; }
+		.card-link, .cards.layout-list .card-link, .card-actions { position: relative; z-index: 1; transform: translateX(var(--swipe-x, 0px)); transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1); }
+		.card:global(.swiping) .card-link, .card:global(.swiping) .card-actions { transition: none; }
+		.swipe-under { position: absolute; top: 0; bottom: 0; z-index: 2; align-items: center; gap: 0.45rem; padding: 0 1.1rem; overflow: hidden; white-space: nowrap; font-size: 0.8rem; font-weight: 600; color: #fff; }
+		.card:not(:global([data-swipe='right'])) .swipe-under-right, .card:not(:global([data-swipe='left'])) .swipe-under-left { display: none; }
+		.card:global([data-swipe='right']) .swipe-under-right { display: flex; left: 0; width: max(0px, var(--swipe-x, 0px)); background: #2f7de1; }
+		.card:global([data-swipe='left']) .swipe-under-left { display: flex; right: 0; width: max(0px, calc(var(--swipe-x, 0px) * -1)); background: var(--color-accent); color: var(--color-on-accent); }
+		.card:global([data-swipe='left']) .swipe-under-left.danger { background: #d92d20; color: #fff; }
 		.filter-tabs { width: 100%; gap: 0.2rem; }
 		.filter-tabs button { min-height: 2.5rem; padding: 0 0.55rem; }
 		.attention-filter { margin-left: 0; }

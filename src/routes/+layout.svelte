@@ -1,6 +1,6 @@
 <script lang="ts">
 	import './layout.css';
-	import { goto } from '$app/navigation';
+	import { goto, onNavigate } from '$app/navigation';
 	import { page } from '$app/stores';
 	import favicon from '$lib/assets/favicon.svg';
 	import Sidebar from '$lib/components/Sidebar.svelte';
@@ -27,6 +27,16 @@
 		resolveSearchFocusAction
 	} from '$lib/shell-chrome';
 	import type { LayoutData } from './$types';
+
+	// Crossfade the content pane between routes (list <-> message); filter and page
+	// changes within the same route stay instant, and reduced-motion skips it.
+	onNavigate((navigation) => {
+		if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+		if (navigation.from?.url.pathname === navigation.to?.url.pathname) return;
+		return new Promise<void>((resolve) => {
+			document.startViewTransition(async () => { resolve(); await navigation.complete; });
+		});
+	});
 
 	const hubRoute = $derived(isHubRoute($page.url.pathname));
 
