@@ -78,10 +78,10 @@ export async function insertEmail(
 		.prepare(
 			`INSERT INTO emails (
 				id, user_id, direction, from_addr, from_name, to_addr, cc_addr, bcc_addr, subject,
-				body_text, body_html, message_id, in_reply_to, references_header,
+				body_text, body_html, preview, message_id, in_reply_to, references_header,
 				reply_to_email_id, thread_id, thread_key,
 				domain_id, provider_id, status, status_at, is_read
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)`
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)`
 		)
 		.bind(
 			id,
@@ -95,6 +95,7 @@ export async function insertEmail(
 			input.subject,
 			bodyText,
 			bodyHtml,
+			buildMessagePreview(bodyText, bodyHtml),
 			input.messageId ?? null,
 			input.inReplyTo ?? null,
 			input.references ?? null,
@@ -211,8 +212,7 @@ type ThreadMessageRow = {
 	from_name: string | null;
 	to_addr: string;
 	subject: string;
-	body_head: string | null;
-	body_html: string | null;
+	preview: string | null;
 	is_read: number;
 	is_starred: number;
 	is_pinned: number;
@@ -312,8 +312,7 @@ export async function listMailbox(
 		.prepare(
 			`SELECT m.id, COALESCE(m.thread_id, m.id) AS thread_id, m.direction, m.from_addr, m.from_name, m.to_addr,
 			        m.subject, m.is_read, m.is_starred, m.is_pinned, m.is_archived, m.created_at, m.domain_id, m.status, m.snoozed_until,
-			        m.auto_trashed_at,
-			        m.body_text AS body_head, m.body_html,
+			        m.auto_trashed_at, m.preview,
 			        EXISTS(SELECT 1 FROM email_attachments a WHERE a.email_id = m.id) AS has_attachments
 			 FROM emails m
 			 WHERE m.user_id = ? AND COALESCE(m.thread_id, m.id) IN (${placeholders}) AND ${display}
@@ -333,6 +332,10 @@ export async function listMailbox(
 		.map((threadId) => byThread.get(threadId))
 		.filter((group): group is ThreadMessageRow[] => Boolean(group?.length))
 		.map(toThreadSummary);
+	await fillMissingPreviews(db, userId, threads.map((thread) => thread.latest_id), (id, preview) => {
+		const thread = threads.find((entry) => entry.latest_id === id);
+		if (thread) thread.preview = preview;
+	}, messages);
 	const names = await knownSenderNames(db, userId, messages);
 	for (const thread of threads) {
 		for (const person of thread.participants) {
@@ -374,6 +377,40 @@ export async function listMailbox(
 	}
 
 	return { threads, total, page, pageCount, pageSize };
+}
+
+/**
+ * Messages stored before previews were persisted have preview = NULL. Compute
+ * those once from the body (only the rows being shown), save the result, and
+ * hand it back; after that the list never touches a body again.
+ */
+async function fillMissingPreviews(
+	db: D1Database,
+	userId: string,
+	ids: string[],
+	apply: (id: string, preview: string) => void,
+	known: { id: string; preview: string | null }[] = []
+): Promise<void> {
+	const missing = ids.filter((id) => {
+		const row = known.find((entry) => entry.id === id);
+		return row ? row.preview === null : true;
+	});
+	if (!missing.length) return;
+	const { results } = await db
+		.prepare(
+			`SELECT id, body_text, body_html FROM emails
+			 WHERE user_id = ? AND preview IS NULL AND id IN (${missing.map(() => '?').join(', ')})`
+		)
+		.bind(userId, ...missing)
+		.all<{ id: string; body_text: string | null; body_html: string | null }>();
+	if (!results.length) return;
+	const computed = results.map((row) => ({ id: row.id, preview: buildMessagePreview(row.body_text, row.body_html) }));
+	for (const { id, preview } of computed) apply(id, preview);
+	await db.batch(
+		computed.map(({ id, preview }) =>
+			db.prepare('UPDATE emails SET preview = ? WHERE id = ? AND user_id = ? AND preview IS NULL').bind(preview, id, userId)
+		)
+	);
 }
 
 /** Recover missing names from this account's other mail, never another user. */
@@ -433,7 +470,7 @@ function toThreadSummary(messages: ThreadMessageRow[]): ThreadSummary {
 		latest_id: latest.id,
 		// The conversation keeps the subject it started with, not "Re: Re: …".
 		subject: latest.status === 'draft' ? latest.subject : displaySubject(oldest.subject),
-		preview: buildMessagePreview(latest.body_head, latest.body_html),
+		preview: latest.preview ?? '',
 		participants,
 		message_count: messages.length,
 		is_read: messages.every((message) => message.is_read === 1),
@@ -479,7 +516,7 @@ export async function listEmails(
 		.prepare(
 			`SELECT e.id, e.direction, e.from_addr, e.to_addr, e.subject, e.is_read, e.is_starred,
 			        e.created_at, e.domain_id, e.status,
-		        e.body_text AS body_head, e.body_html,
+		        e.preview,
 			        EXISTS(SELECT 1 FROM email_attachments a WHERE a.email_id = e.id) AS has_attachments
 			 FROM emails e
 			 WHERE ${where}
@@ -489,13 +526,18 @@ export async function listEmails(
 		.bind(...bindings, options.limit ?? 100)
 		.all<ThreadMessageRow>();
 
+	await fillMissingPreviews(db, userId, results.map((row) => row.id), (id, preview) => {
+		const row = results.find((entry) => entry.id === id);
+		if (row) row.preview = preview;
+	});
+
 	return results.map((row) => ({
 		id: row.id,
 		direction: row.direction,
 		from_addr: row.from_addr,
 		to_addr: row.to_addr,
 		subject: row.subject,
-		preview: buildMessagePreview(row.body_head, row.body_html),
+		preview: row.preview ?? '',
 		is_read: row.is_read === 1,
 		is_starred: row.is_starred === 1,
 		is_draft: row.status === 'draft',
@@ -778,7 +820,7 @@ export async function saveDraft(
 			await db
 				.prepare(
 					`UPDATE emails SET from_addr = ?, to_addr = ?, cc_addr = ?, bcc_addr = ?,
-					        subject = ?, thread_key = ?, body_text = ?, body_html = ?, domain_id = ?,
+					        subject = ?, thread_key = ?, body_text = ?, body_html = ?, preview = ?, domain_id = ?,
 					        created_at = datetime('now'), deleted_at = NULL
 					 WHERE id = ? AND user_id = ?`
 				)
@@ -791,6 +833,7 @@ export async function saveDraft(
 					normalizeSubject(input.subject),
 					input.bodyText ?? null,
 					input.bodyHtml ?? null,
+					buildMessagePreview(input.bodyText ?? null, input.bodyHtml ?? null),
 					input.domainId ?? null,
 					input.id,
 					userId
