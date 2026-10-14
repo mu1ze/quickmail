@@ -92,7 +92,7 @@ export async function handleCloudflareInbound(
 		references,
 		domainId: route.domainId,
 		providerId,
-		analysisMetadata: inboundAnalysisMetadata(message.headers, 'cloudflare', { envelopeFrom: message.from, attachments: parsed.attachments.slice(0, 20).map(a => ({ filename: a.filename || 'attachment', type: a.mimeType })) })
+		analysisMetadata: inboundAnalysisMetadata(message.headers, 'cloudflare', { envelopeFrom: message.from, visibleTo: mailboxAddresses(parsed.to), visibleCc: mailboxAddresses(parsed.cc), attachments: parsed.attachments.slice(0, 20).map(a => ({ filename: a.filename || 'attachment', type: a.mimeType })) })
 	});
 
 	await storeInboundAttachments(env, emailId, parsed.attachments);

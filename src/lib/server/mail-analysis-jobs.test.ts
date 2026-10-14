@@ -8,7 +8,9 @@ import { listMailbox, insertEmail } from './mail-store';
 import { ANALYSIS_VERSION, SUBQ_MODEL } from '../mail-analysis';
 import { answers } from './testing/analysis-fixtures';
 import { analysisEnabled, setAnalysisEnabled, enqueueAnalysisBackfill, loadMailAnalyses, correctMailAnalysis } from './mail-analysis-store';
-import { dispatchAnalysis, processAnalysisJob, reconcileAnalysisJobs } from './mail-analysis-jobs';
+import { dispatchAnalysis, processAnalysisJob, reconcileAnalysisJobs, consumeAnalysisQueue } from './mail-analysis-jobs';
+import { handleCloudflareInbound } from './cloudflare-inbound';
+import { handleResendWebhook } from './inbound';
 import { authorizeApiRequest } from './api-access';
 import { GET as getSettings, PUT as saveSettings } from '../../routes/api/settings/analysis/+server';
 import { PATCH as correctAnalysis } from '../../routes/api/mail/[id]/analysis/+server';
@@ -155,4 +157,35 @@ test('settings require explicit ZDR consent and corrections require an owner bro
  assert.equal((await correctAnalysis(correction({category:'work'}))).status,200);
  for(const path of ['/api/settings/analysis','/api/mail/received/analysis']) assert.equal(authorizeApiRequest({pathname:path,method:'PATCH',authMethod:'api_token',scopes:['mail:read','mail:send','admin']}).ok,false);
  assert.equal((await saveSettings(event({enabled:false}))).status,200);
+});
+
+test('both providers preserve recipient context and dispatch ID-only queue messages after inbound storage', async () => {
+ await setAnalysisEnabled(db,'owner',true);
+ sqlite.exec("UPDATE users SET is_admin=1 WHERE id='owner'; INSERT INTO domains(id,name) VALUES('domain','example.com'); INSERT INTO addresses(id,user_id,domain_id,address) VALUES('address','owner','domain','owner@example.com')");
+ const sent:any[]=[];
+ const env={DB:db,ATTACHMENTS:{},SUBQ_API_KEY:'test',MAIL_ANALYSIS_QUEUE:{send:async(body:unknown)=>{sent.push(body);}}} as any;
+ await handleCloudflareInbound({from:'bounce@example.test',to:'owner@example.com',headers:new Headers({'to':'teammate@example.com','cc':'owner@example.com'}),raw:new Response('From: Alex <alex@example.test>\r\nTo: teammate@example.com\r\nCc: owner@example.com\r\nSubject: Synthetic Cloudflare message\r\nMessage-ID: <cf-qa@example.test>\r\nContent-Type: text/plain\r\n\r\nFYI only.').body!,setReject(){throw Error('unexpected rejection');}},env);
+ await handleResendWebhook({type:'email.received',data:{email_id:'resend-qa'}},env,{getReceivedEmail:async()=>({from:'alex@example.test',to:['teammate@example.com'],cc:['owner@example.com'],subject:'Synthetic Resend message',text:'FYI only.',html:null,headers:{'Reply-To':'alex@example.test'}}),listReceivedAttachments:async()=>[]} as any);
+ assert.equal(sent.length,2);
+ for(const item of sent) {
+  assert.deepEqual(Object.keys(item).sort(),['emailId','userId','version']);assert.equal(item.userId,'owner');
+  const row=sqlite.query<{metadata_json:string},[string]>('SELECT metadata_json FROM email_analysis_metadata WHERE email_id=?').get(item.emailId)!;
+  const metadata=JSON.parse(row.metadata_json);assert.deepEqual(metadata.visibleTo,['teammate@example.com']);assert.deepEqual(metadata.visibleCc,['owner@example.com']);
+ }
+ let acked=0;
+ await consumeAnalysisQueue({messages:sent.map(body=>({body,ack(){acked++;},retry(){throw Error('unexpected retry');}}))} as any,{DB:db,SUBQ_API_KEY:'test',fetch:(async()=>response()) as typeof fetch});
+ assert.equal(acked,2);
+ assert.equal((await loadMailAnalyses(db,'owner',sent.map(m=>m.emailId))).size,2);
+});
+
+test('same-second inbound messages use insertion order so retractions supersede requests', async () => {
+ await setAnalysisEnabled(db,'owner',true);const first=await receive(),second=await receive();
+ sqlite.exec("UPDATE emails SET created_at='2026-01-01 00:00:00'");
+ const env={DB:db,SUBQ_API_KEY:'test',fetch:(async()=>response()) as typeof fetch};
+ await processAnalysisJob(env,message(first));
+ await processAnalysisJob({...env,fetch:(async()=>{const a=answers();a.needs_reply.noul=0;a.deadline.noul=0;return Response.json({model:SUBQ_MODEL,answers:a,usage:{input_tokens:500,output_tokens:0}});}) as typeof fetch},message(second));
+ const page=await listMailbox(db,'owner',{view:'inbox'});
+ assert.equal(page.threads[0].analysisMessageId,second);
+ assert.equal(page.threads[0].analysis?.needsReply,false);
+ assert.equal((await listMailbox(db,'owner',{view:'inbox',q:'needs:reply'})).total,0);
 });

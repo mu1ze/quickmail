@@ -217,6 +217,10 @@ bun run db:migrate:remote
 
 ## Development
 
+Optional incoming email categorization and triage use SubQ Snap. See
+[the analysis guide](docs/subq-analysis.md) for zero retention, account opt-in,
+queue setup, migration order, and synthetic API evaluation.
+
 ```bash
 cp .dev.vars.example .dev.vars    # fill in the provider you're using
 bun install

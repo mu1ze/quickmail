@@ -1,5 +1,8 @@
 # Copy this file to .dev.vars and fill in real values.
 # .dev.vars is gitignored — never commit it.
+
+# Optional incoming analysis. Confirm SubQ organization ZDR before enabling real mail.
+# SUBQ_API_KEY=...
 #
 # In production these live as Worker secrets / vars instead.
 

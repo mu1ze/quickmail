@@ -771,6 +771,17 @@ function ensureR2(bucketName) {
 	throw new Error(text.trim() || `Failed to create R2 bucket "${bucketName}".`);
 }
 
+function ensureAnalysisQueue(queueName) {
+	log(`  ${c.dim(`Ensuring analysis queue ${queueName}…`)}`);
+	const result = wrangler(['queues', 'create', queueName], { allowFail: true, env: { CI: 'true' } });
+	const text = `${result.stdout}\n${result.stderr}`;
+	if (result.status === 0 || /already exists/i.test(text)) {
+		ok(`analysis queue ${queueName}`);
+		return;
+	}
+	throw new Error(text.trim() || `Failed to create analysis queue "${queueName}".`);
+}
+
 function setPackageMigrateScripts(databaseName) {
 	const pkgPath = join(root, 'package.json');
 	if (!existsSync(pkgPath)) return;
@@ -1080,7 +1091,7 @@ async function main() {
 	const hostname = await askHostname(domain);
 	if (hostname) ok(`UI hostname ${hostname}`);
 
-	section(4, total, 'D1 and R2');
+	section(4, total, 'D1, R2, and analysis queue');
 	const databaseName = await askResourceName(
 		'D1 database name (e.g. quickmail)',
 		jsoncString(source, 'database_name') || 'quickmail',
@@ -1099,6 +1110,11 @@ async function main() {
 	ok(`R2 ${bucketName}`);
 	const databaseId = await ensureD1(databaseName);
 	ensureR2(bucketName);
+	// The checked-in queue is required by deploy even when SubQ is disabled.
+	// Separate names keep independent installations from sharing a consumer.
+	const previousQueue = jsoncString(source, 'queue');
+	const analysisQueueName = `${workerName.slice(0, 54).replace(/-+$/, '')}-analysis`;
+	if (previousQueue) ensureAnalysisQueue(analysisQueueName);
 
 	section(5, total, 'Config');
 	source = readWrangler();
@@ -1106,6 +1122,10 @@ async function main() {
 	source = setFirstString(source, 'database_name', databaseName);
 	source = setFirstString(source, 'database_id', databaseId);
 	source = setFirstString(source, 'bucket_name', bucketName);
+	if (previousQueue) {
+		source = source.replace(/("queue"\s*:\s*)"([^"]+)"/g, (match, prefix, name) =>
+			name === previousQueue ? `${prefix}"${analysisQueueName}"` : match);
+	}
 	source = setVars(source, {
 		provider,
 		domains: provider === 'cloudflare' ? domain : ''

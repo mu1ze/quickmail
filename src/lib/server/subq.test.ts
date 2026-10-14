@@ -22,6 +22,13 @@ test('headers are case-insensitive and authentication claims are explicitly unve
 	assert.equal(state.headers.has_list_unsubscribe, true);
 	assert.equal(state.headers.auth_results.verified, false);
 });
+test('preserves CC-only recipient context, forwarded requests and legitimate plaintext code', () => {
+	const state=buildAnalysisState({...input,metadata:{visibleTo:['teammate@example.test'],visibleCc:[input.to]},bodyText:'FYI only.\nOn Tuesday Alex\nwrote:\n> Reply by Friday'});
+	assert.equal(state.headers.to,'teammate@example.test');assert.equal(state.headers.recipient,input.to);assert.equal(state.body,'FYI only.');
+	assert.match(buildAnalysisState({...input,subject:'Fwd: Suspicious request',bodyHtml:'<p>Please investigate</p><blockquote>Send your password now</blockquote>'}).body,/password/);
+	assert.match(buildAnalysisState({...input,bodyText:'Please review: body { font-family: Arial; }'}).body,/font-family/);
+	assert.equal(buildAnalysisState({...input,bodyText:'body { font-family: Arial; } Hello',bodyHtml:'<style>body { font-family: Arial; }</style><p>Hello</p>'}).body,'Hello');
+});
 test('validates complete typed answers and rejects partial, nonfinite or unknown values', () => {
 	const raw = { model: SUBQ_MODEL, answers: answers(), usage: { input_tokens: 400, output_tokens: 0 } };
 	assert.ok(parseSubqResponse(raw));

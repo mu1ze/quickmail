@@ -3,6 +3,7 @@ import { htmlToPlainText } from '$lib/utils/html';
 
 export type AnalysisMetadata = {
 	replyTo?: string; date?: string; envelopeFrom?: string;
+	visibleTo?: string[]; visibleCc?: string[];
 	hasListUnsubscribe?: boolean; listId?: string; autoSubmitted?: string;
 	authResults?: string; provider?: 'cloudflare' | 'resend';
 	attachments?: { filename: string; type: string }[];
@@ -29,10 +30,12 @@ function redact(text: string): string {
 	return text.replace(/https?:\/\/[^\s<>"']+/gi, safeUrl)
 		.replace(/\b((?:verification|security|authentication|one[- ]time|otp)\s*(?:code|password)?\s*(?:is|:)?\s*)\d{4,8}\b/gi, '$1[code]');
 }
-function latestBody(text: string): string {
+function latestBody(text: string, forwarded: boolean): string {
 	const lines = text.split(/\r?\n/);
 	// Forwarded material can be the current message's essential evidence.
-	const boundary = lines.findIndex(line => /^\s*(?:On\b.*wrote:|>{1,}|-{2,}\s*Original Message|--\s*$)/i.test(line));
+	if (forwarded) return text.trim();
+	const boundary = lines.findIndex((line,index) => /^\s*(?:On\b.*wrote:|>{1,}|-{2,}\s*Original Message|--\s*$)/i.test(line) ||
+		(/^\s*On\b/i.test(line) && /wrote:\s*$/i.test(`${line} ${lines[index+1]??''}`)));
 	const own = boundary >= 0 ? lines.slice(0, boundary).join('\n').trim() : text.trim();
 	return own || text.trim();
 }
@@ -41,9 +44,10 @@ export function buildAnalysisState(input: {
 	subject: string; bodyText?: string | null; bodyHtml?: string | null; metadata?: AnalysisMetadata;
 }) {
 	const metadata = input.metadata ?? {};
+	const forwarded = /^\s*(?:fw|fwd|forward)\s*:/i.test(input.subject);
 	let html = input.bodyHtml ?? '';
 	const quote = /<(?:blockquote\b|[^>]+(?:class=["'][^"']*(?:gmail_quote|yahoo_quoted)|id=["']?(?:appendonsend|divRplyFwdMsg)))/i.exec(html);
-	if (quote && htmlToPlainText(html.slice(0, quote.index)).trim()) html = html.slice(0, quote.index);
+	if (!forwarded && quote && htmlToPlainText(html.slice(0, quote.index)).trim()) html = html.slice(0, quote.index);
 	html = html.replace(/<(?:script|style|head)\b[^>]*>[\s\S]*?<\/(?:script|style|head)>/gi, '').replace(/<!--[\s\S]*?-->/g, '');
 	const links: { text: string; destination: string }[] = [];
 	for (const match of html.matchAll(/<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>([\s\S]*?)<\/a>/gi)) {
@@ -52,13 +56,15 @@ export function buildAnalysisState(input: {
 	}
 	const plain = input.bodyText?.trim();
 	// Some providers put CSS into their flattened text alternative.
-	const polluted = plain && /\{\s*(?:text-decoration|font-|background|display)\s*:/i.test(plain);
+	const polluted = html && plain && /\{[^{}]{0,80}(?:text-decoration|font-[\w-]+|background[\w-]*|display|color)\s*:/i.test(plain);
 	const source = plain && !polluted ? plain : htmlToPlainText(html);
-	const body = latestBody(source ?? '');
+	const body = latestBody(source ?? '', forwarded);
 	return {
 		headers: {
 			from_name: (input.fromName ?? '').slice(0, 200), from_addr: input.from.slice(0, 500),
-			to: input.to.slice(0, 1000), cc: (input.cc ?? '').slice(0, 1000), subject: redact(input.subject).slice(0, 500),
+			to: (metadata.visibleTo?.join(', ') ?? input.to).slice(0, 1000),
+			cc: (metadata.visibleCc?.join(', ') ?? input.cc ?? '').slice(0, 1000),
+			recipient: input.to.slice(0,500), subject: redact(input.subject).slice(0, 500),
 			reply_to: metadata.replyTo ?? null, date: metadata.date ?? null,
 			envelope_from: metadata.envelopeFrom ?? null, has_list_unsubscribe: metadata.hasListUnsubscribe ?? null,
 			list_id: metadata.listId ?? null, auto_submitted: metadata.autoSubmitted ?? null,

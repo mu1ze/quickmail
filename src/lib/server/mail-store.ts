@@ -317,7 +317,7 @@ export async function listMailbox(
 			        EXISTS(SELECT 1 FROM email_attachments a WHERE a.email_id = m.id) AS has_attachments
 			 FROM emails m
 			 WHERE m.user_id = ? AND COALESCE(m.thread_id, m.id) IN (${placeholders}) AND ${display}
-			 ORDER BY datetime(m.created_at) ASC,m.id ASC`
+			 ORDER BY datetime(m.created_at) ASC,m.rowid ASC`
 		)
 		.bind(userId, ...threadIds)
 		.all<ThreadMessageRow>();
@@ -334,7 +334,7 @@ export async function listMailbox(
 		.filter((group): group is ThreadMessageRow[] => Boolean(group?.length))
 		.map(toThreadSummary);
 
-	const { results: inbound } = await db.prepare(`SELECT id,COALESCE(thread_id,id) AS thread_id FROM emails WHERE user_id=? AND direction='inbound' AND deleted_at IS NULL AND COALESCE(thread_id,id) IN (${placeholders}) ORDER BY datetime(created_at),id`)
+	const { results: inbound } = await db.prepare(`SELECT id,COALESCE(thread_id,id) AS thread_id FROM emails WHERE user_id=? AND direction='inbound' AND deleted_at IS NULL AND COALESCE(thread_id,id) IN (${placeholders}) ORDER BY datetime(created_at),rowid`)
 		.bind(userId,...threadIds).all<{id:string;thread_id:string}>();
 	const analyses = await loadMailAnalyses(db,userId,inbound.map(m=>m.id));
 	for (const thread of threads) {
@@ -844,7 +844,7 @@ export async function listThreadMessages(
 			 AND COALESCE(e.thread_id, e.id) = ?
 			 AND (e.status IS NULL OR e.status <> 'draft')
 			 ${scope}
-			 ORDER BY datetime(e.created_at) ASC`
+			 ORDER BY datetime(e.created_at) ASC,e.rowid ASC`
 		)
 		.bind(userId, threadId)
 		.all<

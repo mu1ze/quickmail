@@ -1,5 +1,17 @@
 # Mailbox regression checks
 
+Incoming SubQ analysis requires migration `0023_mail_analysis.sql` before
+deploying this revision. See [the analysis guide](subq-analysis.md) for queue
+provisioning, secret configuration, account opt-in, and the synthetic evaluator.
+
+Analysis QA: check Primary/Updates and specific category filters, Review and
+reply/deadline filters, pagination totals, category corrections, warning
+dismissal, task completion, and opt-out during in-flight analysis. A newer
+inbound message must supersede an old reply suggestion; same-second arrivals
+use insertion order. Warnings from earlier messages must remain visible until
+dismissed. Verify these flows at desktop, 390px, and 320px widths. Analysis
+alone must not move messages or mark them read.
+
 ## Local setup
 
 Use a disposable local account and local mail fixtures. Never repoint production
@@ -13,7 +25,7 @@ QUICKMAIL_LOCAL_BINDINGS=1 bun run dev
 
 Apply all pending migrations to the deployment database before deploying these
 changes: `0019_attachment_content_ids.sql`, `0020_mailbox_folders.sql`,
-`0021_mail_labels.sql`, and `0022_sender_names.sql`. Use `bun run db:migrate:remote` with Cloudflare
+`0021_mail_labels.sql`, `0022_sender_names.sql`, and `0023_mail_analysis.sql`. Use `bun run db:migrate:remote` with Cloudflare
 authentication and network access available. Local migration success does not
 establish that these were applied remotely.
 

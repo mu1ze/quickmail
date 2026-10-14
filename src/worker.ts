@@ -55,8 +55,9 @@ export default {
 	},
 
 	async scheduled(controller: ScheduledController, env: Env) {
-		await reconcileAnalysisJobs(env);
-		if (controller.cron !== '0 8 * * SUN') return;
+		try { await reconcileAnalysisJobs(env); }
+		catch { console.error('mail analysis reconciliation failed'); }
+		if (!['0 8 * * SUN', '0 8 * * 1'].includes(controller.cron)) return;
 		const result = await runWeeklyMailAutomations(env);
 		console.log('mail automations', result);
 	}

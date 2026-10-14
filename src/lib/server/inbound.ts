@@ -128,7 +128,7 @@ async function handleInboundEmail(
 		references: received.headers?.['references'] ?? null,
 		domainId: route.domainId,
 		providerId,
-		analysisMetadata: inboundAnalysisMetadata(received.headers ?? {}, 'resend')
+		analysisMetadata: inboundAnalysisMetadata(received.headers ?? {}, 'resend', { visibleTo: received.to, visibleCc: received.cc })
 	});
 
 	await storeInboundAttachments(env, client, providerId, emailId);

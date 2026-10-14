@@ -3,7 +3,7 @@ import { ANALYSIS_VERSION, CATEGORY_GROUPS, isMailCategory } from './mail-analys
 /** All predicates operate on the same conversation as alias e, with owner guards. */
 const thread = 'COALESCE(m.thread_id,m.id)=COALESCE(e.thread_id,e.id)';
 const active = "m.user_id=e.user_id AND m.direction='inbound' AND m.deleted_at IS NULL";
-const latest = `SELECT m.id FROM emails m WHERE ${active} AND ${thread} ORDER BY datetime(m.created_at) DESC,m.id DESC LIMIT 1`;
+const latest = `SELECT m.id FROM emails m WHERE ${active} AND ${thread} ORDER BY datetime(m.created_at) DESC,m.rowid DESC LIMIT 1`;
 const joins = `LEFT JOIN email_analysis a ON a.email_id=m.id AND a.user_id=m.user_id AND a.version='${ANALYSIS_VERSION}'
 	LEFT JOIN email_analysis_corrections c ON c.email_id=m.id AND c.user_id=m.user_id
 	LEFT JOIN email_analysis_jobs j ON j.email_id=m.id AND j.user_id=m.user_id AND j.version='${ANALYSIS_VERSION}'`;

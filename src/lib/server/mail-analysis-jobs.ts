@@ -64,6 +64,7 @@ export async function processAnalysisJob(env: AnalysisEnv, message: AnalysisQueu
 		const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(state))))].map(b=>b.toString(16).padStart(2,'0')).join('');
 		// Check consent immediately before the external call, including during a lease.
 		const consent = await db.prepare(`SELECT 1 FROM email_analysis_jobs j JOIN mail_analysis_settings s ON s.user_id=j.user_id AND s.enabled=1
+			JOIN emails e ON e.id=j.email_id AND e.user_id=j.user_id AND e.deleted_at IS NULL
 			WHERE j.email_id=? AND j.user_id=? AND j.version=? AND j.lease_token=?`).bind(message.emailId,message.userId,ANALYSIS_VERSION,token).first();
 		if (!consent) return;
 		const result = await requestSubq(env.SUBQ_API_KEY, state, env.fetch);
@@ -100,8 +101,10 @@ export async function reconcileAnalysisJobs(env: AnalysisEnv): Promise<void> {
 	if (!env.SUBQ_API_KEY) return;
 	await env.DB.prepare(`UPDATE email_analysis_jobs SET status=CASE WHEN attempts>=? THEN 'failed' ELSE 'pending' END,lease_token=NULL,lease_until=0,error_code='analysis_lease_expired'
 		WHERE status='processing' AND lease_until<=?`).bind(MAX_ATTEMPTS,now()).run();
-	const { results } = await env.DB.prepare(`SELECT DISTINCT j.user_id FROM email_analysis_jobs j JOIN mail_analysis_settings s ON s.user_id=j.user_id AND s.enabled=1
-		WHERE j.version=? AND j.status='pending' AND j.next_attempt_at<=? LIMIT 20`).bind(ANALYSIS_VERSION,now()).all<{ user_id: string }>();
+	const { results } = await env.DB.prepare(`SELECT j.user_id FROM email_analysis_jobs j JOIN mail_analysis_settings s ON s.user_id=j.user_id AND s.enabled=1
+		JOIN emails e ON e.id=j.email_id AND e.user_id=j.user_id AND e.deleted_at IS NULL
+		WHERE j.version=? AND j.status='pending' AND j.next_attempt_at<=? AND j.queued_until<=?
+		GROUP BY j.user_id ORDER BY MIN(j.next_attempt_at),j.user_id LIMIT 20`).bind(ANALYSIS_VERSION,now(),now()).all<{ user_id: string }>();
 	for (const user of results) await dispatchAnalysis(env, user.user_id);
 }
 export async function consumeAnalysisQueue(batch: MessageBatch<AnalysisQueueMessage>, env: AnalysisEnv) {
