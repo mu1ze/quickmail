@@ -77,7 +77,7 @@
 				"description": "Shared secret for the /recover page. Anyone with this key can set a new password for an existing account."
 			},
 			"SUBQ_API_KEY": {
-				"description": "Optional SubQ Snap secret for incoming email analysis. Confirm organization zero retention, then enable per-account in Automations."
+				"description": "Optional SubQ Snap secret for incoming email analysis. Enable per-account in Automations."
 			},
 			"MAIL_ANALYSIS_QUEUE": {
 				"description": "Background analysis queue. Setup provisions it; see docs/subq-analysis.md for existing deployments."

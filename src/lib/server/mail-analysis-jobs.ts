@@ -1,5 +1,6 @@
 import type { D1Database, MessageBatch, Queue } from '@cloudflare/workers-types';
 import { ANALYSIS_VERSION, SUBQ_MODEL, analysisSignals } from '$lib/mail-analysis';
+import { continueBackfill } from './mail-analysis-store';
 import { buildAnalysisState, requestSubq, SubqError, type AnalysisMetadata } from './subq';
 
 export type AnalysisQueueMessage = { emailId: string; userId: string; version: string };
@@ -114,6 +115,12 @@ export async function reconcileAnalysisJobs(env: AnalysisEnv): Promise<void> {
 	if (!env.SUBQ_API_KEY) return;
 	await env.DB.prepare(`UPDATE email_analysis_jobs SET status=CASE WHEN attempts>=? THEN 'failed' ELSE 'pending' END,lease_token=NULL,lease_until=0,error_code='analysis_lease_expired'
 		WHERE status='processing' AND lease_until<=?`).bind(MAX_ATTEMPTS,now()).run();
+	// "Analyze all existing mail" keeps feeding bounded batches until it runs dry.
+	const paused = await env.DB.prepare('SELECT pause_until FROM mail_analysis_provider_state WHERE id=1').first<{ pause_until: number }>();
+	if (!paused || paused.pause_until <= now()) {
+		const { results: filling } = await env.DB.prepare('SELECT user_id FROM mail_analysis_settings WHERE enabled=1 AND backfill_all=1 ORDER BY updated_at LIMIT 20').all<{ user_id: string }>();
+		for (const user of filling) await continueBackfill(env.DB, user.user_id);
+	}
 	const { results } = await env.DB.prepare(`SELECT j.user_id FROM email_analysis_jobs j JOIN mail_analysis_settings s ON s.user_id=j.user_id AND s.enabled=1
 		JOIN emails e ON e.id=j.email_id AND e.user_id=j.user_id AND e.deleted_at IS NULL
 		WHERE j.version=? AND j.status='pending' AND j.next_attempt_at<=? AND j.queued_until<=?

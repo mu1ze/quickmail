@@ -12,12 +12,13 @@ marks it read, sends a reply, or changes weekly cleanup decisions.
 3. Use `QUICKMAIL_LOCAL_BINDINGS=1 bun run dev` to inspect the UI. Vite runs
    the SvelteKit fetch handler, not the queue/cron handlers; use
    `bun run preview` to exercise background delivery with local bindings.
-4. Settings → Automations → Incoming email analysis: confirm the SubQ
-   organization has **active** zero data retention, then enable the account.
+4. Settings → Automations → Incoming email analysis: enable the account.
 
 The setting is off by default and applies only to future incoming messages.
-Existing mail requires the explicit bounded backfill button (up to 200 per
-request). Disable analysis to cancel pending work and invalidate active leases.
+Existing mail is analyzed on request with **Analyze all existing emails**: it
+queues batches of 200 and the five-minute reconcile keeps topping up until
+nothing is left (the Settings page shows how many remain, and has a Stop
+button). Failed jobs are not re-queued automatically; use Retry. Disable analysis to cancel pending work and invalidate active leases.
 A request already in flight cannot be recalled, but its answer is discarded
 after opt-out. Existing analysis/corrections are retained locally.
 
@@ -58,10 +59,11 @@ correspondence do not establish safety. The integration is semantic triage,
 not antivirus, domain reputation, or SPF/DKIM/DMARC verification. Legacy
 messages have unknown metadata where ingestion previously discarded it.
 
-SubQ's default retention is indefinite. Decisions has no documented
-`store:false` switch. Enable organization zero retention before real-mail
-processing; the UI confirmation records operator consent, not an API-verified
-retention policy. See <https://docs.subq.ai/using-the-api/data-retention/>.
+SubQ's default retention is indefinite and Decisions has no documented
+`store:false` switch, so retention is an organization-level setting. Zero data
+retention must be active for the organization that owns `SUBQ_API_KEY`; the app
+cannot verify this through the API. See
+<https://docs.subq.ai/using-the-api/data-retention/>.
 
 D1 stores selected inbound metadata, typed answer probabilities, version/model,
 input hash, token usage, status, and manual corrections. Analysis does not store
@@ -127,7 +129,7 @@ matched 15 categories (14 at confidence ≥0.90; threshold since lowered to 0.60
 flagged the one phishing example. Median end-to-end latency was 305 ms, with
 14,967 reported input tokens total. These are one-run observations, not an SLA.
 
-Before changing thresholds, review roughly 200 real messages under active ZDR.
+Before changing thresholds, review roughly 200 real messages with zero data retention active.
 Settings reports category agreement by confidence band for manually reviewed
 messages only; uncorrected predictions are not assumed correct. Include wanted
 marketing, authentic security mail, scams, retractions, CC-only requests,

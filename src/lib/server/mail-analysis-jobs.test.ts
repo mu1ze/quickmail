@@ -7,7 +7,7 @@ import type { D1Database } from '@cloudflare/workers-types';
 import { listMailbox, insertEmail } from './mail-store';
 import { ANALYSIS_VERSION, SUBQ_MODEL } from '../mail-analysis';
 import { answers } from './testing/analysis-fixtures';
-import { analysisEnabled, setAnalysisEnabled, enqueueAnalysisBackfill, loadMailAnalyses, correctMailAnalysis } from './mail-analysis-store';
+import { analysisEnabled, setAnalysisEnabled, enqueueAnalysisBackfill, loadMailAnalyses, correctMailAnalysis, continueBackfill, countUnanalyzed, setBackfillAll, backfillAllActive } from './mail-analysis-store';
 import { dispatchAnalysis, processAnalysisJob, reconcileAnalysisJobs, consumeAnalysisQueue } from './mail-analysis-jobs';
 import { handleCloudflareInbound } from './cloudflare-inbound';
 import { handleResendWebhook } from './inbound';
@@ -141,13 +141,14 @@ test('a newer informational message supersedes old task suggestions but preserve
  assert.equal((await listMailbox(db,'owner',{view:'inbox'})).threads[0].analysis?.phishing,true);
 });
 
-test('settings require explicit ZDR consent and corrections require an owner browser session', async () => {
+test('settings require a configured key, and corrections require an owner browser session', async () => {
  const id=await receive();
  const locals={user:{id:'owner'},authMethod:'session'},platform={env:{DB:db,SUBQ_API_KEY:'test'}};
  const event=(body:unknown)=>({locals,platform,request:new Request('http://localhost/api/settings/analysis',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}) as any;
- assert.equal((await saveSettings(event({enabled:true}))).status,400);
+ const keyless={locals,platform:{env:{DB:db}},request:new Request('http://localhost/api/settings/analysis',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:true})})} as any;
+ assert.equal((await saveSettings(keyless)).status,400);
  assert.equal(await analysisEnabled(db,'owner'),false);
- assert.equal((await saveSettings(event({enabled:true,zdrConfirmed:true}))).status,200);
+ assert.equal((await saveSettings(event({enabled:true}))).status,200);
  assert.equal(await analysisEnabled(db,'owner'),true);
  const current=await (await getSettings({locals,platform} as any)).json();assert.equal(current.available,true);assert.equal(current.enabled,true);
  const correction=(body:unknown,userId='owner',authMethod='session')=>({locals:{user:{id:userId},authMethod},platform,params:{id},request:new Request('http://localhost/api/mail/x/analysis',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}) as any;
@@ -202,4 +203,27 @@ test('0024 migration re-derives categories for rows previously hidden by the 0.9
  assert.deepEqual(row(hidden), { category: 'promotion', review: 0 });
  assert.deepEqual(row(unsure), { category: null, review: 1 });
  assert.deepEqual(row(flagged), { category: 'transaction', review: 1 });
+});
+
+test('analyze-all keeps queueing bounded batches from cron until the backlog is gone, then stops itself', async () => {
+ for (let i=0;i<5;i++) await receive();
+ await setAnalysisEnabled(db,'owner',true);
+ assert.equal(await countUnanalyzed(db,'owner'),5);
+ assert.equal(await continueBackfill(db,'owner',2),0, 'does nothing until requested');
+ await setBackfillAll(db,'owner',true);
+ const env={DB:db,SUBQ_API_KEY:'test',fetch:(async()=>response()) as typeof fetch};
+ let rounds=0;
+ while (await backfillAllActive(db,'owner') && rounds++<10) {
+  await continueBackfill(db,'owner',2); await reconcileAnalysisJobs(env); await dispatchAnalysis(env,'owner');
+ }
+ assert.equal(await countUnanalyzed(db,'owner'),0);
+ assert.equal(await backfillAllActive(db,'owner'),false);
+ assert.equal(sqlite.query<{n:number},[]>("SELECT COUNT(*) AS n FROM email_analysis").get()!.n,5);
+});
+test('turning analysis off cancels analyze-all', async () => {
+ await receive(); await setAnalysisEnabled(db,'owner',true); await setBackfillAll(db,'owner',true);
+ assert.equal(await backfillAllActive(db,'owner'),true);
+ await setAnalysisEnabled(db,'owner',false);
+ await setAnalysisEnabled(db,'owner',true);
+ assert.equal(await backfillAllActive(db,'owner'),false);
 });

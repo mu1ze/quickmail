@@ -16,7 +16,8 @@ export async function analysisEnabled(db: D1Database, userId: string): Promise<b
 }
 export async function setAnalysisEnabled(db: D1Database, userId: string, enabled: boolean) {
 	await db.batch([
-		db.prepare(`INSERT INTO mail_analysis_settings(user_id,enabled) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET enabled=excluded.enabled,updated_at=datetime('now')`).bind(userId, enabled ? 1 : 0),
+		db.prepare(`INSERT INTO mail_analysis_settings(user_id,enabled) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET enabled=excluded.enabled,
+			backfill_all=CASE WHEN excluded.enabled=0 THEN 0 ELSE backfill_all END,updated_at=datetime('now')`).bind(userId, enabled ? 1 : 0),
 		// Cancel pending work and invalidate processing leases immediately on opt-out.
 		...(enabled ? [] : [db.prepare('DELETE FROM email_analysis_jobs WHERE user_id=?').bind(userId)])
 	]);
@@ -28,6 +29,35 @@ export async function enqueueAnalysisBackfill(db: D1Database, userId: string, li
 		AND NOT EXISTS(SELECT 1 FROM email_analysis a WHERE a.email_id=e.id AND a.user_id=e.user_id AND a.version=?)
 		ORDER BY datetime(e.created_at) DESC,e.id DESC LIMIT ?`).bind(ANALYSIS_VERSION, userId, ANALYSIS_VERSION, Math.min(200, Math.max(1, limit))).run();
 	return result.meta.changes;
+}
+
+/** Inbound mail that has neither an analysis nor a job for the current version. */
+export async function countUnanalyzed(db: D1Database, userId: string): Promise<number> {
+	const row = await db.prepare(`SELECT COUNT(*) AS n FROM emails e WHERE e.user_id=? AND e.direction='inbound' AND e.deleted_at IS NULL
+		AND NOT EXISTS(SELECT 1 FROM email_analysis a WHERE a.email_id=e.id AND a.user_id=e.user_id AND a.version=?)
+		AND NOT EXISTS(SELECT 1 FROM email_analysis_jobs j WHERE j.email_id=e.id AND j.user_id=e.user_id AND j.version=?)`)
+		.bind(userId, ANALYSIS_VERSION, ANALYSIS_VERSION).first<{ n: number }>();
+	return row?.n ?? 0;
+}
+export async function backfillAllActive(db: D1Database, userId: string): Promise<boolean> {
+	return (await db.prepare('SELECT backfill_all FROM mail_analysis_settings WHERE user_id=? AND enabled=1').bind(userId).first<{ backfill_all: number }>())?.backfill_all === 1;
+}
+export async function setBackfillAll(db: D1Database, userId: string, on: boolean) {
+	await db.prepare("UPDATE mail_analysis_settings SET backfill_all=?,updated_at=datetime('now') WHERE user_id=? AND enabled=1").bind(on ? 1 : 0, userId).run();
+}
+/**
+ * One step of "analyze everything": queue the next batch once the previous one
+ * has mostly drained, and clear the flag when nothing is left to queue.
+ * Returns how many jobs were added.
+ */
+export async function continueBackfill(db: D1Database, userId: string, batch = 200): Promise<number> {
+	if (!await backfillAllActive(db, userId)) return 0;
+	const open = await db.prepare("SELECT COUNT(*) AS n FROM email_analysis_jobs WHERE user_id=? AND version=? AND status IN ('pending','processing')")
+		.bind(userId, ANALYSIS_VERSION).first<{ n: number }>();
+	if ((open?.n ?? 0) >= 20) return 0;
+	const added = await enqueueAnalysisBackfill(db, userId, batch);
+	if (added === 0 && (open?.n ?? 0) === 0) await setBackfillAll(db, userId, false);
+	return added;
 }
 
 type AnalysisRow = {
