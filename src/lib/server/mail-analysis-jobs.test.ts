@@ -121,7 +121,7 @@ test('conversation category, warnings, task filters and pagination agree with di
  assert.equal((await listMailbox(db,'owner',{view:'inbox',q:'needs:reply'})).total,0);
  assert.equal((await listMailbox(db,'other',{view:'inbox',q:'category:transactions'})).total,0);
  const newer=await receive();sqlite.query("UPDATE emails SET created_at='2100-01-01' WHERE id=?").run(newer);
- await processAnalysisJob({DB:db,SUBQ_API_KEY:'test',fetch:(async () => {const a=answers(0.6);a.phishing.noul=0.8;return Response.json({model:SUBQ_MODEL,answers:a,usage:{input_tokens:500,output_tokens:0}});}) as typeof fetch},message(newer));
+ await processAnalysisJob({DB:db,SUBQ_API_KEY:'test',fetch:(async () => {const a=answers(0.5);a.phishing.noul=0.8;return Response.json({model:SUBQ_MODEL,answers:a,usage:{input_tokens:500,output_tokens:0}});}) as typeof fetch},message(newer));
  const page=await listMailbox(db,'owner',{view:'inbox',q:'needs:review'});assert.equal(page.total,1);assert.equal(page.threads[0].analysis?.phishing,true);assert.equal(page.threads[0].analysis?.category,null);
  assert.equal((await listMailbox(db,'owner',{view:'inbox',q:'category:transaction'})).total,0);
  await correctMailAnalysis(db,'owner',newer,{category:'work',warningDismissed:true});
@@ -188,4 +188,18 @@ test('same-second inbound messages use insertion order so retractions supersede 
  assert.equal(page.threads[0].analysisMessageId,second);
  assert.equal(page.threads[0].analysis?.needsReply,false);
  assert.equal((await listMailbox(db,'owner',{view:'inbox',q:'needs:reply'})).total,0);
+});
+
+test('0024 migration re-derives categories for rows previously hidden by the 0.90 cutoff', async () => {
+ const hidden = await receive(), unsure = await receive(), flagged = await receive();
+ const insert = sqlite.query(`INSERT INTO email_analysis(email_id,user_id,version,model,input_hash,category,predicted_category,confidence,review,phishing,spam,needs_reply,deadline,urgency,answers_json,input_tokens)
+  VALUES(?,'owner',?,?,'h',NULL,?,?,1,?,0,0,0,0,'{}',1)`);
+ insert.run(hidden, ANALYSIS_VERSION, SUBQ_MODEL, 'promotion', 0.8, 0);
+ insert.run(unsure, ANALYSIS_VERSION, SUBQ_MODEL, 'notification', 0.45, 0);
+ insert.run(flagged, ANALYSIS_VERSION, SUBQ_MODEL, 'transaction', 0.85, 1);
+ sqlite.exec(readFileSync('migrations/0024_category_threshold.sql', 'utf8'));
+ const row = (id: string) => sqlite.query<{category:string|null;review:number}, [string]>('SELECT category,review FROM email_analysis WHERE email_id=?').get(id)!;
+ assert.deepEqual(row(hidden), { category: 'promotion', review: 0 });
+ assert.deepEqual(row(unsure), { category: null, review: 1 });
+ assert.deepEqual(row(flagged), { category: 'transaction', review: 1 });
 });

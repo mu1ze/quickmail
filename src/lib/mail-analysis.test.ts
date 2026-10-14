@@ -4,8 +4,8 @@ import { analysisSignals } from './mail-analysis';
 import { answers } from './server/testing/analysis-fixtures';
 
 test('confidence gates category, independently of reply and deadline hints', () => {
-	assert.equal(analysisSignals(answers(0.9)).category, 'work');
-	const uncertain = analysisSignals(answers(0.899));
+	assert.equal(analysisSignals(answers(0.6)).category, 'work');
+	const uncertain = analysisSignals(answers(0.599));
 	assert.equal(uncertain.category, null);
 	assert.equal(uncertain.review, true);
 	assert.equal(uncertain.needsReply, true);

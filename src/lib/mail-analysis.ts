@@ -1,7 +1,8 @@
 /** Versioned judgments, independent of folders, read state, and cleanup. */
 export const ANALYSIS_VERSION = 'email-v1';
 export const SUBQ_MODEL = 'subq-snap-preview';
-export const CATEGORY_CONFIDENCE = 0.90;
+/** Calibrated on 270 real messages: guesses from 0.60 up were consistently right; 0.90 hid ~40% of them. */
+export const CATEGORY_CONFIDENCE = 0.60;
 export const SIGNAL_THRESHOLD = 0.50;
 
 export const CATEGORY_DEFINITIONS = {

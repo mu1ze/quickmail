@@ -76,7 +76,9 @@ promotion, newsletter, notification, security_alert, support, sales_outreach,
 personal, work, and other. Primary groups personal/work/support; Updates groups
 notification/security_alert; Promotions groups promotion/sales_outreach.
 
-Category confidence must be at least 0.90. Lower confidence produces Review,
+Category confidence must be at least 0.60 (calibrated on 270 real messages, where
+guesses at 0.60–0.89 were consistently correct and a 0.90 cutoff hid ~40% of mail).
+Lower confidence produces Review,
 not a guessed category. Phishing/spam probabilities above 0.50 also produce
 Review and warnings, retaining a confident purpose category independently.
 Reply/deadline probabilities above 0.50 produce hints, suppressed for suspicious
@@ -121,7 +123,7 @@ If the key is only in `.dev.vars`, run `bun --env-file=.dev.vars scripts/evaluat
 
 The included 15 examples are distinct from the report's original 47 fixtures.
 They do not prove real-inbox accuracy. The final live run completed 15/15,
-matched 15 categories (14 at confidence ≥0.90), matched 14 reply labels, and
+matched 15 categories (14 at confidence ≥0.90; threshold since lowered to 0.60), matched 14 reply labels, and
 flagged the one phishing example. Median end-to-end latency was 305 ms, with
 14,967 reported input tokens total. These are one-run observations, not an SLA.
 

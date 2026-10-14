@@ -9,7 +9,7 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
 	const db=platform.env.DB,userId=locals.user.id;
 	const {results:counts}=await db.prepare('SELECT status,COUNT(*) AS count FROM email_analysis_jobs WHERE user_id=? AND version=? GROUP BY status').bind(userId,ANALYSIS_VERSION).all<{status:string;count:number}>();
 	const provider=await db.prepare('SELECT pause_until,error_code FROM mail_analysis_provider_state WHERE id=1').first<{pause_until:number;error_code:string}>();
-	const {results:corrections}=await db.prepare(`SELECT CASE WHEN a.confidence>=0.9 THEN '>=0.90' WHEN a.confidence>=0.8 THEN '0.80–0.89' ELSE '<0.80' END AS band,
+	const {results:corrections}=await db.prepare(`SELECT CASE WHEN a.confidence>=0.9 THEN '>=0.90' WHEN a.confidence>=0.6 THEN '0.60–0.89' ELSE '<0.60' END AS band,
 		COUNT(*) AS reviewed,SUM(CASE WHEN a.predicted_category=c.category THEN 1 ELSE 0 END) AS agreed
 		FROM email_analysis a JOIN email_analysis_corrections c ON c.email_id=a.email_id AND c.user_id=a.user_id
 		WHERE a.user_id=? AND a.version=? AND c.category IS NOT NULL GROUP BY band`).bind(userId,ANALYSIS_VERSION).all<{band:string;reviewed:number;agreed:number}>();
