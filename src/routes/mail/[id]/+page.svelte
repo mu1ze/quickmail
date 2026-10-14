@@ -246,6 +246,7 @@
 				replyOpen = false;
 				sending = false;
 				await invalidateAll();
+				return typeof body.warning === 'string' ? body.warning : undefined;
 			},
 			undo: () => {
 				sending = false;

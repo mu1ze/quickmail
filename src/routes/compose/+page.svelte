@@ -203,6 +203,8 @@
 				});
 				const body = await res.json();
 				if (!res.ok) throw new Error(body.error ?? 'Failed to send');
+				// The page is replaced, so carry any after-send warning to the next one.
+				if (typeof body.warning === 'string') { try { sessionStorage.setItem('mail:flash', body.warning); } catch { /* storage unavailable */ } }
 				window.location.href = '/sent';
 			},
 			undo: () => {

@@ -3,21 +3,23 @@ import { showUndo } from './undo';
 const DELAY_MS = 10_000;
 
 type QueuedSend = {
-	send: () => Promise<void>;
+	send: () => Promise<void | string>;
 	onError?: (message: string) => void;
 	timer: ReturnType<typeof setTimeout>;
 };
 
 let queued: QueuedSend | null = null;
-let flushing = false;
 
 /** Gmail-style undo send: wait a beat, then actually POST. */
 export function queueMailSend(input: {
-	send: () => Promise<void>;
+	/** May resolve to a warning to show instead of "Sent" (the mail still went out). */
+	send: () => Promise<void | string>;
 	undo: () => void;
 	onError?: (message: string) => void;
 }): void {
-	cancelQueuedSend();
+	// A second message must never silently replace a first one still inside its
+	// undo window: send the earlier one now, then queue this one.
+	if (queued) void flushQueuedSend();
 	queued = {
 		send: input.send,
 		onError: input.onError,
@@ -42,20 +44,17 @@ export function cancelQueuedSend(): void {
 }
 
 export async function flushQueuedSend(): Promise<void> {
-	if (!queued || flushing) return;
+	if (!queued) return;
 	const job = queued;
 	queued = null;
 	clearTimeout(job.timer);
-	flushing = true;
 	try {
-		await job.send();
-		showUndo('Sent');
+		const warning = await job.send();
+		showUndo(typeof warning === 'string' && warning ? warning : 'Sent');
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Failed to send';
 		showUndo(message);
 		job.onError?.(message);
-	} finally {
-		flushing = false;
 	}
 }
 

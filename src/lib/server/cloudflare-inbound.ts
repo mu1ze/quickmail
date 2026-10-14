@@ -1,7 +1,7 @@
 import { inboundAnalysisMetadata } from './subq';
 import { dispatchAnalysis, type AnalysisEnv } from './mail-analysis-jobs';
 import type { R2Bucket } from '@cloudflare/workers-types';
-import PostalMime, { type Address, type Attachment } from 'postal-mime';
+import PostalMime, { type Address, type Attachment, type Email } from 'postal-mime';
 import { insertAttachmentBytes } from './attachments';
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_EMAIL } from './constants';
 import { recordUnroutedEmail, resolveInboundRoute } from './domains';
@@ -32,7 +32,7 @@ export async function handleCloudflareInbound(
 	env: CloudflareInboundEnv
 ): Promise<void> {
 	const raw = await new Response(message.raw).arrayBuffer();
-	const parsed = await PostalMime.parse(raw, { attachmentEncoding: 'arraybuffer' });
+	const parsed = await parseInbound(raw, message.headers);
 
 	const envelopeTo = parseEmailAddress(message.to);
 	const recipients = collectInboundRecipients({
@@ -104,6 +104,30 @@ export async function handleCloudflareInbound(
 		from,
 		subject
 	});
+}
+
+const FALLBACK_TEXT_CHARS = 20_000;
+
+/**
+ * Never lose a message to a parser limit or malformed MIME. When parsing fails,
+ * keep what the transport already told us (envelope, headers) and the raw body
+ * text, flagged so the reader knows it is unformatted.
+ */
+async function parseInbound(raw: ArrayBuffer, headers: Headers): Promise<Email> {
+	try {
+		return await PostalMime.parse(raw, { attachmentEncoding: 'arraybuffer' });
+	} catch (error) {
+		console.error('Inbound MIME could not be parsed; storing a plain-text fallback', error instanceof Error ? error.message : error);
+		const text = new TextDecoder('utf-8', { fatal: false }).decode(raw);
+		const separator = /\r?\n\r?\n/.exec(text);
+		const body = separator ? text.slice(separator.index + separator[0].length) : '';
+		return {
+			headers: [],
+			attachments: [],
+			subject: headers.get('subject') ?? undefined,
+			text: `[This message could not be fully parsed, so its raw content is shown.]\n\n${body.slice(0, FALLBACK_TEXT_CHARS)}`
+		} as unknown as Email;
+	}
 }
 
 async function storeInboundAttachments(

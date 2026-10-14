@@ -88,7 +88,7 @@ export const POST: RequestHandler = async ({ request, locals, platform, url }) =
 
 	try {
 		const provider = getEmailProvider(platform);
-		const { emailId } = await sendAndStore(
+		const { emailId, warnings } = await sendAndStore(
 			{ DB: db, ATTACHMENTS: bucket },
 			provider,
 			locals.user,
@@ -106,11 +106,13 @@ export const POST: RequestHandler = async ({ request, locals, platform, url }) =
 			}
 		);
 
+		// The mail is already delivered: failing to tidy the draft must not read as a failed send.
 		if (body.draftId) {
-		await deleteDraft(db, locals.user.id, body.draftId, bucket);
+			try { await deleteDraft(db, locals.user.id, body.draftId, bucket); }
+			catch (cleanupError) { console.error('Sent mail but could not delete its draft', body.draftId, cleanupError); }
 		}
 
-		return json({ ok: true, id: emailId });
+		return json({ ok: true, id: emailId, ...(warnings.length ? { warning: warnings.join(' ') } : {}) });
 	} catch (error) {
 		return json({ error: describeProviderError(error) }, { status: statusForProviderError(error) });
 	}

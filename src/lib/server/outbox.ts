@@ -129,13 +129,53 @@ export async function resolveReplyFromAddress(
 	return null;
 }
 
-/** Send through the configured provider, then record it in the Sent folder. */
+export type SendResult = {
+	/** null when the provider accepted the mail but it could not be recorded in Sent. */
+	emailId: string | null;
+	providerId: string;
+	from: MailAddress;
+	/** Problems after delivery. The mail WAS sent; do not offer a retry. */
+	warnings: string[];
+};
+
+const RECORD_ATTEMPTS = 3;
+
+/** Once the provider accepted a message, record it with a few retries and without duplicating. */
+async function recordWithRetry(
+	db: D1Database,
+	providerId: string,
+	record: () => Promise<string>,
+	sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+): Promise<string> {
+	let lastError: unknown;
+	for (let attempt = 0; attempt < RECORD_ATTEMPTS; attempt++) {
+		try {
+			return await record();
+		} catch (error) {
+			lastError = error;
+			// A write whose acknowledgement was lost may have landed: never insert twice.
+			try {
+				const existing = await db.prepare('SELECT id FROM emails WHERE provider_id = ? LIMIT 1').bind(providerId).first<{ id: string }>();
+				if (existing) return existing.id;
+			} catch { /* database still unavailable; retry */ }
+			if (attempt < RECORD_ATTEMPTS - 1) await sleep(100 * 3 ** attempt);
+		}
+	}
+	throw lastError;
+}
+
+/**
+ * Send through the configured provider, then record it in the Sent folder.
+ * Failures before the provider accepts the mail throw. Failures after it are
+ * reported as warnings instead: the message is already delivered, and
+ * surfacing an error would invite the user to send it a second time.
+ */
 export async function sendAndStore(
 	env: { DB: D1Database; ATTACHMENTS: R2Bucket },
 	provider: EmailProvider,
 	user: User,
 	input: ComposeInput
-): Promise<{ emailId: string; providerId: string; from: MailAddress }> {
+): Promise<SendResult> {
 	// resolveFromAddress scopes the lookup to this user, so ownership is implied.
 	const from = input.fromAddress ?? (await resolveFromAddress(env.DB, user, input.fromAddressId));
 	const permission = await getDomainPermissionFlags(env.DB, user, from.domain_id);
@@ -186,28 +226,42 @@ export async function sendAndStore(
 		attachments
 	});
 
-	const emailId = await insertEmail(env.DB, {
-		userId: user.id,
-		direction: 'outbound',
-		from: from.address,
-		to: parseRecipients(input.to).join(', '),
-		cc: parseRecipients(input.cc).join(', ') || null,
-		bcc: parseRecipients(input.bcc).join(', ') || null,
-		subject: input.subject.trim(),
-		bodyText: text,
-		bodyHtml: html ?? escapeHtml(text).replaceAll('\n', '<br>\n'),
-		inReplyTo: input.inReplyTo ?? null,
-		references: input.references ?? null,
-		replyToEmailId: input.replyToEmailId ?? null,
-		domainId: from.domain_id,
-		providerId,
-		status: initialOutboundStatus(provider.kind),
-		isRead: true
-	});
-
-	if (attachments.length > 0) {
-		await insertAttachments(env.DB, env.ATTACHMENTS, emailId, attachments);
+	const warnings: string[] = [];
+	let emailId: string | null = null;
+	try {
+		emailId = await recordWithRetry(env.DB, providerId, () =>
+			insertEmail(env.DB, {
+				userId: user.id,
+				direction: 'outbound',
+				from: from.address,
+				to: parseRecipients(input.to).join(', '),
+				cc: parseRecipients(input.cc).join(', ') || null,
+				bcc: parseRecipients(input.bcc).join(', ') || null,
+				subject: input.subject.trim(),
+				bodyText: text,
+				bodyHtml: html ?? escapeHtml(text).replaceAll('\n', '<br>\n'),
+				inReplyTo: input.inReplyTo ?? null,
+				references: input.references ?? null,
+				replyToEmailId: input.replyToEmailId ?? null,
+				domainId: from.domain_id,
+				providerId,
+				status: initialOutboundStatus(provider.kind),
+				isRead: true
+			})
+		);
+	} catch (error) {
+		console.error('Message was sent but could not be saved to Sent', providerId, error);
+		warnings.push('Your message was sent, but it could not be saved to your Sent folder.');
 	}
 
-	return { emailId, providerId, from };
+	if (emailId && attachments.length > 0) {
+		try {
+			await insertAttachments(env.DB, env.ATTACHMENTS, emailId, attachments);
+		} catch (error) {
+			console.error('Message was sent but its attachments could not be saved', providerId, error);
+			warnings.push('Your message was sent, but its attachments could not be saved to your Sent folder.');
+		}
+	}
+
+	return { emailId, providerId, from, warnings };
 }

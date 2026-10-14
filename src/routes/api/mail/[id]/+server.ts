@@ -137,7 +137,7 @@ export const POST: RequestHandler = async ({ params, request, locals, platform, 
 
 	try {
 		const provider = getEmailProvider(platform);
-		const { emailId } = await sendAndStore(
+		const { emailId, warnings } = await sendAndStore(
 			{ DB: db, ATTACHMENTS: bucket },
 			provider,
 			locals.user,
@@ -162,7 +162,7 @@ export const POST: RequestHandler = async ({ params, request, locals, platform, 
 			}
 		);
 
-		return json({ ok: true, id: emailId });
+		return json({ ok: true, id: emailId, ...(warnings.length ? { warning: warnings.join(' ') } : {}) });
 	} catch (error) {
 		return json(
 			{ error: describeProviderError(error, 'Failed to send reply') },

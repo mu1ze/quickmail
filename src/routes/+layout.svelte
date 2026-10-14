@@ -13,7 +13,7 @@
 	import { bindPendingSendFlush } from '$lib/pending-send';
 	import { armGoChord, consumeGoChord, isMod, isTypingTarget } from '$lib/shortcuts';
 	import { watchSystemTheme } from '$lib/theme';
-	import { runUndo } from '$lib/undo';
+	import { runUndo, showUndo } from '$lib/undo';
 	import { setShellContext } from '$lib/shell-context';
 	import { requestSearchFocus } from '$lib/search-focus';
 	import {
@@ -95,6 +95,15 @@
 	$effect(() => {
 		if (!showShell) return;
 		return bindPendingSendFlush();
+	});
+
+	// A message set just before a full page load (for example "sent, but not saved to Sent").
+	$effect(() => {
+		if (!showShell) return;
+		try {
+			const flash = sessionStorage.getItem('mail:flash');
+			if (flash) { sessionStorage.removeItem('mail:flash'); showUndo(flash, undefined, 12_000); }
+		} catch { /* storage unavailable */ }
 	});
 
 	$effect(() => {
