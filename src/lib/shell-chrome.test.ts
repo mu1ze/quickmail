@@ -36,10 +36,11 @@ describe('shell chrome routing', () => {
 		assert.equal(hideTopbarOnMobile('/onboarding'), false);
 	});
 
-	test('Topbar steps aside on mailbox pages at every width', () => {
+	test('Topbar steps aside on mailbox, settings and admin pages at every width', () => {
 		assert.equal(hideTopbar('/inbox'), true);
 		assert.equal(hideTopbar('/trash'), true);
-		assert.equal(hideTopbar('/settings'), false);
+		assert.equal(hideTopbar('/settings/appearance'), true);
+		assert.equal(hideTopbar('/admin/users'), true);
 		assert.equal(hideTopbar('/mail/abc'), false);
 	});
 
@@ -75,7 +76,7 @@ describe('shell chrome routing', () => {
 		);
 		assert.equal(
 			resolveSearchFocusAction({ pathname: '/settings', mobileViewport: false }),
-			'topbar'
+			'inbox-then-mailbox'
 		);
 		assert.equal(
 			resolveSearchFocusAction({ pathname: '/mail/abc', mobileViewport: true }),

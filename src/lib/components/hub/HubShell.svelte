@@ -6,11 +6,14 @@
 		title,
 		backHref = '/inbox',
 		backLabel = 'Back',
+		description,
 		children
 	}: {
 		title: string;
 		backHref?: string;
 		backLabel?: string;
+		/** One line under the title on wide screens. */
+		description?: string;
 		children: import('svelte').Snippet;
 	} = $props();
 </script>
@@ -20,7 +23,10 @@
 		<button type="button" class="hub-back" aria-label={backLabel} onclick={() => goto(backHref)}>
 			<Icon name="arrow-left-s-line" size={22} />
 		</button>
-		<h1 class="hub-title">{title}</h1>
+		<div class="hub-heading">
+			<h1 class="hub-title">{title}</h1>
+			{#if description}<p class="hub-description">{description}</p>{/if}
+		</div>
 		<div class="hub-header-spacer" aria-hidden="true"></div>
 	</header>
 
@@ -81,6 +87,15 @@
 		padding: 1rem 0.875rem;
 	}
 
+	.hub-heading {
+		min-width: 0;
+	}
+
+	.hub-description {
+		display: none;
+	}
+
+	/* Wide screens: the sidebar handles navigation, so the page is a plain left-aligned heading over its sections. */
 	@media (min-width: 901px) {
 		.hub-shell {
 			min-height: auto;
@@ -88,19 +103,35 @@
 		}
 
 		.hub-header {
-			padding-top: 0;
-			border-radius: 14px 14px 0 0;
+			display: block;
+			padding: 0 0 1.5rem;
+			background: transparent;
+			box-shadow: none;
+		}
+
+		.hub-back,
+		.hub-header-spacer {
+			display: none;
+		}
+
+		.hub-title {
+			font-size: 1.375rem;
+			font-weight: 600;
+			text-align: left;
+			white-space: normal;
+		}
+
+		.hub-description {
+			display: block;
+			margin-top: 0.375rem;
+			font-size: 0.875rem;
+			line-height: 1.5;
+			color: var(--color-text-secondary);
 		}
 
 		.hub-content {
-			padding: 1rem 1.25rem 1.5rem;
-			background: var(--color-surface);
-			border-radius: 0 0 14px 14px;
-			box-shadow: var(--mat-panel);
-		}
-
-		.hub-shell :global(.hub-header) {
-			box-shadow: none;
+			padding: 0;
+			overflow: visible;
 		}
 	}
 </style>

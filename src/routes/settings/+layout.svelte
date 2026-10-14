@@ -1,104 +1,78 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import HubShell from '$lib/components/hub/HubShell.svelte';
 	import GroupedNav, { type HubLink } from '$lib/components/hub/GroupedNav.svelte';
+	import { FIRST_SETTINGS_HREF, settingsGroups } from '$lib/settings-nav';
+	import type { LayoutData } from './$types';
 
-	let { children }: { children: import('svelte').Snippet } = $props();
+	let { children, data }: { children: import('svelte').Snippet; data: LayoutData } = $props();
 
 	const isHub = $derived($page.url.pathname === '/settings');
 
-	const links: HubLink[] = [
-		{ href: '/settings/appearance', label: 'Appearance', icon: 'contrast-2-line' },
-		{ href: '/settings/password', label: 'Password', icon: 'lock-password-line' },
-		{ href: '/settings/notifications', label: 'Notifications', icon: 'notification-3-line' },
-		{ href: '/settings/automations', label: 'Automations', icon: 'sparkling-2-line' },
-		{ href: '/settings/signatures', label: 'Signatures', icon: 'pencil-line' },
-		{ href: '/settings/addresses', label: 'Addresses', icon: 'at-line' },
-		{ href: '/settings/domains', label: 'Connected domains', icon: 'global-line' },
-		{ href: '/settings/api-keys', label: 'API keys', icon: 'key-2-line' }
-	];
+	// The sidebar lists every section on wide screens, so the hub would only repeat it.
+	$effect(() => {
+		if (isHub && matchMedia('(min-width: 901px)').matches) void goto(FIRST_SETTINGS_HREF, { replaceState: true });
+	});
+
+	/** A quick read of each section's state, shown beside it in the phone list. */
+	function detail(href: string): string | undefined {
+		switch (href) {
+			case '/settings/addresses':
+				return String(data.addresses.length);
+			case '/settings/signatures':
+				return data.signatures.length ? String(data.signatures.length) : 'None';
+			case '/settings/notifications':
+				return data.brrr.configured ? 'Phone on' : undefined;
+			case '/settings/api-keys':
+				return data.apiTokens.length ? String(data.apiTokens.length) : 'None';
+			default:
+				return undefined;
+		}
+	}
+
+	const groups = $derived(
+		settingsGroups(data.isAdmin).map((group) => ({
+			...group,
+			links: group.links.map((link): HubLink => ({ ...link, detail: detail(link.href) }))
+		}))
+	);
 </script>
 
-<div class="settings-layout" class:settings-hub={isHub}>
-	<aside class="settings-nav" aria-label="Settings sections">
-		{#if isHub}
-			<HubShell title="Settings" backHref="/inbox" backLabel="Back to mail">
-				<GroupedNav {links} footer="Account, sending identity, and integrations." />
-			</HubShell>
-		{:else}
-			<div class="settings-nav-inner">
-				<p class="settings-nav-title">Settings</p>
-				<GroupedNav {links} />
-			</div>
-		{/if}
-	</aside>
+<svelte:head>
+	{#if isHub}<title>Settings — Mail</title>{/if}
+</svelte:head>
 
-	{#if !isHub}
-		<div class="settings-detail">
-			{@render children()}
-		</div>
-	{/if}
-</div>
+{#if isHub}
+	<div class="settings-hub">
+		<HubShell title="Settings" backHref="/inbox" backLabel="Back to mail">
+			{#each groups as group (group.id)}
+				<GroupedNav title={group.label} links={group.links} />
+			{/each}
+		</HubShell>
+	</div>
+{:else}
+	<div class="settings-detail">
+		{@render children()}
+	</div>
+{/if}
 
 <style>
-	.settings-layout {
-		min-height: 100%;
-	}
-
-	.settings-nav-inner {
-		display: none;
-	}
-
+	.settings-hub,
 	.settings-detail {
+		min-height: 100%;
 		min-width: 0;
 	}
 
 	@media (min-width: 901px) {
-		.settings-layout {
-			display: grid;
-			grid-template-columns: 16rem minmax(0, 1fr);
-			gap: 1rem;
-			max-width: 56rem;
-			margin: 0 auto;
-			padding: 1rem 1rem 2rem;
+		.settings-detail {
+			max-width: 50rem;
+			padding: 1.75rem 2.5rem 3rem;
 		}
 
-		.settings-layout.settings-hub {
-			grid-template-columns: 1fr;
-			max-width: 28rem;
-		}
-
-		.settings-nav-inner {
-			display: block;
-			position: sticky;
-			top: 0;
-			align-self: start;
-		}
-
-		.settings-nav-title {
-			margin-bottom: 0.75rem;
-			padding-left: 0.25rem;
-			font-size: 1.25rem;
-			font-weight: 700;
-			letter-spacing: -0.02em;
-		}
-
-		.settings-layout.settings-hub .settings-nav-inner {
-			display: none;
-		}
-
-		.settings-layout:not(.settings-hub) .settings-nav :global(.hub-shell) {
-			display: none;
-		}
-	}
-
-	.settings-layout:not(.settings-hub) .settings-nav {
-		display: none;
-	}
-
-	@media (min-width: 901px) {
-		.settings-layout:not(.settings-hub) .settings-nav {
-			display: block;
+		/* The signature editor sits beside its live preview, so give it more room. */
+		.settings-detail:has(:global(.editor:not(.compact))) {
+			max-width: 76rem;
 		}
 	}
 </style>

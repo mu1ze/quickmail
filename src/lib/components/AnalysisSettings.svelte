@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import GroupedPanel from './hub/GroupedPanel.svelte';
+	import SettingRow from './settings/SettingRow.svelte';
+	import StatusBanner from './settings/StatusBanner.svelte';
+	import Icon from './Icon.svelte';
 	let enabled=$state(false),available=$state(false),loading=$state(true),busy=$state(false);
 	let remaining=$state(0),backfillAll=$state(false);
 	let error=$state(''),notice=$state(''),providerError=$state<string|null>(null);
@@ -20,6 +23,14 @@
 		return ()=>clearInterval(timer);
 	});
 	const open=$derived(counts.filter(c=>c.status==='pending'||c.status==='processing').reduce((n,c)=>n+c.count,0));
+	let showDetails=$state(false);
+	const existingSummary=$derived(
+		loading ? 'Checking…'
+		: backfillAll ? `Analyzing in batches of 200: ${remaining} not yet queued, ${open} in progress. This continues if you leave the page.`
+		: !enabled ? 'Turn on analysis to categorize what is already in your mailbox.'
+		: remaining>0 ? `${remaining} message${remaining===1?' has':'s have'} not been analyzed yet.`
+		: 'All existing mail has been analyzed.'
+	);
 	async function change(next:boolean) {
 		busy=true;error='';notice='';
 		try {
@@ -38,34 +49,57 @@
 	}
 </script>
 
-<GroupedPanel title="Incoming email analysis" hint="SubQ suggests categories and flags possible phishing, spam, replies, and deadlines. Mail stays in its current folder and keeps its read state. Weekly cleanup is a separate feature.">
-	<div class="analysis-settings">
-		<p>When enabled, sender and recipient details, selected headers, cleaned message text, link destinations, and attachment names are sent to SubQ. Attachment contents are excluded. Suggestions can be wrong; unflagged mail is not verified safe.</p>
-		{#if loading}<p>Loading settings…</p>{:else if !available}<p>SubQ is unavailable. Configure the server API key to enable analysis.</p>{/if}
-		<label><input type="checkbox" role="switch" aria-label="Analyze incoming email" checked={enabled} disabled={busy || loading || (!enabled && !available)} onchange={(e)=>change(e.currentTarget.checked)} />Analyze all incoming email for my account</label>
-		<div class="buttons">
+{#if !loading && !available}
+	<StatusBanner title="Email analysis is unavailable">
+		The server has no SubQ API key. Add it as a Worker secret, then reload this page.
+	</StatusBanner>
+{:else if providerError}
+	<StatusBanner title="Analysis is paused">
+		{providerErrors[providerError] ?? 'SubQ is temporarily unavailable.'} Fix the cause, then retry. Processing resumes after the retry delay.
+	</StatusBanner>
+{/if}
+
+<GroupedPanel title="Email analysis" hint="Suggestions can be wrong. Unflagged mail is not verified safe." flush>
+	<SettingRow
+		label="Analyze incoming mail"
+		id="analysis-enabled"
+		description="Suggest categories and flag phishing, spam, replies and deadlines. Mail stays in its folder and keeps its read state."
+	>
+		{#snippet control()}
+			<input id="analysis-enabled" class="switch" type="checkbox" role="switch" checked={enabled} disabled={busy || loading || (!enabled && !available)} onchange={(e)=>change(e.currentTarget.checked)} />
+		{/snippet}
+	</SettingRow>
+	<SettingRow label="What gets sent" description="Sender, recipients, a few headers, cleaned text, link destinations and attachment names. Never attachment contents.">
+		{#snippet control()}
+			<button class="btn-ghost" type="button" aria-expanded={showDetails} onclick={()=>showDetails=!showDetails}>{showDetails ? 'Hide' : 'Details'}</button>
+		{/snippet}
+		{#if showDetails}
+			<p>When enabled, sender and recipient details, selected headers, cleaned message text, link destinations, and attachment names are sent to SubQ for this account. Attachment contents are excluded.</p>
+		{/if}
+	</SettingRow>
+	<SettingRow label="Existing mail" description={existingSummary}>
+		{#snippet control()}
 			{#if backfillAll}
-				<button class="btn-ghost" type="button" disabled={busy} onclick={()=>queue('stop-backfill')}>Stop analyzing existing emails</button>
+				<button class="btn-ghost" type="button" disabled={busy} onclick={()=>queue('stop-backfill')}>Stop</button>
 			{:else}
-				<button class="btn-ghost" type="button" disabled={!enabled || !available || busy || remaining===0} onclick={()=>queue('backfill-all')}>Analyze all existing emails{remaining>0?` (${remaining})`:''}</button>
+				<button class="btn-ghost" type="button" disabled={!enabled || !available || busy || remaining===0} onclick={()=>queue('backfill-all')}>Analyze {remaining>0 ? remaining : 'all'}</button>
 			{/if}
-			<button class="btn-ghost" type="button" disabled={!enabled || !available || busy} onclick={()=>queue('retry')}>Retry failed analysis</button>
-			<button class="btn-ghost" type="button" disabled={busy} onclick={refresh}>Refresh status</button>
-		</div>
-		{#if backfillAll}<p role="status">Analyzing existing mail in batches of 200 — {remaining} not yet queued, {open} in progress. You can leave this page; it continues in the background.</p>
-		{:else if enabled && remaining===0 && !loading}<p>All existing mail has been analyzed.</p>{/if}
-		{#if counts.length}<p>{counts.map(c=>`${c.count} ${c.status}`).join(' · ')}</p>{/if}
-		{#each corrections as band}<p>Reviewed categories {band.band}: {band.agreed}/{band.reviewed} agree with the model. Only manually reviewed messages are counted.</p>{/each}
-		{#if providerError}<p role="status">Processing paused. {providerErrors[providerError] ?? 'SubQ is temporarily unavailable.'} Fix the cause before retrying. Processing resumes after the retry delay.</p>{/if}
-		{#if error}<p role="alert">{error}</p>{/if}
-		{#if notice}<p role="status">{notice}</p>{/if}
-	</div>
+		{/snippet}
+	</SettingRow>
+	{#if counts.length || corrections.length}
+		<SettingRow label="Status" description={counts.map(c=>`${c.count} ${c.status}`).join(' · ')}>
+			{#snippet control()}
+				<button class="btn-ghost" type="button" disabled={!enabled || !available || busy} onclick={()=>queue('retry')}>Retry failed</button>
+				<button class="btn-ghost" type="button" disabled={busy} onclick={refresh} aria-label="Refresh status"><Icon name="refresh-line" size={16} /></button>
+			{/snippet}
+			{#each corrections as band}<p>Reviewed categories {band.band}: {band.agreed}/{band.reviewed} agree with the model.</p>{/each}
+		</SettingRow>
+	{/if}
 </GroupedPanel>
+{#if error}<p class="analysis-message error" role="alert">{error}</p>{/if}
+{#if notice}<p class="analysis-message" role="status">{notice}</p>{/if}
 
 <style>
-	.analysis-settings { padding:1rem; display:flex; flex-direction:column; gap:0.8rem; font-size:0.875rem; }
-	p { margin:0; color:var(--color-text-secondary); line-height:1.6; }
-	label { display:flex; align-items:flex-start; gap:0.6rem; }
-	input { flex-shrink:0; margin-top:0.2rem; }
-	.buttons { display:flex; gap:0.5rem; flex-wrap:wrap; }
+	.analysis-message { margin: 0.625rem 0.25rem 0; font-size: 0.8125rem; color: var(--color-text-secondary); }
+	.analysis-message.error { color: var(--color-danger); }
 </style>

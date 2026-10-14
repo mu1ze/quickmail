@@ -40,9 +40,12 @@ export function hideTopbarOnMobile(pathname: string): boolean {
 	);
 }
 
-/** Mailbox pages carry their own header with search, so the topbar steps aside at every width. */
+/**
+ * Mailbox pages carry their own header with search, and settings/admin pages
+ * navigate from the sidebar, so the topbar steps aside there at every width.
+ */
 export function hideTopbar(pathname: string): boolean {
-	return isMailboxRoute(pathname);
+	return isMailboxRoute(pathname) || isHubRoute(pathname);
 }
 
 /** Inbox dock covers the reading surface; hide it on compose and open mail. */
@@ -61,6 +64,6 @@ export function resolveSearchFocusAction(input: {
 	mobileViewport: boolean;
 }): SearchFocusAction {
 	if (isMailboxRoute(input.pathname)) return 'mailbox';
-	if (input.mobileViewport && isHubRoute(input.pathname)) return 'inbox-then-mailbox';
+	if (isHubRoute(input.pathname)) return 'inbox-then-mailbox';
 	return 'topbar';
 }

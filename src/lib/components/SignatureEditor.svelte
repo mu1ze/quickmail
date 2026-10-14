@@ -122,7 +122,7 @@
 	}
 </script>
 
-<div class="editor">
+<div class="editor" class:compact>
 	<div class="layout-grid" class:compact role="radiogroup" aria-label="Signature layout">
 		{#each layouts as layout (layout.id)}
 			<button
@@ -327,6 +327,27 @@
 		flex-direction: column;
 		gap: 1rem;
 		margin-top: 1rem;
+	}
+
+	/* Wide screens: fields on the left, the live preview pinned on the right. */
+	@media (min-width: 1180px) {
+		.editor:not(.compact) {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) minmax(17rem, 21rem);
+			align-items: start;
+			gap: 1.25rem 2rem;
+		}
+
+		.editor:not(.compact) > :global(*) {
+			grid-column: 1;
+		}
+
+		.editor:not(.compact) > .preview-block {
+			grid-column: 2;
+			grid-row: 1 / span 12;
+			position: sticky;
+			top: 1rem;
+		}
 	}
 
 	.layout-grid {

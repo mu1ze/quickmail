@@ -142,10 +142,12 @@
 	<title>Signatures — Settings</title>
 </svelte:head>
 
-<HubShell title="Signatures" backHref="/settings">
-	<GroupedPanel
-		hint="Save up to {MAX_SAVED_SIGNATURES}. Switch between them when you write a message."
-	>
+<HubShell
+	title="Signatures"
+	backHref="/settings"
+	description="Keep up to {MAX_SAVED_SIGNATURES} and pick one per message when you write."
+>
+	<GroupedPanel>
 		<div class="signature-tabs" role="tablist" aria-label="Saved signatures">
 			{#each signatures as signature (signature.id)}
 				<button
@@ -299,6 +301,20 @@
 		justify-content: space-between;
 		gap: 0.75rem;
 		margin-top: 0.75rem;
+	}
+
+	/* Keep save in reach while scrolling a long signature form. */
+	@media (min-width: 901px) {
+		.signature-actions {
+			position: sticky;
+			bottom: 0;
+			z-index: 2;
+			margin: 1rem -1.125rem -1rem;
+			padding: 0.75rem 1.125rem;
+			border-radius: 0 0 16px 16px;
+			background: var(--color-surface);
+			box-shadow: inset 0 1px 0 var(--color-line);
+		}
 	}
 
 	.character-count {

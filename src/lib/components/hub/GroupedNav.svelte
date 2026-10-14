@@ -10,14 +10,17 @@
 
 	let {
 		links,
+		title,
 		footer
 	}: {
 		links: HubLink[];
+		title?: string;
 		footer?: string;
 	} = $props();
 </script>
 
-<nav class="group" aria-label="Sections">
+<nav class="group" aria-label={title ?? 'Sections'}>
+	{#if title}<h2 class="group-title">{title}</h2>{/if}
 	<ul class="group-list">
 		{#each links as link (link.href)}
 			<li>
@@ -44,8 +47,17 @@
 </nav>
 
 <style>
-	.group + .group {
+	.group + :global(.group) {
 		margin-top: 1.5rem;
+	}
+
+	.group-title {
+		margin: 0 0.875rem 0.5rem;
+		font-size: 0.75rem;
+		font-weight: 600;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		color: var(--color-muted);
 	}
 
 	.group-list {

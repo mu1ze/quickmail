@@ -5,6 +5,8 @@
 	import DomainSwitcher from './DomainSwitcher.svelte';
 	import ThemeSwitcher from './ThemeSwitcher.svelte';
 	import LabelManager from './LabelManager.svelte';
+	import { isHubRoute } from '$lib/shell-chrome';
+	import { isSettingsLinkActive, settingsGroups } from '$lib/settings-nav';
 	import type { Domain, MailboxCounts, MailLabel } from '$lib/types';
 
 	let {
@@ -59,6 +61,10 @@
 
 	// Phone drawer always shows labels, even if the desktop sidebar is collapsed.
 	const expanded = $derived(!collapsed || mobileOpen);
+
+	// Settings and admin take over the sidebar with their own grouped sections.
+	const settingsMode = $derived(isHubRoute($page.url.pathname));
+	const groups = $derived(settingsGroups(isAdmin));
 </script>
 
 {#if mobileOpen}
@@ -88,83 +94,120 @@
 		{/if}
 	</div>
 
-	<a href="/compose" class="new-message" title="New message" onclick={() => (mobileOpen = false)}>
-		<Icon name="pencil-line" size={expanded ? 16 : 18} />
-		{#if expanded}<span>Compose</span><kbd>C</kbd>{/if}
-	</a>
-
-	<nav class="nav" aria-label="Mailboxes">
-		{#each mailboxes as item (item.href)}
-			<a
-				href={item.href}
-				class="nav-link"
-				class:active={isActive(item.href)}
-				aria-current={isActive(item.href) ? 'page' : undefined}
-				title={expanded ? undefined : item.label}
-				onclick={() => (mobileOpen = false)}
-			>
-				<Icon name={item.icon} size={17} />
-				{#if expanded}
-					<span class="nav-label">{item.label}</span>
-					{#if item.badge}
-						<span class="nav-badge">{item.badge}</span>
-					{:else if item.count}
-						<span class="nav-count">{item.count}</span>
-					{/if}
-				{:else if item.badge}
-					<span class="nav-dot"></span>
-				{/if}
-			</a>
+	{#if settingsMode}
+		<a href="/inbox" class="nav-link back-link" title={expanded ? undefined : 'Back to mail'}>
+			<Icon name="arrow-left-s-line" size={18} />
+			{#if expanded}<span class="nav-label">Back to mail</span>{/if}
+		</a>
+		{#if expanded}<p class="settings-title">Settings</p>{/if}
+		{#each groups as group (group.id)}
+			<nav class="nav settings-group" aria-label={group.label}>
+				{#if expanded}<p class="section-title">{group.label}</p>{/if}
+				{#each group.links as link (link.href)}
+					<a
+						href={link.href}
+						class="nav-link"
+						class:active={isSettingsLinkActive(link.href, $page.url.pathname)}
+						aria-current={isSettingsLinkActive(link.href, $page.url.pathname) ? 'page' : undefined}
+						title={expanded ? undefined : link.label}
+					>
+						<Icon name={link.icon} size={17} />
+						{#if expanded}<span class="nav-label">{link.label}</span>{/if}
+					</a>
+				{/each}
+			</nav>
 		{/each}
-	</nav>
+		<nav class="nav nav-tools">
+			<button
+				type="button"
+				class="nav-link"
+				title={expanded ? undefined : 'Log out'}
+				aria-label="Log out"
+				onclick={onLogout}
+			>
+				<Icon name="logout-box-r-line" size={17} />
+				{#if expanded}<span class="nav-label">Log out</span>{/if}
+			</button>
+		</nav>
+	{:else}
+		<a href="/compose" class="new-message" title="New message" onclick={() => (mobileOpen = false)}>
+			<Icon name="pencil-line" size={expanded ? 16 : 18} />
+			{#if expanded}<span>Compose</span><kbd>C</kbd>{/if}
+		</a>
 
-	<!-- On desktop the domain scope lives in the mailbox header; the phone drawer keeps it here. -->
-	{#if mobileOpen && domains.length > 1}
-		<div class="section">
-			<p class="section-title">Domains</p>
-			<div class="section-body">
-				<DomainSwitcher {domains} {activeDomainId} block />
-			</div>
-		</div>
-	{/if}
-
-	<div class="labels-section">
-		<LabelManager {labels} collapsed={!expanded} />
-		<nav class="nav" aria-label="Labels">
-			{#each labels as label (label.id)}
-				<a href={`/all?label=${encodeURIComponent(label.id)}`} class="nav-link" class:active={$page.url.searchParams.get('label') === label.id} aria-current={$page.url.searchParams.get('label') === label.id ? 'page' : undefined} title={label.name} onclick={() => (mobileOpen = false)}><Icon name="price-tag-3-line" size={17} />{#if expanded}<span class="nav-label">{label.name}</span>{/if}</a>
+		<nav class="nav" aria-label="Mailboxes">
+			{#each mailboxes as item (item.href)}
+				<a
+					href={item.href}
+					class="nav-link"
+					class:active={isActive(item.href)}
+					aria-current={isActive(item.href) ? 'page' : undefined}
+					title={expanded ? undefined : item.label}
+					onclick={() => (mobileOpen = false)}
+				>
+					<Icon name={item.icon} size={17} />
+					{#if expanded}
+						<span class="nav-label">{item.label}</span>
+						{#if item.badge}
+							<span class="nav-badge">{item.badge}</span>
+						{:else if item.count}
+							<span class="nav-count">{item.count}</span>
+						{/if}
+					{:else if item.badge}
+						<span class="nav-dot"></span>
+					{/if}
+				</a>
 			{/each}
 		</nav>
-	</div>
 
-	<nav class="nav nav-tools">
-		{#each tools as item (item.href)}
-			<a
-				href={item.href}
+		<!-- On desktop the domain scope lives in the mailbox header; the phone drawer keeps it here. -->
+		{#if mobileOpen && domains.length > 1}
+			<div class="section">
+				<p class="section-title">Domains</p>
+				<div class="section-body">
+					<DomainSwitcher {domains} {activeDomainId} block />
+				</div>
+			</div>
+		{/if}
+
+		<div class="labels-section">
+			<LabelManager {labels} collapsed={!expanded} />
+			<nav class="nav" aria-label="Labels">
+				{#each labels as label (label.id)}
+					<a href={`/all?label=${encodeURIComponent(label.id)}`} class="nav-link" class:active={$page.url.searchParams.get('label') === label.id} aria-current={$page.url.searchParams.get('label') === label.id ? 'page' : undefined} title={label.name} onclick={() => (mobileOpen = false)}><Icon name="price-tag-3-line" size={17} />{#if expanded}<span class="nav-label">{label.name}</span>{/if}</a>
+				{/each}
+			</nav>
+		</div>
+
+		<nav class="nav nav-tools">
+			{#each tools as item (item.href)}
+				<a
+					href={item.href}
+					class="nav-link"
+					class:active={isActive(item.href)}
+					aria-current={isActive(item.href) ? 'page' : undefined}
+					title={expanded ? undefined : item.label}
+					onclick={() => (mobileOpen = false)}
+				>
+					<Icon name={item.icon} size={17} />
+					{#if expanded}<span class="nav-label">{item.label}</span>{/if}
+				</a>
+			{/each}
+			<button
+				type="button"
 				class="nav-link"
-				class:active={isActive(item.href)}
-				aria-current={isActive(item.href) ? 'page' : undefined}
-				title={expanded ? undefined : item.label}
-				onclick={() => (mobileOpen = false)}
+				title={expanded ? undefined : 'Log out'}
+				aria-label="Log out"
+				onclick={() => {
+					mobileOpen = false;
+					onLogout();
+				}}
 			>
-				<Icon name={item.icon} size={17} />
-				{#if expanded}<span class="nav-label">{item.label}</span>{/if}
-			</a>
-		{/each}
-		<button
-			type="button"
-			class="nav-link"
-			title={expanded ? undefined : 'Log out'}
-			aria-label="Log out"
-			onclick={() => {
-				mobileOpen = false;
-				onLogout();
-			}}
-		>
-			<Icon name="logout-box-r-line" size={17} />
-			{#if expanded}<span class="nav-label">Log out</span>{/if}
-		</button>
-	</nav>
+				<Icon name="logout-box-r-line" size={17} />
+				{#if expanded}<span class="nav-label">Log out</span>{/if}
+			</button>
+		</nav>
+	{/if}
 
 	<div class="sidebar-foot">
 		<ThemeSwitcher collapsed={!expanded} />
@@ -257,6 +300,10 @@
 		box-shadow: inset 0 1px 0 var(--color-line);
 	}
 	.labels-section { margin-top: 1rem; }
+	.back-link { color: var(--color-muted); margin-bottom: 0.25rem; }
+	.settings-title { padding: 0.5rem 0.875rem 0.25rem; font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; color: var(--color-text); }
+	.settings-group { margin-top: 0.875rem; }
+	.settings-group .section-title { padding: 0 0.875rem 0.3rem; }
 
 	.nav-link {
 		position: relative;

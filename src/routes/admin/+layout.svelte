@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import HubShell from '$lib/components/hub/HubShell.svelte';
 	import GroupedNav, { type HubLink } from '$lib/components/hub/GroupedNav.svelte';
@@ -8,6 +9,11 @@
 	let { children, data }: { children: import('svelte').Snippet; data: LayoutData } = $props();
 
 	const isHub = $derived($page.url.pathname === '/admin');
+
+	// Wide screens list admin sections in the sidebar, so skip the hub there.
+	$effect(() => {
+		if (isHub && matchMedia('(min-width: 901px)').matches) void goto('/admin/users', { replaceState: true });
+	});
 
 	const links = $derived.by((): HubLink[] => {
 		const items: HubLink[] = [
@@ -31,8 +37,8 @@
 </svelte:head>
 
 <div class="admin-layout" class:admin-hub={isHub}>
-	<aside class="admin-nav" aria-label="Admin sections">
-		{#if isHub}
+	{#if isHub}
+		<aside class="admin-nav" aria-label="Admin sections">
 			<HubShell title="Admin" backHref="/inbox" backLabel="Back to mail">
 				{#if data.loadError}
 					<div class="banner">
@@ -42,15 +48,8 @@
 				{/if}
 				<GroupedNav {links} footer="Domains, users, and mail routing for this dashboard." />
 			</HubShell>
-		{:else}
-			<div class="admin-nav-inner">
-				<p class="admin-nav-title">Admin</p>
-				<GroupedNav {links} />
-			</div>
-		{/if}
-	</aside>
-
-	{#if !isHub}
+		</aside>
+	{:else}
 		<div class="admin-detail">
 			{#if data.loadError}
 				<div class="banner">
@@ -66,16 +65,6 @@
 <style>
 	.admin-layout {
 		min-height: 100%;
-	}
-
-	.admin-nav-inner {
-		display: none;
-	}
-
-	@media (max-width: 900px) {
-		.admin-layout:not(.admin-hub) .admin-nav {
-			display: none;
-		}
 	}
 
 	.admin-detail {
@@ -97,44 +86,12 @@
 
 	@media (min-width: 901px) {
 		.admin-layout {
-			display: grid;
-			grid-template-columns: 16rem minmax(0, 1fr);
-			gap: 1rem;
-			max-width: 56rem;
-			margin: 0 auto;
-			padding: 1rem 1rem 2rem;
-		}
-
-		.admin-layout.admin-hub {
-			grid-template-columns: 1fr;
-			max-width: 28rem;
-		}
-
-		.admin-nav-inner {
-			display: block;
-			position: sticky;
-			top: 0;
-			align-self: start;
-		}
-
-		.admin-nav-title {
-			margin-bottom: 0.75rem;
-			padding-left: 0.25rem;
-			font-size: 1.25rem;
-			font-weight: 700;
-			letter-spacing: -0.02em;
-		}
-
-		.admin-layout.admin-hub .admin-nav-inner {
-			display: none;
-		}
-
-		.admin-layout:not(.admin-hub) .admin-nav :global(.hub-shell) {
-			display: none;
+			max-width: 50rem;
+			padding: 1.75rem 2.5rem 3rem;
 		}
 
 		.admin-layout:not(.admin-hub) .admin-detail .banner {
-			margin-bottom: 0;
+			margin-bottom: 1.5rem;
 		}
 	}
 </style>

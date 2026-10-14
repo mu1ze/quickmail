@@ -2,6 +2,7 @@
 	import AnalysisSettings from '$lib/components/AnalysisSettings.svelte';
 	import HubShell from '$lib/components/hub/HubShell.svelte';
 	import GroupedPanel from '$lib/components/hub/GroupedPanel.svelte';
+	import SettingRow from '$lib/components/settings/SettingRow.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import type { PageData } from './$types';
 
@@ -24,6 +25,21 @@
 
 	const aiAvailable = data.automations.aiAvailable;
 
+	// Toggles save as soon as they change; rule edits wait for an explicit save.
+	const serializeRules = (list: AutomationRule[]) => JSON.stringify(list.map(({ field, value, action }) => ({ field, value: value.trim(), action })));
+	let savedRules = $state<AutomationRule[]>(data.automations.rules.map((rule) => ({ ...rule })));
+	const rulesDirty = $derived(serializeRules(rules) !== serializeRules(savedRules));
+
+	function discardRules() {
+		rules = savedRules.map((rule) => ({ ...rule }));
+	}
+
+	function cleanRules(list: AutomationRule[]) {
+		return list
+			.map((rule) => ({ id: rule.id, field: rule.field, value: rule.value.trim(), action: rule.action }))
+			.filter((rule) => rule.value.length > 0);
+	}
+
 	function addRule() {
 		rules = [
 			...rules,
@@ -44,7 +60,8 @@
 		}
 	}
 
-	async function save() {
+	/** Saves the toggles; rule edits are only included when the rules panel asks for it. */
+	async function save(includeRules = false) {
 		busy = true;
 		error = '';
 		notice = '';
@@ -56,14 +73,7 @@
 					weeklyCleanup,
 					aiClassify,
 					aiSummaries,
-					rules: rules
-						.map((rule) => ({
-							id: rule.id,
-							field: rule.field,
-							value: rule.value.trim(),
-							action: rule.action
-						}))
-						.filter((rule) => rule.value.length > 0)
+					rules: cleanRules(includeRules ? rules : savedRules)
 				})
 			});
 			if (!res.ok) {
@@ -74,10 +84,11 @@
 			weeklyCleanup = saved.weeklyCleanup;
 			aiClassify = saved.aiClassify;
 			aiSummaries = saved.aiSummaries;
-			rules = saved.rules.map((rule) => ({ ...rule }));
+			savedRules = saved.rules.map((rule) => ({ ...rule }));
+			if (includeRules) rules = savedRules.map((rule) => ({ ...rule }));
 			lastCleanupAt = saved.lastCleanupAt;
 			lastCleanupTrashed = saved.lastCleanupTrashed;
-			notice = 'Automations saved';
+			notice = 'Saved';
 		} catch {
 			error = 'Network error';
 		} finally {
@@ -97,14 +108,7 @@
 					weeklyCleanup,
 					aiClassify,
 					aiSummaries,
-					rules: rules
-						.map((rule) => ({
-							id: rule.id,
-							field: rule.field,
-							value: rule.value.trim(),
-							action: rule.action
-						}))
-						.filter((rule) => rule.value.length > 0)
+					rules: cleanRules(savedRules)
 				})
 			});
 			if (!saveRes.ok) {
@@ -148,69 +152,64 @@
 	<title>Automations — Settings</title>
 </svelte:head>
 
-<HubShell title="Automations" backHref="/settings">
+<HubShell
+	title="Automations"
+	backHref="/settings"
+	description="Let QuickMail sort, flag and tidy incoming mail. Nothing is deleted without passing through Trash."
+>
 	<AnalysisSettings />
+
 	<GroupedPanel
-		hint="Every message still arrives in your inbox. Once a week, mail you have already opened is scanned. Promotions and mail matching your rules move to Trash, where you can restore them."
+		title="Weekly cleanup"
+		hint="Every message still arrives in your inbox. Opened promotions and mail matching your rules move to Trash, where you can restore them."
+		flush
 	>
-		<label class="toggle-row">
-			<span>
-				<span class="toggle-title">Weekly cleanup</span>
-				<span class="toggle-hint">Sunday, opened mail only. Unread messages are never touched.</span>
-			</span>
-			<input
-				class="switch"
-				type="checkbox"
-				role="switch"
-				aria-label="Weekly cleanup"
-				bind:checked={weeklyCleanup}
-			/>
-		</label>
-
-		<label class="toggle-row">
-			<span>
-				<span class="toggle-title">Use AI to classify</span>
-				<span class="toggle-hint">
-					{#if aiAvailable}
-						Optional second pass on leftover bulk mail. Skipped when the model is unsure.
-					{:else}
-						Needs the Workers AI binding. Heuristics and rules still run without it.
-					{/if}
-				</span>
-			</span>
-			<input
-				class="switch"
-				type="checkbox"
-				role="switch"
-				aria-label="Use AI to classify"
-				bind:checked={aiClassify}
-				disabled={!weeklyCleanup}
-			/>
-		</label>
-
-		<label class="toggle-row">
-			<span>
-				<span class="toggle-title">AI inbox summaries</span>
-				<span class="toggle-hint">
-					Replace the snippet on opened threads with a short summary. No-op without Workers AI.
-				</span>
-			</span>
-			<input
-				class="switch"
-				type="checkbox"
-				role="switch"
-				aria-label="AI inbox summaries"
-				bind:checked={aiSummaries}
-			/>
-		</label>
+		<SettingRow label="Clean up every Sunday" id="weekly-cleanup" description="Opened mail only. Unread messages are never touched.">
+			{#snippet control()}
+				<input id="weekly-cleanup" class="switch" type="checkbox" role="switch" bind:checked={weeklyCleanup} disabled={busy} onchange={() => save()} />
+			{/snippet}
+		</SettingRow>
+		<SettingRow
+			label="Second pass with AI"
+			id="ai-classify"
+			description={aiAvailable
+				? 'Classifies leftover bulk mail. Skipped when the model is unsure.'
+				: 'Needs the Workers AI binding. Heuristics and rules still run without it.'}
+		>
+			{#snippet control()}
+				<input id="ai-classify" class="switch" type="checkbox" role="switch" bind:checked={aiClassify} disabled={busy || !weeklyCleanup} onchange={() => save()} />
+			{/snippet}
+		</SettingRow>
+		<SettingRow label="Inbox summaries" id="ai-summaries" description="Show a short summary instead of the snippet on threads you have opened. Needs Workers AI.">
+			{#snippet control()}
+				<input id="ai-summaries" class="switch" type="checkbox" role="switch" bind:checked={aiSummaries} disabled={busy} onchange={() => save()} />
+			{/snippet}
+		</SettingRow>
+		<SettingRow
+			label="Last run"
+			description={lastCleanupAt ? `${formatLastRun(lastCleanupAt)} · ${lastCleanupTrashed} moved to Trash` : 'Not run yet'}
+		>
+			{#snippet control()}
+				<button
+					type="button"
+					class="btn-ghost"
+					disabled={runBusy || busy || (!weeklyCleanup && !aiSummaries)}
+					onclick={runNow}
+				>
+					{runBusy ? 'Running…' : 'Run now'}
+				</button>
+			{/snippet}
+		</SettingRow>
 	</GroupedPanel>
 
-	<GroupedPanel
-		title="Your rules"
-		hint="Keep rules always win. Trash rules run before the built-in promo scan."
-	>
+	<GroupedPanel title="Your rules" hint="Keep rules always win. Trash rules run before the promotions scan.">
+		{#snippet actions()}
+			<button type="button" class="btn-ghost" onclick={addRule}>
+				<Icon name="add-line" size={16} /> Add rule
+			</button>
+		{/snippet}
 		{#if rules.length === 0}
-			<p class="empty">No custom rules yet.</p>
+			<p class="empty">No rules yet. Add one to always keep, or always trash, mail from a sender, domain or subject.</p>
 		{:else}
 			<ul class="rule-list">
 				{#each rules as rule (rule.id)}
@@ -231,106 +230,37 @@
 							<option value={'trash' satisfies RuleAction}>Move to Trash</option>
 							<option value={'keep' satisfies RuleAction}>Never auto-trash</option>
 						</select>
-						<button type="button" class="btn-ghost" onclick={() => removeRule(rule.id)}>
-							Remove
+						<button type="button" class="icon-btn" aria-label="Remove rule" onclick={() => removeRule(rule.id)}>
+							<Icon name="close-line" size={16} />
 						</button>
 					</li>
 				{/each}
 			</ul>
 		{/if}
-		<button type="button" class="btn-ghost add-rule" onclick={addRule}>
-			<Icon name="add-line" size={16} /> Add rule
-		</button>
+		{#if rulesDirty}
+			<div class="rule-actions">
+				<span>Unsaved rule changes</span>
+				<button type="button" class="btn-ghost" disabled={busy} onclick={discardRules}>Discard</button>
+				<button type="button" class="btn-primary" disabled={busy} onclick={() => save(true)}>{busy ? 'Saving…' : 'Save rules'}</button>
+			</div>
+		{/if}
 	</GroupedPanel>
 
-	<GroupedPanel>
-		<p class="status">
-			Last cleanup: {formatLastRun(lastCleanupAt)}
-			{#if lastCleanupAt}
-				· {lastCleanupTrashed} moved to Trash
-			{/if}
-		</p>
-		<div class="actions">
-			<button type="button" class="btn-primary" disabled={busy} onclick={save}>
-				{busy ? 'Saving…' : 'Save'}
-			</button>
-			<button
-				type="button"
-				class="btn-ghost"
-				disabled={runBusy || busy || (!weeklyCleanup && !aiSummaries)}
-				onclick={runNow}
-			>
-				{runBusy ? 'Running…' : 'Run cleanup now'}
-			</button>
-		</div>
-		{#if error}<p class="error" aria-live="polite">{error}</p>{/if}
-		{#if notice}<p class="saved" aria-live="polite">{notice}</p>{/if}
-	</GroupedPanel>
+	{#if error}<p class="error" role="alert">{error}</p>{/if}
+	{#if notice}<p class="saved" role="status">{notice}</p>{/if}
 </HubShell>
 
 <style>
-	.toggle-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		padding: 0.5rem 0;
-	}
 
-	.toggle-row + .toggle-row {
-		box-shadow: inset 0 1px 0 var(--color-line);
-	}
 
-	.toggle-title {
-		display: block;
-		font-size: 0.9375rem;
-		font-weight: 500;
-	}
 
-	.toggle-hint {
-		display: block;
-		margin-top: 0.2rem;
-		font-size: 0.8125rem;
-		line-height: 1.4;
-		color: var(--color-muted);
-	}
 
-	.switch {
-		flex-shrink: 0;
-		width: 2.5rem;
-		height: 1.5rem;
-		appearance: none;
-		border-radius: 999px;
-		background: var(--color-line);
-		box-shadow: inset 0 0 0 1px var(--color-line);
-		transition: background 0.15s;
-	}
 
-	.switch::after {
-		content: '';
-		display: block;
-		width: 1.125rem;
-		height: 1.125rem;
-		margin: 0.1875rem;
-		border-radius: 999px;
-		background: var(--color-surface);
-		transition: transform 0.15s;
-	}
 
-	.switch:checked {
-		background: var(--color-accent);
-	}
 
-	.switch:checked::after {
-		transform: translateX(1rem);
-	}
 
-	.switch:disabled {
-		opacity: 0.4;
-	}
 
-	.empty,
-	.status {
+	.empty {
 		margin: 0;
 		font-size: 0.8125rem;
 		color: var(--color-muted);
@@ -343,6 +273,23 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
+	}
+
+	.rule-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 0.5rem;
+		margin-top: 0.875rem;
+		padding-top: 0.875rem;
+		box-shadow: inset 0 1px 0 var(--color-line);
+		font-size: 0.8125rem;
+		color: var(--color-text-secondary);
+	}
+
+	.rule-actions span {
+		margin-right: auto;
 	}
 
 	.rule-row {
@@ -366,16 +313,7 @@
 		box-shadow: inset 0 0 0 1px var(--color-focus-line), 0 0 0 3px var(--color-focus-halo);
 	}
 
-	.add-rule {
-		margin-top: 0.75rem;
-	}
 
-	.actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-		margin-top: 0.75rem;
-	}
 
 	.error {
 		margin-top: 0.5rem;

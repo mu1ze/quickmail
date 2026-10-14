@@ -163,12 +163,17 @@
 </script>
 
 <svelte:head>
-	<title>Addresses — Settings</title>
+	<title>Addresses &amp; domains — Settings</title>
 </svelte:head>
 
-<HubShell title="Addresses" backHref="/settings">
+<HubShell
+	title="Addresses & domains"
+	backHref="/settings"
+	description="Where you send and receive mail. Recipients see the From name, not your login."
+>
 	<GroupedPanel
-		hint="The From name is what recipients see. Pin a saved signature to an address, or leave it on the account default."
+		title="Your addresses"
+		hint="Pin a saved signature to an address, or leave it on the account default."
 	>
 		<ul class="address-list">
 			{#each addresses as address (address.id)}
@@ -274,9 +279,108 @@
 
 		{#if error}<p class="error">{error}</p>{/if}
 	</GroupedPanel>
+
+	<div id="domains">
+		<GroupedPanel title="Domains" hint="Domains connected to your account and what each can do." flush>
+			<ul class="domain-list">
+				{#each data.domains as domain (domain.id)}
+					{@const canReceive = domain.receiving_enabled && data.domainPermissions[domain.id]?.can_receive !== false}
+					{@const canSend = domain.sending_enabled && data.domainPermissions[domain.id]?.can_send !== false}
+					<li class="domain-row">
+						<span class="domain-name">{domain.name}</span>
+						<span class="domain-caps">
+							<span class="cap" class:on={canReceive}><Icon name={canReceive ? 'check-line' : 'close-line'} size={14} />Receive</span>
+							<span class="cap" class:on={canSend}><Icon name={canSend ? 'check-line' : 'close-line'} size={14} />Send</span>
+							{#if domain.status === 'verified'}
+								<span class="status ok">Verified</span>
+							{:else}
+								<span class="status pending">{domain.status}</span>
+							{/if}
+						</span>
+					</li>
+				{:else}
+					<li class="domain-row domain-empty">No domains are connected yet.</li>
+				{/each}
+			</ul>
+		</GroupedPanel>
+	</div>
 </HubShell>
 
 <style>
+	#domains {
+		margin-top: 1.75rem;
+		scroll-margin-top: 1rem;
+	}
+
+	.domain-list {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.domain-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem 1rem;
+		padding: 0.75rem 1rem;
+	}
+
+	.domain-row + .domain-row {
+		box-shadow: inset 0 1px 0 var(--color-line);
+	}
+
+	.domain-name {
+		min-width: 0;
+		font-size: 0.875rem;
+		font-weight: 500;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.domain-empty {
+		font-size: 0.8125rem;
+		color: var(--color-muted);
+	}
+
+	.domain-caps {
+		display: flex;
+		align-items: center;
+		gap: 0.875rem;
+		font-size: 0.8125rem;
+	}
+
+	.cap {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		color: var(--color-muted);
+	}
+
+	.cap.on {
+		color: var(--tone-good-fg);
+	}
+
+	.status {
+		padding: 0.0625rem 0.5rem;
+		border-radius: 6px;
+		font-size: 0.75rem;
+		font-weight: 500;
+		text-transform: capitalize;
+	}
+
+	.status.ok {
+		color: var(--tone-good-fg);
+		background: var(--tone-good-bg);
+	}
+
+	.status.pending {
+		color: var(--tone-warn-fg);
+		background: var(--tone-warn-bg);
+	}
+
 	.address-list {
 		margin: 0;
 		padding: 0;
