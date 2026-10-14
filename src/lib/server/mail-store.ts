@@ -343,7 +343,7 @@ export async function listMailbox(
 		if (!latest) continue;
 		const base = analyses.get(latest.id);
 		const flagged = (key: 'phishing'|'spam'|'needsReply'|'deadline'|'review') => group.findLast(m=>analyses.get(m.id)?.[key]);
-		const phishing = flagged('phishing'), spam = flagged('spam'), reply = flagged('needsReply'), deadline = flagged('deadline');
+		const phishing = flagged('phishing'), spam = flagged('spam'), reply = base?.needsReply ? latest : undefined, deadline = base?.deadline ? latest : undefined;
 		const review = group.some(m=>analyses.get(m.id)?.status==='failed') || Boolean(base?.review);
 		if (base || phishing || spam || reply || deadline || review) {
 			thread.analysis = { ...(base ?? {emailId:latest.id,status:'pending',category:null,confidence:null,corrected:false,urgency:null}), review:review || Boolean(phishing || spam), phishing:Boolean(phishing), spam:Boolean(spam),needsReply:Boolean(reply),deadline:Boolean(deadline) };
@@ -869,6 +869,8 @@ export async function listThreadMessages(
 		.bind(...results.map((message) => message.id))
 		.all<EmailAttachmentMeta>();
 
+	const analyses = await loadMailAnalyses(db,userId,results.map(m=>m.id));
+
 	// The query already filters drafts out, so `status` is a delivery state or null
 	// and needs no further narrowing here.
 	return results.map((message) => ({
@@ -876,6 +878,7 @@ export async function listThreadMessages(
 		is_read: message.is_read === 1,
 		is_starred: message.is_starred === 1,
 		is_pinned: message.is_pinned === 1,
+		analysis: analyses.get(message.id),
 		attachments: files.filter((file) => file.email_id === message.id)
 	}));
 }

@@ -9,6 +9,9 @@ import { ANALYSIS_VERSION, SUBQ_MODEL } from '../mail-analysis';
 import { answers } from './testing/analysis-fixtures';
 import { analysisEnabled, setAnalysisEnabled, enqueueAnalysisBackfill, loadMailAnalyses, correctMailAnalysis } from './mail-analysis-store';
 import { dispatchAnalysis, processAnalysisJob, reconcileAnalysisJobs } from './mail-analysis-jobs';
+import { authorizeApiRequest } from './api-access';
+import { GET as getSettings, PUT as saveSettings } from '../../routes/api/settings/analysis/+server';
+import { PATCH as correctAnalysis } from '../../routes/api/mail/[id]/analysis/+server';
 let sqlite: Database;
 let db: D1Database;
 
@@ -121,4 +124,35 @@ test('conversation category, warnings, task filters and pagination agree with di
  assert.equal((await listMailbox(db,'owner',{view:'inbox',q:'category:transaction'})).total,0);
  await correctMailAnalysis(db,'owner',newer,{category:'work',warningDismissed:true});
  assert.equal((await listMailbox(db,'owner',{view:'inbox',q:'needs:review'})).total,0);
+});
+
+test('a newer informational message supersedes old task suggestions but preserves old security warnings', async () => {
+ await setAnalysisEnabled(db,'owner',true); const id=await receive();
+ const env={DB:db,SUBQ_API_KEY:'test',fetch:(async()=>response()) as typeof fetch};
+ await processAnalysisJob(env,message(id));
+ const newer=await receive(); sqlite.query("UPDATE emails SET created_at='2100-01-01' WHERE id=?").run(newer);
+ await processAnalysisJob({...env,fetch:(async()=>{const a=answers();a.needs_reply.noul=0.1;a.deadline.noul=0.1;return Response.json({model:SUBQ_MODEL,answers:a,usage:{input_tokens:500,output_tokens:0}});}) as typeof fetch},message(newer));
+ assert.equal((await listMailbox(db,'owner',{view:'inbox',q:'needs:reply'})).total,0);
+ assert.equal((await listMailbox(db,'owner',{view:'inbox'})).threads[0].analysis?.needsReply,false);
+ sqlite.query('UPDATE email_analysis SET phishing=1 WHERE email_id=?').run(id);
+ assert.equal((await listMailbox(db,'owner',{view:'inbox',q:'risk:phishing'})).total,1);
+ assert.equal((await listMailbox(db,'owner',{view:'inbox'})).threads[0].analysis?.phishing,true);
+});
+
+test('settings require explicit ZDR consent and corrections require an owner browser session', async () => {
+ const id=await receive();
+ const locals={user:{id:'owner'},authMethod:'session'},platform={env:{DB:db,SUBQ_API_KEY:'test'}};
+ const event=(body:unknown)=>({locals,platform,request:new Request('http://localhost/api/settings/analysis',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}) as any;
+ assert.equal((await saveSettings(event({enabled:true}))).status,400);
+ assert.equal(await analysisEnabled(db,'owner'),false);
+ assert.equal((await saveSettings(event({enabled:true,zdrConfirmed:true}))).status,200);
+ assert.equal(await analysisEnabled(db,'owner'),true);
+ const current=await (await getSettings({locals,platform} as any)).json();assert.equal(current.available,true);assert.equal(current.enabled,true);
+ const correction=(body:unknown,userId='owner',authMethod='session')=>({locals:{user:{id:userId},authMethod},platform,params:{id},request:new Request('http://localhost/api/mail/x/analysis',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}) as any;
+ assert.equal((await correctAnalysis(correction({category:'work'},'other'))).status,404);
+ assert.equal((await correctAnalysis(correction({category:'work'},'owner','api_token'))).status,403);
+ assert.equal((await correctAnalysis(correction({category:'made-up'}))).status,400);
+ assert.equal((await correctAnalysis(correction({category:'work'}))).status,200);
+ for(const path of ['/api/settings/analysis','/api/mail/received/analysis']) assert.equal(authorizeApiRequest({pathname:path,method:'PATCH',authMethod:'api_token',scopes:['mail:read','mail:send','admin']}).ok,false);
+ assert.equal((await saveSettings(event({enabled:false}))).status,200);
 });

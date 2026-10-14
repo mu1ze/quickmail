@@ -1,4 +1,5 @@
 <script lang="ts">
+	import AnalysisSettings from '$lib/components/AnalysisSettings.svelte';
 	import HubShell from '$lib/components/hub/HubShell.svelte';
 	import GroupedPanel from '$lib/components/hub/GroupedPanel.svelte';
 	import Icon from '$lib/components/Icon.svelte';
@@ -148,6 +149,7 @@
 </svelte:head>
 
 <HubShell title="Automations" backHref="/settings">
+	<AnalysisSettings />
 	<GroupedPanel
 		hint="Every message still arrives in your inbox. Once a week, mail you have already opened is scanned. Promotions and mail matching your rules move to Trash, where you can restore them."
 	>

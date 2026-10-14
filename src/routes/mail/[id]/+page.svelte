@@ -1,4 +1,6 @@
 <script lang="ts">
+	import AnalysisBadges from '$lib/components/AnalysisBadges.svelte';
+	import AnalysisControls from '$lib/components/AnalysisControls.svelte';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { untrack } from 'svelte';
 	import { tooltip } from '$lib/actions/tooltip';
@@ -441,6 +443,13 @@
 
 		<div class="thread">
 			{#each messages as message (message.id)}
+				{#if message.analysis}
+					<div class="message-analysis">
+						<AnalysisBadges analysis={message.analysis} />
+						{#if message.analysis.phishing}<p>Possible phishing: verify the sender and link destination through a trusted channel before sharing credentials or sending money.</p>{/if}
+						<details><summary>Review analysis</summary><AnalysisControls analysis={message.analysis} categoryId={message.id} /></details>
+					</div>
+				{/if}
 				<ThreadMessage
 					{message}
 					expanded={opened.has(message.id)}
@@ -515,6 +524,10 @@
 </div>
 
 <style>
+	.message-analysis { margin:0.7rem 0; padding:0.7rem; border:1px solid var(--color-line); border-radius:8px; }
+	.message-analysis p { font-size:0.875rem; line-height:1.6; }
+	.message-analysis summary { padding:0.5rem 0; font-size:0.8125rem; cursor:pointer; }
+
 	.toolbar-actions[aria-busy="true"] { opacity: 0.6; }
 	.mail-page {
 		display: flex;

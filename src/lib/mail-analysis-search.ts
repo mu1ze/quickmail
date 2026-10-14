@@ -8,9 +8,9 @@ const joins = `LEFT JOIN email_analysis a ON a.email_id=m.id AND a.user_id=m.use
 	LEFT JOIN email_analysis_corrections c ON c.email_id=m.id AND c.user_id=m.user_id
 	LEFT JOIN email_analysis_jobs j ON j.email_id=m.id AND j.user_id=m.user_id AND j.version='${ANALYSIS_VERSION}'`;
 const warning = '(COALESCE(c.warning_dismissed,0)=0 AND (a.phishing=1 OR a.spam=1))';
-const reply = `(a.needs_reply=1 AND COALESCE(c.task_done,0)=0 AND a.phishing=0 AND a.spam=0
+const reply = `(m.id=(${latest}) AND a.needs_reply=1 AND COALESCE(c.task_done,0)=0 AND a.phishing=0 AND a.spam=0
 	AND NOT EXISTS(SELECT 1 FROM emails sent WHERE sent.user_id=m.user_id AND sent.direction='outbound' AND sent.reply_to_email_id=m.id AND sent.status IN ('sent','delivered','delayed')))`;
-const deadline = '(a.deadline=1 AND COALESCE(c.task_done,0)=0 AND a.phishing=0 AND a.spam=0)';
+const deadline = `(m.id=(${latest}) AND a.deadline=1 AND COALESCE(c.task_done,0)=0 AND a.phishing=0 AND a.spam=0)`;
 const review = `(${warning} OR j.status='failed' OR (m.id=(${latest}) AND a.confidence IS NOT NULL AND COALESCE(c.category,a.category) IS NULL))`;
 
 export function analysisSearch(operator: string, value: string): { condition: string; bindings: string[] } | null {

@@ -3,6 +3,9 @@
 	import { mailboxContextMenu, rowMenuPosition } from '$lib/actions/mailbox-context-menu';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page as currentPage } from '$app/stores';
+	import AnalysisBadges from './AnalysisBadges.svelte';
+	import AnalysisControls from './AnalysisControls.svelte';
+	import { CATEGORY_LABELS } from '$lib/mail-analysis';
 	import Icon from './Icon.svelte';
 	import Check from './Check.svelte';
 	import EmptyState from './EmptyState.svelte';
@@ -96,7 +99,7 @@
 	});
 
 	const activeFilterCount = $derived(
-		[filters.unreadOnly, filters.starredOnly, filters.attachmentsOnly].filter(Boolean).length
+		[filters.unreadOnly, filters.starredOnly, filters.attachmentsOnly, filters.category, filters.needs].filter(Boolean).length
 	);
 
 	const subtitle = $derived.by(() => {
@@ -626,7 +629,7 @@
 			type="button"
 			class="ios-filter-pill"
 			class:active={activeFilterCount === 0 && !filters.q}
-			onclick={() => apply({ unread: null, starred: null, attachments: null, q: null })}
+			onclick={() => apply({ unread: null, starred: null, attachments: null, category: null, needs: null, q: null })}
 		>
 			<Icon name="mail-line" size={16} />
 			All messages
@@ -733,12 +736,23 @@
 		</div>
 	</header>
 	<nav class="filter-tabs" aria-label="Filter conversations">
-		<button type="button" class:active={!activeFilterCount} aria-pressed={!activeFilterCount} onclick={() => apply({ unread: null, starred: null, attachments: null })}><Icon name="inbox-line" size={17} />All messages</button>
+		<button type="button" class:active={!activeFilterCount} aria-pressed={!activeFilterCount} onclick={() => apply({ unread: null, starred: null, attachments: null, category: null, needs: null })}><Icon name="inbox-line" size={17} />All messages</button>
 		<button type="button" class:active={filters.unreadOnly} aria-pressed={filters.unreadOnly} onclick={() => apply({ unread: filters.unreadOnly ? null : '1' })}><Icon name="mail-unread-line" size={17} />Unread</button>
 		<button type="button" class:active={filters.starredOnly} aria-pressed={filters.starredOnly} onclick={() => apply({ starred: filters.starredOnly ? null : '1' })}><Icon name="star-line" size={17} />Starred</button>
 		<button type="button" class:active={filters.attachmentsOnly} aria-pressed={filters.attachmentsOnly} onclick={() => apply({ attachments: filters.attachmentsOnly ? null : '1' })}><Icon name="attachment-2" size={17} />Attachments</button>
 	</nav>
 
+	<div class="analysis-filters">
+		<label>Category<select aria-label="Filter email category" value={filters.category ?? ''} onchange={(e)=>apply({category:e.currentTarget.value || null})}>
+			<option value="">All categories</option>
+			<optgroup label="Inbox groups"><option value="primary">Primary</option><option value="transactions">Transactions</option><option value="promotions">Promotions</option><option value="updates">Updates</option><option value="newsletters">Newsletters</option></optgroup>
+			<optgroup label="Specific categories">
+			{#each Object.entries(CATEGORY_LABELS) as [value,label]}<option {value}>{label}</option>{/each}</optgroup>
+		</select></label>
+		<label>Attention<select aria-label="Filter email attention" value={filters.needs ?? ''} onchange={(e)=>apply({needs:e.currentTarget.value || null})}>
+			<option value="">All messages</option><option value="attention">Needs attention</option><option value="review">Review</option><option value="reply">Reply suggested</option><option value="deadline">Deadline mentioned</option>
+		</select></label>
+	</div>
 	{#if filters.q}
 		<div class="search-note">
 			<Icon name="search-line" size={14} />
@@ -754,7 +768,7 @@
 				title={filters.q ? 'No messages match that search' : activeFilterCount ? 'No conversations match these filters' : meta.empty}
 			/>
 			{#if filters.q || activeFilterCount}
-				<div class="empty-actions"><a class="btn-ghost" href={withParams({ q: null, unread: null, starred: null, attachments: null })}>Clear filters</a></div>
+				<div class="empty-actions"><a class="btn-ghost" href={withParams({ q: null, unread: null, starred: null, attachments: null, category: null, needs: null })}>Clear filters</a></div>
 			{/if}
 		{:else}
 			<ul class="cards" class:layout-list={layout === 'list'} class:compact={density === 'compact'} class:ios-list={true}>
@@ -818,6 +832,7 @@
 								</span>
 
 								<span class="card-meta">
+									<AnalysisBadges analysis={thread.analysis} />
 									{#each (thread.labels ?? []).slice(0, 2) as label (label.id)}<span class="tag tag-label" title={label.name}>{label.name}</span>{/each}
 									{#if (thread.labels?.length ?? 0) > 2}<span class="tag" title={thread.labels?.map((label) => label.name).join(', ')}>+{thread.labels!.length - 2}</span>{/if}
 									<span class="indicators">
@@ -893,6 +908,9 @@
 									/>
 								{:else}
 									<div class="menu menu-right" role="menu" aria-label="Conversation options">
+										{#if thread.analysis && thread.analysisMessageId}
+											<AnalysisControls analysis={thread.analysis} categoryId={thread.analysisMessageId} warningIds={[thread.analysisPhishingId,thread.analysisSpamId].filter((id): id is string=>Boolean(id))} taskIds={[thread.analysisReplyId,thread.analysisDeadlineId].filter((id): id is string=>Boolean(id))} />
+										{/if}
 										<LabelPicker {labels} ids={[thread.latest_id]} existing={[thread.labels ?? []]} disabled={busy} caption="Labels…" />
 										{#if view === 'spam' || view === 'all' || view === 'later'}
 											<button type="button" class="menu-item" disabled={busy} onclick={() => run('inbox', [thread.latest_id])}><Icon name="inbox-line" size={16} />Move to inbox</button>
@@ -1007,6 +1025,11 @@
 </section>
 
 <style>
+	.analysis-filters { display:flex; flex-wrap:wrap; gap:0.7rem; padding:0.6rem 1rem; border-bottom:1px solid var(--color-line); }
+	.analysis-filters label { display:flex; align-items:center; gap:0.4rem; font-size:0.75rem; color:var(--color-text-secondary); min-width:0; }
+	.analysis-filters select { max-width:100%; min-width:0; min-height:2.5rem; padding:0.3rem; color:var(--color-text); background:var(--color-surface); border:1px solid var(--color-line); border-radius:7px; }
+	@media(max-width:500px) { .analysis-filters label { flex:1 1 100%; } .analysis-filters select { flex:1; } }
+
 	.mailbox { display: flex; flex-direction: column; min-height: 100%; }
 	.mailbox-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.1rem 1.5rem 1.25rem; }
 	.eyebrow { font-size: 0.625rem; font-weight: 600; letter-spacing: 0.13em; color: var(--color-text-secondary); margin-bottom: 0.45rem; }
