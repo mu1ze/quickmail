@@ -1,3 +1,5 @@
+import { inboundAnalysisMetadata } from './subq';
+import { dispatchAnalysis, type AnalysisEnv } from './mail-analysis-jobs';
 import type { R2Bucket } from '@cloudflare/workers-types';
 import PostalMime, { type Address, type Attachment } from 'postal-mime';
 import { insertAttachmentBytes } from './attachments';
@@ -17,7 +19,7 @@ export type CloudflareInboundMessage = {
 	setReject(reason: string): void;
 };
 
-export type CloudflareInboundEnv = PushNotificationEnv & {
+export type CloudflareInboundEnv = PushNotificationEnv & AnalysisEnv & {
 	ATTACHMENTS: R2Bucket;
 };
 
@@ -89,10 +91,13 @@ export async function handleCloudflareInbound(
 		inReplyTo,
 		references,
 		domainId: route.domainId,
-		providerId
+		providerId,
+		analysisMetadata: inboundAnalysisMetadata(message.headers, 'cloudflare', { envelopeFrom: message.from, attachments: parsed.attachments.slice(0, 20).map(a => ({ filename: a.filename || 'attachment', type: a.mimeType })) })
 	});
 
 	await storeInboundAttachments(env, emailId, parsed.attachments);
+	const analysis = dispatchAnalysis(env, route.userId, emailId).catch(() => undefined);
+	if (env.waitUntil) env.waitUntil(analysis); else await analysis;
 	await scheduleNewMailNotification(env, {
 		emailId,
 		userId: route.userId,

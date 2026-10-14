@@ -155,6 +155,12 @@ export type ThreadParticipant = {
 
 /** One card in a mailbox grid: a whole conversation, not a single message. */
 export type ThreadSummary = {
+	analysis?: import('./mail-analysis').MailAnalysis;
+	analysisMessageId?: string;
+	analysisPhishingId?: string;
+	analysisSpamId?: string;
+	analysisReplyId?: string;
+	analysisDeadlineId?: string;
 	labels?: MailLabel[];
 	/** Whether every message has been archived. */
 	is_archived?: boolean;
@@ -183,6 +189,8 @@ export type ThreadSummary = {
 };
 
 export type MailboxFilters = {
+	category?: string;
+	needs?: string;
 	labelId?: string;
 	q: string;
 	unreadOnly: boolean;
@@ -202,6 +210,7 @@ export type MailboxPage = {
 
 /** A single message inside an open conversation. */
 export type ThreadMessage = {
+	analysis?: import('./mail-analysis').MailAnalysis;
 	id: string;
 	direction: 'inbound' | 'outbound';
 	from_addr: string;

@@ -1,4 +1,4 @@
-import type { D1Database, ExecutionContext, R2Bucket } from '@cloudflare/workers-types';
+import type { Queue, D1Database, ExecutionContext, R2Bucket } from '@cloudflare/workers-types';
 import type { ApiScope, AuthMethod } from '$lib/server/api-access';
 import type { CloudflareSendEmailBinding } from '$lib/server/providers/cloudflare-provider';
 import type { Domain, DomainPermissionFlags, MailAddress, User } from '$lib/types';
@@ -30,6 +30,8 @@ declare global {
 				PUBLIC_APP_URL?: string;
 				/** Shared secret required by /recover. Set with wrangler secret put. */
 				PASSWORD_RESET_KEY?: string;
+				SUBQ_API_KEY?: string;
+				MAIL_ANALYSIS_QUEUE?: Queue<import('$lib/server/mail-analysis-jobs').AnalysisQueueMessage>;
 				/** Workers AI. Missing locally unless the AI binding is available. */
 				AI?: {
 					run(model: string, input: Record<string, unknown>): Promise<unknown>;

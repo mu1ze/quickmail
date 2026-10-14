@@ -67,6 +67,8 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 			event,
 			{
 				DB: db,
+				SUBQ_API_KEY: platform?.env.SUBQ_API_KEY,
+				MAIL_ANALYSIS_QUEUE: platform?.env.MAIL_ANALYSIS_QUEUE,
 				ATTACHMENTS: bucket,
 				VAPID_PUBLIC_KEY: platform?.env.VAPID_PUBLIC_KEY,
 				VAPID_PRIVATE_KEY: platform?.env.VAPID_PRIVATE_KEY,

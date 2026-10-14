@@ -1,4 +1,5 @@
-import type { ExecutionContext, ScheduledController } from '@cloudflare/workers-types';
+import { consumeAnalysisQueue, reconcileAnalysisJobs, type AnalysisQueueMessage } from './lib/server/mail-analysis-jobs';
+import type { ExecutionContext, ScheduledController, MessageBatch } from '@cloudflare/workers-types';
 import {
 	handleCloudflareInbound,
 	type CloudflareInboundEnv,
@@ -36,6 +37,8 @@ export default {
 
 		const inboundEnv: CloudflareInboundEnv = {
 			DB: env.DB,
+			SUBQ_API_KEY: env.SUBQ_API_KEY,
+			MAIL_ANALYSIS_QUEUE: env.MAIL_ANALYSIS_QUEUE,
 			ATTACHMENTS: env.ATTACHMENTS,
 			VAPID_PUBLIC_KEY: env.VAPID_PUBLIC_KEY,
 			VAPID_PRIVATE_KEY: env.VAPID_PRIVATE_KEY,
@@ -47,7 +50,13 @@ export default {
 		await handleCloudflareInbound(message, inboundEnv);
 	},
 
-	async scheduled(_controller: ScheduledController, env: Env) {
+	async queue(batch: MessageBatch<AnalysisQueueMessage>, env: Env) {
+		await consumeAnalysisQueue(batch, env);
+	},
+
+	async scheduled(controller: ScheduledController, env: Env) {
+		await reconcileAnalysisJobs(env);
+		if (controller.cron !== '0 8 * * SUN') return;
 		const result = await runWeeklyMailAutomations(env);
 		console.log('mail automations', result);
 	}

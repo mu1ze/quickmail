@@ -1,3 +1,4 @@
+import { analysisSearch } from './mail-analysis-search';
 import type { MailboxView } from './types';
 
 export type MailSearch = {
@@ -31,9 +32,12 @@ export function parseMailSearch(query: string): MailSearch {
 		const operator = match?.[1]?.toLowerCase();
 		const unquote = (value: string) => value.replace(/^"|"$/g, '').replace(/\\(["\\])/g, '$1');
 		const value = unquote(match?.[2] ?? token);
+		const analysis = operator ? analysisSearch(operator, value) : null;
 		let condition = '';
 		const bindings: string[] = [];
-		if (value && (operator === 'from' || operator === 'to' || operator === 'subject')) {
+		if (analysis) {
+			condition = analysis.condition; bindings.push(...analysis.bindings);
+		} else if (value && (operator === 'from' || operator === 'to' || operator === 'subject')) {
 			if (operator === 'to') {
 				condition = "(e.to_addr LIKE ? ESCAPE '\\' OR COALESCE(e.cc_addr, '') LIKE ? ESCAPE '\\' OR COALESCE(e.bcc_addr, '') LIKE ? ESCAPE '\\')";
 				bindings.push(like(value), like(value), like(value));

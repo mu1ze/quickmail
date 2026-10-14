@@ -5,6 +5,8 @@ import type { D1Database } from '@cloudflare/workers-types';
 export function readFilters(url: URL): MailboxFilters {
 	return {
 		labelId: url.searchParams.get('label') ?? undefined,
+		category: url.searchParams.get('category') ?? '',
+		needs: url.searchParams.get('needs') ?? '',
 		q: url.searchParams.get('q')?.trim() ?? '',
 		unreadOnly: url.searchParams.get('unread') === '1',
 		starredOnly: url.searchParams.get('starred') === '1',
@@ -33,6 +35,8 @@ export async function loadMailbox(
 		labelId: filters.labelId,
 		domainId,
 		q: filters.q,
+		category: filters.category,
+		needs: filters.needs,
 		unreadOnly: filters.unreadOnly,
 		starredOnly: filters.starredOnly,
 		attachmentsOnly: filters.attachmentsOnly,

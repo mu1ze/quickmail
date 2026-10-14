@@ -1,4 +1,4 @@
-import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
+import type { Queue, D1Database, R2Bucket } from '@cloudflare/workers-types';
 import type { CloudflareSendEmailBinding } from '$lib/server/providers/cloudflare-provider';
 
 declare global {
@@ -16,6 +16,8 @@ declare global {
 		VAPID_SUBJECT?: string;
 		PUBLIC_APP_URL?: string;
 		PASSWORD_RESET_KEY?: string;
+		SUBQ_API_KEY?: string;
+		MAIL_ANALYSIS_QUEUE?: Queue<import('$lib/server/mail-analysis-jobs').AnalysisQueueMessage>;
 		/** Workers AI. Absent in local-bindings mode; automations then skip the model. */
 		AI?: {
 			run(model: string, input: Record<string, unknown>): Promise<unknown>;

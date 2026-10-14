@@ -1,3 +1,5 @@
+import { inboundAnalysisMetadata } from './subq';
+import { dispatchAnalysis, type AnalysisEnv } from './mail-analysis-jobs';
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
 import type { DeliveryStatus } from '$lib/types';
 import { insertAttachmentBytes } from './attachments';
@@ -19,7 +21,7 @@ export type WebhookOutcome = {
 	note: string;
 };
 
-type InboundEnv = PushNotificationEnv & { ATTACHMENTS: R2Bucket };
+type InboundEnv = PushNotificationEnv & AnalysisEnv & { ATTACHMENTS: R2Bucket };
 
 /** Resend delivery events → the status we display on a sent message. */
 const STATUS_BY_EVENT: Record<string, DeliveryStatus> = {
@@ -125,10 +127,13 @@ async function handleInboundEmail(
 		// chain still carries the message that started the conversation.
 		references: received.headers?.['references'] ?? null,
 		domainId: route.domainId,
-		providerId
+		providerId,
+		analysisMetadata: inboundAnalysisMetadata(received.headers ?? {}, 'resend')
 	});
 
 	await storeInboundAttachments(env, client, providerId, emailId);
+	const analysis = dispatchAnalysis(env, route.userId, emailId).catch(() => undefined);
+	if (env.waitUntil) env.waitUntil(analysis); else await analysis;
 	await scheduleNewMailNotification(env, {
 		emailId,
 		userId: route.userId,

@@ -1,3 +1,6 @@
+import { analysisSearch } from '$lib/mail-analysis-search';
+import { loadMailAnalyses, analysisInsertStatements } from './mail-analysis-store';
+import type { AnalysisMetadata } from './subq';
 import { parseMailSearch } from '$lib/mail-search';
 import { loadThreadLabels } from './mail-labels';
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
@@ -36,6 +39,7 @@ export async function insertEmail(
 		direction: 'inbound' | 'outbound';
 		from: string;
 		fromName?: string | null;
+		analysisMetadata?: AnalysisMetadata;
 		to: string;
 		cc?: string | null;
 		bcc?: string | null;
@@ -70,7 +74,7 @@ export async function insertEmail(
 		subjectMatch: input.status !== 'draft'
 	});
 
-	await db
+	const insert = db
 		.prepare(
 			`INSERT INTO emails (
 				id, user_id, direction, from_addr, from_name, to_addr, cc_addr, bcc_addr, subject,
@@ -101,8 +105,11 @@ export async function insertEmail(
 			input.providerId ?? null,
 			input.status ?? null,
 			input.isRead ? 1 : 0
-		)
-		.run();
+		);
+
+	if (input.direction === 'inbound') {
+		await db.batch([insert, ...analysisInsertStatements(db, id, input.userId, input.analysisMetadata)]);
+	} else { await insert.run(); }
 
 	return id;
 }
@@ -186,6 +193,8 @@ export type MailboxQuery = {
 	domainId?: string | null;
 	/** Free text matched against participants, subject and body. */
 	q?: string | null;
+	category?: string;
+	needs?: string;
 	unreadOnly?: boolean;
 	starredOnly?: boolean;
 	attachmentsOnly?: boolean;
@@ -232,6 +241,10 @@ function buildScope(userId: string, query: MailboxQuery): { where: string; bindi
 		bindings.push(query.labelId);
 	}
 
+	for (const [operator, value] of [['category', query.category], ['needs', query.needs]]) {
+		const analysis = value ? analysisSearch(operator!, value) : null;
+		if (analysis) { filters.push(analysis.condition); bindings.push(...analysis.bindings); }
+	}
 	filters.push(...search.conditions);
 	bindings.push(...search.bindings);
 
@@ -304,7 +317,7 @@ export async function listMailbox(
 			        EXISTS(SELECT 1 FROM email_attachments a WHERE a.email_id = m.id) AS has_attachments
 			 FROM emails m
 			 WHERE m.user_id = ? AND COALESCE(m.thread_id, m.id) IN (${placeholders}) AND ${display}
-			 ORDER BY datetime(m.created_at) ASC`
+			 ORDER BY datetime(m.created_at) ASC,m.id ASC`
 		)
 		.bind(userId, ...threadIds)
 		.all<ThreadMessageRow>();
@@ -320,6 +333,25 @@ export async function listMailbox(
 		.map((threadId) => byThread.get(threadId))
 		.filter((group): group is ThreadMessageRow[] => Boolean(group?.length))
 		.map(toThreadSummary);
+
+	const { results: inbound } = await db.prepare(`SELECT id,COALESCE(thread_id,id) AS thread_id FROM emails WHERE user_id=? AND direction='inbound' AND deleted_at IS NULL AND COALESCE(thread_id,id) IN (${placeholders}) ORDER BY datetime(created_at),id`)
+		.bind(userId,...threadIds).all<{id:string;thread_id:string}>();
+	const analyses = await loadMailAnalyses(db,userId,inbound.map(m=>m.id));
+	for (const thread of threads) {
+		const group = inbound.filter(m=>m.thread_id===thread.thread_id);
+		const latest = group.at(-1);
+		if (!latest) continue;
+		const base = analyses.get(latest.id);
+		const flagged = (key: 'phishing'|'spam'|'needsReply'|'deadline'|'review') => group.findLast(m=>analyses.get(m.id)?.[key]);
+		const phishing = flagged('phishing'), spam = flagged('spam'), reply = flagged('needsReply'), deadline = flagged('deadline');
+		const review = group.some(m=>analyses.get(m.id)?.status==='failed') || Boolean(base?.review);
+		if (base || phishing || spam || reply || deadline || review) {
+			thread.analysis = { ...(base ?? {emailId:latest.id,status:'pending',category:null,confidence:null,corrected:false,urgency:null}), review:review || Boolean(phishing || spam), phishing:Boolean(phishing), spam:Boolean(spam),needsReply:Boolean(reply),deadline:Boolean(deadline) };
+			thread.analysisMessageId=latest.id;
+			thread.analysisPhishingId=phishing?.id;thread.analysisSpamId=spam?.id;
+			thread.analysisReplyId=reply?.id;thread.analysisDeadlineId=deadline?.id;
+		}
+	}
 
 	const summaries = await loadThreadSummaries(
 		db,

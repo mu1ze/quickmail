@@ -61,6 +61,8 @@ export const GET: RequestHandler = async ({ locals, platform, url }) => {
 		labelId: url.searchParams.get('label') ?? undefined,
 		view: mailboxView(url),
 		domainId: locals.activeDomainId,
+		category: url.searchParams.get('category') ?? '',
+		needs: url.searchParams.get('needs') ?? '',
 		q: url.searchParams.get('q'),
 		unreadOnly: url.searchParams.get('unread') === '1',
 		starredOnly: url.searchParams.get('starred') === '1',

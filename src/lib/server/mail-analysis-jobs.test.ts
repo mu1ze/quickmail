@@ -1,0 +1,124 @@
+/// <reference path="../../../node_modules/bun-types/sqlite.d.ts" />
+import { Database } from 'bun:sqlite';
+import { readdirSync, readFileSync } from 'node:fs';
+import { afterEach, beforeEach, test } from 'node:test';
+import assert from 'node:assert/strict';
+import type { D1Database } from '@cloudflare/workers-types';
+import { listMailbox, insertEmail } from './mail-store';
+import { ANALYSIS_VERSION, SUBQ_MODEL } from '../mail-analysis';
+import { answers } from './testing/analysis-fixtures';
+import { analysisEnabled, setAnalysisEnabled, enqueueAnalysisBackfill, loadMailAnalyses, correctMailAnalysis } from './mail-analysis-store';
+import { dispatchAnalysis, processAnalysisJob, reconcileAnalysisJobs } from './mail-analysis-jobs';
+let sqlite: Database;
+let db: D1Database;
+
+beforeEach(() => {
+	sqlite = new Database(':memory:');
+	sqlite.exec('PRAGMA foreign_keys = ON');
+	for (const file of readdirSync('migrations').filter((file) => file.endsWith('.sql')).sort()) {
+		sqlite.exec(readFileSync(`migrations/${file}`, 'utf8'));
+	}
+	// Execute the production SQL against SQLite, as D1 does.
+	db = {
+		async batch(statements: { run: () => Promise<unknown> }[]) {
+			sqlite.exec('BEGIN');
+			try { const result = []; for (const statement of statements) result.push(await statement.run()); sqlite.exec('COMMIT'); return result; }
+			catch (cause) { sqlite.exec('ROLLBACK'); throw cause; }
+		},
+		prepare(sql: string) {
+			let values: any[] = [];
+			return {
+				bind(...args: any[]) { values = args; return this; },
+				async all() { return { results: sqlite.query(sql).all(...values) }; },
+				async first() { return sqlite.query(sql).get(...values); },
+				async run() { return { meta: { changes: sqlite.query(sql).run(...values).changes } }; }
+			};
+		}
+	} as unknown as D1Database;
+	sqlite.exec("INSERT INTO users(id,email,name,password_hash) VALUES('owner','owner@example.com','Owner','disabled'),('other','other@example.com','Other','disabled')");
+});
+
+afterEach(() => sqlite.close());
+
+async function receive(userId = 'owner') {
+ return insertEmail(db, { userId, direction: 'inbound', from:'alex@example.com', to:'owner@example.com', subject:'Project', bodyText:'Can you review by Friday?', analysisMetadata: { replyTo:'alex@example.com' } });
+}
+const response = () => Response.json({ model: SUBQ_MODEL, answers: answers(), usage: { input_tokens:500, output_tokens:0 } });
+const message = (id: string, userId = 'owner') => ({emailId:id,userId,version:ANALYSIS_VERSION});
+test('inbound jobs are opt-in, transactional, bounded, and scoped to account', async () => {
+ const id = await receive(); assert.equal(await analysisEnabled(db,'owner'),false);
+ assert.equal(sqlite.query<{n:number}, []>('SELECT COUNT(*) AS n FROM email_analysis_jobs').get()!.n,0);
+ await setAnalysisEnabled(db,'owner',true);
+ await receive('other');
+ assert.equal(await enqueueAnalysisBackfill(db,'owner'),1);
+ assert.equal(await enqueueAnalysisBackfill(db,'owner'),0);
+ assert.equal(await correctMailAnalysis(db,'other',id,{category:'work'}),false);
+ await processAnalysisJob({DB:db,SUBQ_API_KEY:'test',fetch: (async () => response()) as typeof fetch},message(id,'other'));
+ assert.equal(sqlite.query<{n:number}, []>('SELECT COUNT(*) AS n FROM email_analysis').get()!.n,0);
+});
+test('analysis does not mutate folders, read state, or cleanup and duplicate deliveries do not bill twice', async () => {
+ await setAnalysisEnabled(db,'owner',true); const id = await receive(); let calls=0;
+ const env={DB:db,SUBQ_API_KEY:'test',fetch:(async () => {calls++;return response();}) as typeof fetch};
+ await processAnalysisJob(env,message(id)); await processAnalysisJob(env,message(id));
+ assert.equal(calls,1);
+ const a=(await loadMailAnalyses(db,'owner',[id])).get(id)!;
+ assert.equal(a.category,'work'); assert.equal(a.needsReply,true);
+ const e=sqlite.query('SELECT is_read,is_spam,deleted_at FROM emails WHERE id=?').get(id);
+ assert.deepEqual(e,{is_read:0,is_spam:0,deleted_at:null});
+ assert.equal((await loadMailAnalyses(db,'other',[id])).size,0);
+});
+test('opt-out during provider call prevents saving a late answer', async () => {
+ await setAnalysisEnabled(db,'owner',true); const id=await receive();
+ await processAnalysisJob({DB:db,SUBQ_API_KEY:'test',fetch:(async () => { await setAnalysisEnabled(db,'owner',false); return response(); }) as typeof fetch},message(id));
+ assert.equal(sqlite.query<{n:number}, []>('SELECT COUNT(*) AS n FROM email_analysis').get()!.n,0);
+});
+test('corrections survive inference, linked sent replies clear reply hints, drafts do not', async () => {
+ await setAnalysisEnabled(db,'owner',true); const id=await receive();
+ await correctMailAnalysis(db,'owner',id,{category:'personal'});
+ await processAnalysisJob({DB:db,SUBQ_API_KEY:'test',fetch:(async () => response()) as typeof fetch},message(id));
+ let a=(await loadMailAnalyses(db,'owner',[id])).get(id)!; assert.equal(a.category,'personal');assert.equal(a.corrected,true);
+ const sent=await insertEmail(db,{userId:'owner',direction:'outbound',from:'owner@example.com',to:'alex@example.com',subject:'Re: Project',replyToEmailId:id,status:'draft'});
+ assert.equal((await loadMailAnalyses(db,'owner',[id])).get(id)!.needsReply,true);
+ sqlite.query("UPDATE emails SET status='sent' WHERE id=?").run(sent);
+ a=(await loadMailAnalyses(db,'owner',[id])).get(id)!;assert.equal(a.needsReply,false);assert.equal(a.deadline,true);
+ await correctMailAnalysis(db,'owner',id,{taskDone:true});
+ assert.equal((await loadMailAnalyses(db,'owner',[id])).get(id)!.deadline,false);
+});
+test('rate limits persist backoff and pause, malformed responses become Review failures', async () => {
+ await setAnalysisEnabled(db,'owner',true); const id=await receive();let calls=0;
+ const env={DB:db,SUBQ_API_KEY:'test',fetch:(async () => {calls++;return new Response('',{status:429});}) as typeof fetch};
+ await processAnalysisJob(env,message(id));await processAnalysisJob(env,message(id));assert.equal(calls,1);
+ assert.equal(sqlite.query<{status:string}, [string]>('SELECT status FROM email_analysis_jobs WHERE email_id=?').get(id)!.status,'pending');
+ sqlite.exec('DELETE FROM mail_analysis_provider_state; UPDATE email_analysis_jobs SET next_attempt_at=0');
+ await processAnalysisJob({...env,fetch:(async () => Response.json({})) as typeof fetch},message(id));
+ const a=(await loadMailAnalyses(db,'owner',[id])).get(id)!;assert.equal(a.status,'failed');assert.equal(a.review,true);
+});
+test('queue failure and expired leases remain recoverable without accepting deleted messages', async () => {
+ await setAnalysisEnabled(db,'owner',true);const id=await receive();
+ await dispatchAnalysis({DB:db,SUBQ_API_KEY:'test',MAIL_ANALYSIS_QUEUE:{send:async () => {throw Error('offline');}} as any},'owner',id);
+ assert.equal(sqlite.query<{status:string}, [string]>('SELECT status FROM email_analysis_jobs WHERE email_id=?').get(id)!.status,'pending');
+ sqlite.exec("UPDATE email_analysis_jobs SET status='processing',lease_until=0,lease_token='expired'");
+ await reconcileAnalysisJobs({DB:db,SUBQ_API_KEY:'test',fetch:(async () => response()) as typeof fetch});
+ assert.equal((await loadMailAnalyses(db,'owner',[id])).get(id)!.status,'analyzed');
+ const deleted=await receive();sqlite.query("UPDATE emails SET deleted_at=datetime('now') WHERE id=?").run(deleted);
+ let calls=0;await processAnalysisJob({DB:db,SUBQ_API_KEY:'test',fetch:(async () => {calls++;return response();}) as typeof fetch},message(deleted));assert.equal(calls,0);
+});
+
+test('conversation category, warnings, task filters and pagination agree with displayed analysis', async () => {
+ await setAnalysisEnabled(db,'owner',true); const id=await receive();
+ await processAnalysisJob({DB:db,SUBQ_API_KEY:'test',fetch:(async () => response()) as typeof fetch},message(id));
+ for(const q of ['category:primary','category:work','needs:reply','needs:deadline','needs:attention']) {
+  const page=await listMailbox(db,'owner',{view:'inbox',q,pageSize:1});assert.equal(page.total,1,q);assert.equal(page.threads[0].analysis?.category,'work');
+ }
+ assert.equal((await listMailbox(db,'owner',{view:'inbox',q:'risk:phishing'})).total,0);
+ await correctMailAnalysis(db,'owner',id,{category:'transaction',taskDone:true});
+ assert.equal((await listMailbox(db,'owner',{view:'inbox',category:'transactions'})).total,1);
+ assert.equal((await listMailbox(db,'owner',{view:'inbox',q:'needs:reply'})).total,0);
+ assert.equal((await listMailbox(db,'other',{view:'inbox',q:'category:transactions'})).total,0);
+ const newer=await receive();sqlite.query("UPDATE emails SET created_at='2100-01-01' WHERE id=?").run(newer);
+ await processAnalysisJob({DB:db,SUBQ_API_KEY:'test',fetch:(async () => {const a=answers(0.6);a.phishing.noul=0.8;return Response.json({model:SUBQ_MODEL,answers:a,usage:{input_tokens:500,output_tokens:0}});}) as typeof fetch},message(newer));
+ const page=await listMailbox(db,'owner',{view:'inbox',q:'needs:review'});assert.equal(page.total,1);assert.equal(page.threads[0].analysis?.phishing,true);assert.equal(page.threads[0].analysis?.category,null);
+ assert.equal((await listMailbox(db,'owner',{view:'inbox',q:'category:transaction'})).total,0);
+ await correctMailAnalysis(db,'owner',newer,{category:'work',warningDismissed:true});
+ assert.equal((await listMailbox(db,'owner',{view:'inbox',q:'needs:review'})).total,0);
+});
