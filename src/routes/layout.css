@@ -130,6 +130,7 @@ button:disabled { cursor: default; }
 }
 
 .app-shell.mailbox-mobile .app-main { padding: 0; }
+.app-shell.hide-topbar .topbar { display: none; }
 
 .surface,
 .surface-lg {

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { tick, untrack } from 'svelte';
-	import { flip } from 'svelte/animate';
 	import { slide } from 'svelte/transition';
 	import { swipeRow } from '$lib/actions/swipe-row';
 	import { motionDuration } from '$lib/interior/motion';
@@ -10,6 +9,7 @@
 	import AnalysisBadges from './AnalysisBadges.svelte';
 	import AnalysisControls from './AnalysisControls.svelte';
 	import MailCategories from './MailCategories.svelte';
+	import DomainSwitcher from './DomainSwitcher.svelte';
 	import { CATEGORY_LABELS } from '$lib/mail-analysis';
 	import Icon from './Icon.svelte';
 	import Check from './Check.svelte';
@@ -27,6 +27,7 @@
 	import { onSearchFocus } from '$lib/search-focus';
 	import { handleMailboxRowClick, toggleSelection } from '$lib/mailbox-select';
 	import { participantName, threadHeadline } from '$lib/mailbox-people';
+	import { mailboxGroupHeadings } from '$lib/mailbox-groups';
 	import { requireOk, requestError } from '$lib/utils/request';
 	import {
 		readMailboxLayout,
@@ -36,7 +37,7 @@
 		type MailboxDensity,
 		type MailboxLayout
 	} from '$lib/mailbox-layout';
-	import type { MailboxCounts, MailboxFilters, MailboxPage, MailboxView, ThreadSummary, MailLabel } from '$lib/types';
+	import type { Domain, MailboxCounts, MailboxFilters, MailboxPage, MailboxView, ThreadSummary, MailLabel } from '$lib/types';
 
 	const shell = getShellContext();
 
@@ -91,15 +92,31 @@
 	let selectionAnchor = $state<string | null>(null);
 	let searchQuery = $state('');
 	let searchInput = $state<HTMLInputElement | null>(null);
+	let deskSearchInput = $state<HTMLInputElement | null>(null);
+	let viewOpen = $state(false);
 
 	const counts = $derived(($currentPage.data.counts ?? {}) as MailboxCounts);
 	const labels = $derived(($currentPage.data.labels ?? []) as MailLabel[]);
 	const activeLabel = $derived(labels.find((label) => label.id === filters.labelId));
+	const domains = $derived(($currentPage.data.domains ?? []) as Domain[]);
+	const activeDomainId = $derived(($currentPage.data.activeDomainId ?? null) as string | null);
+
+	const headerCount = $derived(
+		view === 'inbox' && !filters.q
+			? `${counts.inbox_unread ?? 0} unread`
+			: `${mailbox.total} conversation${mailbox.total === 1 ? '' : 's'}`
+	);
+
+	// Snoozed mail is ordered by when it comes back, so date headings would mislead there.
+	const headings = $derived(view === 'later' ? items.map(() => null) : mailboxGroupHeadings(items));
 
 	$effect(() => {
 		return onSearchFocus(() => {
 			searchOpen = true;
-			queueMicrotask(() => searchInput?.focus());
+			queueMicrotask(() => {
+				const phone = matchMedia('(max-width: 900px)').matches;
+				(phone ? searchInput : deskSearchInput)?.focus();
+			});
 		});
 	});
 
@@ -328,7 +345,7 @@
 		if (event.key === 'Escape') {
 			if (document.querySelector('dialog[open]')) return;
 			const menuId = rowMenuFor;
-			moreOpen = false; selectMenuOpen = false; rowMenuFor = null; snoozeFor = null; bulkSnoozeOpen = false;
+			moreOpen = false; viewOpen = false; selectMenuOpen = false; rowMenuFor = null; snoozeFor = null; bulkSnoozeOpen = false;
 			if (menuId) {
 				void tick().then(() => document.querySelector<HTMLAnchorElement>(`a.card-link[data-message-id="${menuId}"]`)?.focus({ preventScroll: true }));
 			} else { selected = []; selectMode = false; selectionAnchor = null; }
@@ -549,12 +566,12 @@
 <svelte:window onkeydown={onListKeydown} />
 {#snippet filterControls()}
 		<nav class="filter-tabs" aria-label="Filter conversations">
-			<button type="button" class:active={filters.unreadOnly} aria-pressed={filters.unreadOnly} onclick={() => apply({ unread: filters.unreadOnly ? null : '1' })}><Icon name="mail-unread-line" size={15} />Unread</button>
-			<button type="button" class:active={filters.starredOnly} aria-pressed={filters.starredOnly} onclick={() => apply({ starred: filters.starredOnly ? null : '1' })}><Icon name="star-line" size={15} />Starred</button>
-			<button type="button" class:active={filters.attachmentsOnly} aria-pressed={filters.attachmentsOnly} onclick={() => apply({ attachments: filters.attachmentsOnly ? null : '1' })}><Icon name="attachment-2" size={15} />Attachments</button>
+			<button type="button" class:active={filters.unreadOnly} aria-pressed={filters.unreadOnly} onclick={() => apply({ unread: filters.unreadOnly ? null : '1' })} title="Unread"><Icon name="mail-unread-line" size={15} /><span class="filter-text">Unread</span></button>
+			<button type="button" class:active={filters.starredOnly} aria-pressed={filters.starredOnly} onclick={() => apply({ starred: filters.starredOnly ? null : '1' })} title="Starred"><Icon name="star-line" size={15} /><span class="filter-text">Starred</span></button>
+			<button type="button" class:active={filters.attachmentsOnly} aria-pressed={filters.attachmentsOnly} onclick={() => apply({ attachments: filters.attachmentsOnly ? null : '1' })} title="Attachments"><Icon name="attachment-2" size={15} /><span class="filter-text">Attachments</span></button>
 		</nav>
 		<label class="attention-filter"><Icon name="focus-3-line" size={15} /><select aria-label="Filter email attention" value={filters.needs ?? ''} onchange={(e)=>apply({needs:e.currentTarget.value || null})}>
-			<option value="">Any attention level</option><option value="attention">Needs attention</option><option value="review">Review</option><option value="reply">Reply suggested</option><option value="deadline">Deadline mentioned</option>
+			<option value="">Any attention</option><option value="attention">Needs attention</option><option value="review">Review</option><option value="reply">Reply suggested</option><option value="deadline">Deadline mentioned</option>
 		</select><Icon name="arrow-down-s-line" size={14} /></label>
 		{#if activeFilterCount}<button type="button" class="reset-filters" onclick={() => apply({ unread: null, starred: null, attachments: null, category: null, needs: null })} aria-label="Clear all filters"><Icon name="close-line" size={14} /><span>Reset</span></button>{/if}
 {/snippet}
@@ -665,89 +682,130 @@
 	{/if}
 
 	<div class="mailbox-head">
-	<div class="mailbox-heading">
-		<div><h1>{filters.q ? 'Search results' : activeLabel?.name ?? meta.title}<span>{mailbox.total} conversation{mailbox.total === 1 ? '' : 's'}</span></h1></div>
-		{#if view === 'inbox' && counts.inbox_unread > 0}<span class="unread-summary"><span></span>{counts.inbox_unread} unread in your inbox</span>{/if}
-	</div>
-	<MailCategories value={filters.category ?? ''} onChange={(category) => apply({ category })} />
-	<header class="toolbar" aria-label="Mailbox tools" aria-busy={busy}>
-		<div class="toolbar-left">
-			<div class="select-all">
-				<Check label="Select all messages" checked={allSelected} indeterminate={someSelected && !allSelected} disabled={busy} onchange={selectAll} />
-				<button type="button" class="caret" aria-label="Selection options" aria-expanded={selectMenuOpen} onclick={() => (selectMenuOpen = !selectMenuOpen)}><Icon name="arrow-down-s-line" size={16} /></button>
-				{#if selectMenuOpen}
-					<button type="button" class="backdrop" aria-label="Close selection options" onclick={() => (selectMenuOpen = false)}></button>
-					<div class="menu menu-left">
-						<button type="button" class="menu-item" onclick={() => selectWhere(() => true)}>All on this page</button>
-						<button type="button" class="menu-item" onclick={() => selectWhere(() => false)}>None</button>
-						<button type="button" class="menu-item" onclick={() => selectWhere((row) => !row.is_read)}>Unread</button>
-						<button type="button" class="menu-item" onclick={() => selectWhere((row) => row.is_read)}>Read</button>
-						<button type="button" class="menu-item" onclick={() => selectWhere((row) => row.is_starred)}>Starred</button>
-					</div>
-				{/if}
-			</div>
-			{#if someSelected}
-				<div class="bulk-actions">
-					{#if view === 'trash' || view === 'spam' || view === 'all' || view === 'later'}
-						<button type="button" class="tool-btn" title="Move to inbox" aria-label="Move to inbox" disabled={busy} onclick={() => run('inbox')}><Icon name="inbox-line" size={19} /></button>
-					{/if}
-					{#if view !== 'trash' && view !== 'spam' && view !== 'drafts'}
-						<button type="button" class="tool-btn" title="Archive (e)" aria-label="Archive" disabled={busy} onclick={() => run('archive')}><Icon name="archive-line" size={19} /></button>
-					{/if}
-					{#if view !== 'drafts' && view !== 'trash'}
-						<button type="button" class="tool-btn" title={view === 'spam' ? 'Not spam' : 'Mark as spam'} aria-label={view === 'spam' ? 'Not spam' : 'Mark as spam'} disabled={busy} onclick={() => run(view === 'spam' ? 'not-spam' : 'spam')}><Icon name={view === 'spam' ? 'shield-check-line' : 'spam-2-line'} size={19} /></button>
-					{/if}
-					<button type="button" class="tool-btn" title={view === 'trash' ? 'Delete permanently' : 'Move to trash (#)'} aria-label={view === 'trash' ? 'Delete permanently' : 'Move to trash'} disabled={busy} onclick={() => run(view === 'trash' ? 'delete' : 'trash')}><Icon name="delete-bin-line" size={19} /></button>
-					<span class="tool-divider"></span>
-					<LabelPicker {labels} ids={selected} existing={items.filter((row) => selected.includes(row.latest_id)).map((row) => row.labels ?? [])} disabled={busy} />
-					<button type="button" class="tool-btn" title="Mark as read" aria-label="Mark as read" disabled={busy} onclick={() => run('read')}><Icon name="mail-open-line" size={19} /></button>
-					<button type="button" class="tool-btn" title="Mark as unread" aria-label="Mark as unread" disabled={busy} onclick={() => run('unread')}><Icon name="mail-unread-line" size={19} /></button>
-					{#if view !== 'trash' && view !== 'spam' && view !== 'drafts'}
-						<div class="snooze-wrap">
-							<button type="button" class="tool-btn" title="Snooze (b)" aria-label="Snooze" disabled={busy} onclick={() => (bulkSnoozeOpen = !bulkSnoozeOpen)}><Icon name="time-line" size={19} /></button>
-							{#if bulkSnoozeOpen}
-								<button type="button" class="backdrop" aria-label="Close snooze" onclick={() => (bulkSnoozeOpen = false)}></button>
-								<SnoozeMenu onPick={(until) => snoozeIds(selected, until)} onClose={() => (bulkSnoozeOpen = false)} />
-							{/if}
+	<header class="mailbox-bar">
+		<div class="mailbox-title">
+			<h1>{filters.q ? 'Search results' : activeLabel?.name ?? meta.title}</h1>
+			<span class="mailbox-count">{headerCount}</span>
+			{#if domains.length > 1}<DomainSwitcher {domains} {activeDomainId} />{/if}
+		</div>
+		<form class="desk-search" role="search" onsubmit={submitSearch}>
+			<Icon name="search-line" size={16} />
+			<input
+				type="search"
+				bind:this={deskSearchInput}
+				bind:value={searchQuery}
+				placeholder="Search mail"
+				aria-label="Search messages"
+				enterkeyhint="search"
+			/>
+			{#if searchQuery}
+				<button type="button" class="desk-search-btn" aria-label="Clear search" onclick={clearSearch}><Icon name="close-line" size={15} /></button>
+			{:else}
+				<kbd aria-hidden="true">/</kbd>
+			{/if}
+			<button type="button" class="desk-search-btn" aria-label="Search options" title="Advanced search" onclick={() => (advancedOpen = true)}><Icon name="equalizer-line" size={17} /></button>
+		</form>
+		<div class="pager">
+			<span class="pager-label">{rangeStart}–{rangeEnd} of {mailbox.total}</span>
+			<a class="pager-btn" class:disabled={mailbox.page <= 1} aria-disabled={mailbox.page <= 1} tabindex={mailbox.page <= 1 ? -1 : 0} onclick={(event) => { if (mailbox.page <= 1) event.preventDefault(); }} href={withParams({ page: mailbox.page - 1 })} aria-label="Previous page"><Icon name="arrow-left-s-line" size={20} /></a>
+			<a class="pager-btn" class:disabled={mailbox.page >= mailbox.pageCount} aria-disabled={mailbox.page >= mailbox.pageCount} tabindex={mailbox.page >= mailbox.pageCount ? -1 : 0} onclick={(event) => { if (mailbox.page >= mailbox.pageCount) event.preventDefault(); }} href={withParams({ page: mailbox.page + 1 })} aria-label="Next page"><Icon name="arrow-right-s-line" size={20} /></a>
+		</div>
+	</header>
+
+	<!-- One row: categories and filters normally, the bulk-action bar while anything is selected. -->
+	<div class="tabbar" class:selecting={someSelected} aria-busy={busy}>
+		{#if someSelected}
+			<div class="bulkbar" role="toolbar" aria-label="Selected conversations">
+				<div class="select-all">
+					<Check label="Select all messages" checked={allSelected} indeterminate={someSelected && !allSelected} disabled={busy} onchange={selectAll} />
+					<button type="button" class="caret" aria-label="Selection options" aria-expanded={selectMenuOpen} onclick={() => (selectMenuOpen = !selectMenuOpen)}><Icon name="arrow-down-s-line" size={16} /></button>
+					{#if selectMenuOpen}
+						<button type="button" class="backdrop" aria-label="Close selection options" onclick={() => (selectMenuOpen = false)}></button>
+						<div class="menu menu-left">
+							<button type="button" class="menu-item" onclick={() => selectWhere(() => true)}>All on this page</button>
+							<button type="button" class="menu-item" onclick={() => selectWhere(() => false)}>None</button>
+							<button type="button" class="menu-item" onclick={() => selectWhere((row) => !row.is_read)}>Unread</button>
+							<button type="button" class="menu-item" onclick={() => selectWhere((row) => row.is_read)}>Read</button>
+							<button type="button" class="menu-item" onclick={() => selectWhere((row) => row.is_starred)}>Starred</button>
 						</div>
 					{/if}
 				</div>
 				<span class="selected-count" aria-live="polite">{selected.length} selected</span>
-			{:else}
-				<button type="button" class="tool-btn" title="Refresh" aria-label="Refresh" disabled={busy} onclick={refresh}><Icon name="refresh-line" size={19} /></button>
-			{/if}
-			<div class="more">
-				<button type="button" class="tool-btn" title="More actions" aria-label="More actions" aria-expanded={moreOpen} onclick={() => (moreOpen = !moreOpen)}><Icon name="more-2-fill" size={19} /></button>
-				{#if moreOpen}
-					<button type="button" class="backdrop" aria-label="Close menu" onclick={() => (moreOpen = false)}></button>
-					<div class="menu menu-left">
-						{#if someSelected}
+				{#if view === 'trash' || view === 'spam' || view === 'all' || view === 'later'}
+					<button type="button" class="bulk-btn" title="Move to inbox" disabled={busy} onclick={() => run('inbox')}><Icon name="inbox-line" size={18} /><span>Move to inbox</span></button>
+				{/if}
+				{#if view !== 'trash' && view !== 'spam' && view !== 'drafts'}
+					<button type="button" class="bulk-btn" title="Archive (e)" disabled={busy} onclick={() => run('archive')}><Icon name="archive-line" size={18} /><span>Archive</span></button>
+				{/if}
+				<button type="button" class="bulk-btn" title={view === 'trash' ? 'Delete permanently' : 'Move to trash (#)'} disabled={busy} onclick={() => run(view === 'trash' ? 'delete' : 'trash')}><Icon name="delete-bin-line" size={18} /><span>{view === 'trash' ? 'Delete' : 'Trash'}</span></button>
+				{#if view !== 'trash' && view !== 'spam' && view !== 'drafts'}
+					<div class="snooze-wrap">
+						<button type="button" class="bulk-btn" title="Snooze (b)" aria-expanded={bulkSnoozeOpen} disabled={busy} onclick={() => (bulkSnoozeOpen = !bulkSnoozeOpen)}><Icon name="time-line" size={18} /><span>Snooze</span></button>
+						{#if bulkSnoozeOpen}
+							<button type="button" class="backdrop" aria-label="Close snooze" onclick={() => (bulkSnoozeOpen = false)}></button>
+							<SnoozeMenu onPick={(until) => snoozeIds(selected, until)} onClose={() => (bulkSnoozeOpen = false)} />
+						{/if}
+					</div>
+				{/if}
+				<button type="button" class="bulk-btn" title="Mark as read" disabled={busy} onclick={() => run('read')}><Icon name="mail-open-line" size={18} /><span>Mark read</span></button>
+				<LabelPicker {labels} ids={selected} existing={items.filter((row) => selected.includes(row.latest_id)).map((row) => row.labels ?? [])} disabled={busy} />
+				<div class="more">
+					<button type="button" class="tool-btn" title="More actions" aria-label="More actions" aria-expanded={moreOpen} onclick={() => (moreOpen = !moreOpen)}><Icon name="more-2-fill" size={18} /></button>
+					{#if moreOpen}
+						<button type="button" class="backdrop" aria-label="Close menu" onclick={() => (moreOpen = false)}></button>
+						<div class="menu menu-left">
+							<button type="button" class="menu-item" disabled={busy} onclick={() => run('unread')}><Icon name="mail-unread-line" size={17} />Mark as unread</button>
+							{#if view !== 'drafts' && view !== 'trash'}
+								<button type="button" class="menu-item" disabled={busy} onclick={() => run(view === 'spam' ? 'not-spam' : 'spam')}><Icon name={view === 'spam' ? 'shield-check-line' : 'spam-2-line'} size={17} />{view === 'spam' ? 'Not spam' : 'Mark as spam'}</button>
+							{/if}
 							<button type="button" class="menu-item" disabled={busy} onclick={() => run('star')}><Icon name="star-line" size={17} />Add star</button>
 							<button type="button" class="menu-item" disabled={busy} onclick={() => run('unstar')}><Icon name="star-off-line" size={17} />Remove star</button>
 							<button type="button" class="menu-item" disabled={busy} onclick={() => run('pin')}><Icon name="pushpin-line" size={17} />Pin to top</button>
 							<button type="button" class="menu-item" disabled={busy} onclick={() => run('unpin')}><Icon name="unpin-line" size={17} />Unpin</button>
-						{:else}
+						</div>
+					{/if}
+				</div>
+				<button type="button" class="bulk-btn clear-selection" onclick={() => { selected = []; selectionAnchor = null; }}><Icon name="close-line" size={16} /><span>Clear</span></button>
+			</div>
+		{/if}
+		<div class="tab-main">
+			<MailCategories value={filters.category ?? ''} onChange={(category) => apply({ category })} />
+			<div class="tab-tools">
+				{@render filterControls()}
+				<span class="tool-divider"></span>
+				<div class="more">
+					<button type="button" class="tool-btn" title="View options" aria-label="View options" aria-expanded={viewOpen} onclick={() => (viewOpen = !viewOpen)}><Icon name="layout-row-line" size={18} /></button>
+					{#if viewOpen}
+						<button type="button" class="backdrop" aria-label="Close view options" onclick={() => (viewOpen = false)}></button>
+						<div class="menu menu-right view-menu">
+							<p class="menu-label" id="mailbox-layout-label">Layout</p>
+							<div class="segmented" role="group" aria-labelledby="mailbox-layout-label">
+								<button type="button" aria-pressed={layout === 'list'} onclick={() => chooseLayout('list')}><Icon name="list-unordered" size={16} />List</button>
+								<button type="button" aria-pressed={layout === 'cards'} onclick={() => chooseLayout('cards')}><Icon name="layout-grid-line" size={16} />Cards</button>
+							</div>
+							<p class="menu-label" id="mailbox-density-label">Density</p>
+							<div class="segmented" role="group" aria-labelledby="mailbox-density-label">
+								<button type="button" aria-pressed={density === 'comfortable'} onclick={() => setMailboxDensity('comfortable')}>Comfortable</button>
+								<button type="button" aria-pressed={density === 'compact'} onclick={() => setMailboxDensity('compact')}>Compact</button>
+							</div>
+						</div>
+					{/if}
+				</div>
+				<div class="more">
+					<button type="button" class="tool-btn" title="More actions" aria-label="More actions" aria-expanded={moreOpen} onclick={() => (moreOpen = !moreOpen)}><Icon name="more-2-fill" size={18} /></button>
+					{#if moreOpen}
+						<button type="button" class="backdrop" aria-label="Close menu" onclick={() => (moreOpen = false)}></button>
+						<div class="menu menu-right">
+							<button type="button" class="menu-item" disabled={busy || items.length === 0} onclick={() => { moreOpen = false; selectAll(true); }}><Icon name="checkbox-multiple-line" size={17} />Select all on this page</button>
 							<button type="button" class="menu-item" disabled={busy} onclick={() => run('read-all', [])}><Icon name="mail-open-line" size={17} />Mark all as read</button>
-						{/if}
-						{#if view === 'trash'}<div class="menu-hold"><HoldToConfirm label="Empty trash" holdLabel="Keep holding" confirmLabel="Emptied" onConfirm={() => run('empty-trash', [])} /></div>{/if}
-					</div>
-				{/if}
+							<button type="button" class="menu-item" disabled={busy} onclick={refresh}><Icon name="refresh-line" size={17} />Refresh</button>
+							{#if view === 'trash'}<div class="menu-hold"><HoldToConfirm label="Empty trash" holdLabel="Keep holding" confirmLabel="Emptied" onConfirm={() => run('empty-trash', [])} /></div>{/if}
+						</div>
+					{/if}
+				</div>
 			</div>
 		</div>
-		<div class="toolbar-filters">{@render filterControls()}</div>
-		<div class="toolbar-right">
-			<button type="button" class="tool-btn density-toggle" aria-label="Compact density" aria-pressed={density === 'compact'} title={density === 'compact' ? 'Switch to comfortable spacing' : 'Switch to compact spacing'} onclick={() => setMailboxDensity(density === 'compact' ? 'comfortable' : 'compact')}><Icon name={density === 'compact' ? 'contract-up-down-line' : 'expand-up-down-line'} size={18} /></button>
-			<div class="layout-toggle" role="group" aria-label="Mailbox layout">
-				<button type="button" class="tool-btn" class:on={layout === 'list'} aria-pressed={layout === 'list'} aria-label="List view" title="List view" onclick={() => chooseLayout('list')}><Icon name="list-unordered" size={18} /></button>
-				<button type="button" class="tool-btn" class:on={layout === 'cards'} aria-pressed={layout === 'cards'} aria-label="Card view" title="Card view" onclick={() => chooseLayout('cards')}><Icon name="layout-grid-line" size={18} /></button>
-			</div>
-			<div class="pager">
-				<span class="pager-label">{rangeStart}–{rangeEnd} of {mailbox.total}</span>
-				<a class="pager-btn" class:disabled={mailbox.page <= 1} aria-disabled={mailbox.page <= 1} tabindex={mailbox.page <= 1 ? -1 : 0} onclick={(event) => { if (mailbox.page <= 1) event.preventDefault(); }} href={withParams({ page: mailbox.page - 1 })} aria-label="Previous page"><Icon name="arrow-left-s-line" size={20} /></a>
-				<a class="pager-btn" class:disabled={mailbox.page >= mailbox.pageCount} aria-disabled={mailbox.page >= mailbox.pageCount} tabindex={mailbox.page >= mailbox.pageCount ? -1 : 0} onclick={(event) => { if (mailbox.page >= mailbox.pageCount) event.preventDefault(); }} href={withParams({ page: mailbox.page + 1 })} aria-label="Next page"><Icon name="arrow-right-s-line" size={20} /></a>
-			</div>
-		</div>
-	</header>
+	</div>
 	<div class="refine-bar">{@render filterControls()}</div>
 	</div>
 	{#if filters.q}
@@ -768,8 +826,11 @@
 				<div class="empty-actions"><a class="btn-ghost" href={withParams({ q: null, unread: null, starred: null, attachments: null, category: null, needs: null })}>Clear filters</a></div>
 			{/if}
 		{:else}
-			<ul class="cards" class:layout-list={layout === 'list'} class:compact={density === 'compact'} class:ios-list={true}>
+			<ul class="cards" class:layout-list={layout === 'list'} class:compact={density === 'compact'} class:selecting={someSelected} class:ios-list={true}>
 				{#each items as thread, index (thread.thread_id)}
+					{#if headings[index]}
+						<li class="group-head"><h2>{headings[index]}</h2></li>
+					{/if}
 					<li
 						class="card"
 						class:unread={!thread.is_read}
@@ -780,7 +841,6 @@
 						class:menu-open={rowMenuFor === thread.latest_id}
 						use:mailboxContextMenu={() => openRowMenu(thread.latest_id, index)}
 						use:swipeRow={swipeFor(thread)}
-						animate:flip={{ duration: motionDuration(220) }}
 						out:slide={{ duration: motionDuration(200) }}
 					>
 						<span class="swipe-under swipe-under-right" aria-hidden="true"><Icon name={thread.is_read ? 'mail-unread-line' : 'mail-open-line'} size={20} />{thread.is_read ? 'Unread' : 'Read'}</span>
@@ -880,6 +940,9 @@
 									<button type="button" class="tool-btn" title="Archive" aria-label="Archive conversation" disabled={busy} onclick={() => run('archive', [thread.latest_id])}><Icon name="archive-line" size={18} /></button>
 								{/if}
 								<button type="button" class="tool-btn" title={thread.is_read ? 'Mark as unread' : 'Mark as read'} aria-label={thread.is_read ? 'Mark conversation as unread' : 'Mark conversation as read'} disabled={busy} onclick={() => run(thread.is_read ? 'unread' : 'read', [thread.latest_id])}><Icon name={thread.is_read ? 'mail-unread-line' : 'mail-open-line'} size={18} /></button>
+								{#if !thread.is_draft && view !== 'trash' && view !== 'spam' && view !== 'later'}
+									<button type="button" class="tool-btn" title="Snooze (b)" aria-label="Snooze conversation" disabled={busy} onclick={() => { openRowMenu(thread.latest_id, index); snoozeFor = thread.latest_id; }}><Icon name="time-line" size={18} /></button>
+								{/if}
 								{#if view !== 'trash'}<button type="button" class="tool-btn" title="Move to trash" aria-label="Trash conversation" disabled={busy} onclick={() => run('trash', [thread.latest_id])}><Icon name="delete-bin-line" size={18} /></button>{/if}
 							</div>
 
@@ -1030,38 +1093,55 @@
 
 	.mailbox { display: flex; flex-direction: column; min-height: 100%; }
 	.mailbox-head { position: sticky; top: 0; z-index: 20; background: var(--color-surface); }
-	.mailbox-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.35rem 0.75rem 0.5rem; }
-	.mailbox-heading h1 { display: flex; align-items: baseline; gap: 0.6rem; font-size: 1.6rem; font-weight: 650; letter-spacing: -0.035em; }
-	.mailbox-heading > div { min-width: 0; }
-	.mailbox-heading h1 { flex-wrap: wrap; overflow-wrap: anywhere; }
-	.mailbox-heading h1 span { margin-left: 0.3rem; font-size: 0.75rem; font-weight: 400; letter-spacing: 0; color: var(--color-text-secondary); }
-	.unread-summary { display: flex; align-items: center; gap: 0.5rem; flex: none; color: var(--color-text-secondary); font-size: 0.75rem; }
-	.unread-summary > span { width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent); box-shadow: 0 0 0 4px var(--color-accent-soft); }
 	.refine-bar { display: none; align-items: center; gap: 0.65rem; margin: 0 1.5rem; padding: 0.4rem 0 0.8rem; border-bottom: 1px solid var(--color-line); }
-	.toolbar-filters { display: flex; align-items: center; gap: 0.6rem; margin: 0 auto 0 0.75rem; min-width: 0; }
-	.toolbar-filters .attention-filter { margin-left: 0; }
 	.attention-filter { display: flex; align-items: center; gap: 0.4rem; margin-left: auto; color: var(--color-text-secondary); font-size: 0.75rem; min-width: 0; }
 	.attention-filter select { appearance: none; background: transparent; color: var(--color-text-secondary); min-height: 2.25rem; padding: 0 0.15rem; max-width: 100%; min-width: 0; cursor: pointer; }
 	.attention-filter select option { background: var(--color-surface); color: var(--color-text); }
 	.reset-filters { display: flex; align-items: center; gap: 0.25rem; color: var(--color-muted); font-size: 0.7rem; min-height: 2rem; }
-	.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 2.75rem; padding: 0.2rem 0.75rem; border-bottom: 1px solid var(--color-line); }
-	.toolbar-left, .toolbar-right, .bulk-actions, .select-all, .pager, .layout-toggle { display: flex; align-items: center; gap: 0.2rem; min-width: 0; }
-	.toolbar-right { gap: 0.6rem; }
-	.select-all { position: relative; padding-right: 0.5rem; }
+	.mailbox-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1rem; min-height: 4rem; padding: 0.625rem 1rem 0.375rem 1.5rem; box-sizing: border-box; }
+	.mailbox-title { display: flex; align-items: center; gap: 0.625rem; min-width: 0; }
+	.mailbox-title h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.mailbox-count { font-size: 0.8125rem; color: var(--color-text-secondary); white-space: nowrap; }
+	.mailbox-title :global(.switcher) { margin-left: 0.25rem; }
+	.desk-search { display: flex; align-items: center; gap: 0.5rem; flex: 1 1 16rem; max-width: 34rem; height: 2.5rem; margin-left: auto; padding: 0 0.375rem 0 0.75rem; border: 1px solid transparent; border-radius: 12px; background: var(--color-well); color: var(--color-muted); transition: border-color 0.15s, background 0.15s; }
+	.desk-search:focus-within { border-color: var(--color-accent); background: var(--color-surface); }
+	.desk-search input { flex: 1; min-width: 0; background: transparent; outline: none; font-size: 0.875rem; color: var(--color-text); }
+	.desk-search input::placeholder { color: var(--color-muted); }
+	.desk-search input::-webkit-search-cancel-button { display: none; }
+	.desk-search kbd { font: inherit; font-size: 0.6875rem; line-height: 1.4; padding: 0 0.375rem; border: 1px solid var(--color-line-strong); border-radius: 5px; }
+	.desk-search-btn { display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 8px; color: var(--color-text-secondary); }
+	.desk-search-btn:hover { background: var(--color-surface-hover); color: var(--color-text); }
+	.tabbar { display: flex; align-items: center; min-height: 2.875rem; padding: 0 1rem 0 0.75rem; border-bottom: 1px solid var(--color-line); }
+	.tab-main { display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0; }
+	.tab-tools { display: flex; align-items: center; gap: 0.35rem; margin-left: auto; flex: none; }
+	.tab-tools .attention-filter { margin-left: 0.25rem; }
+	@media (min-width: 901px) and (max-width: 1280px) { .tab-main { gap: 0.25rem; } .tab-tools { gap: 0.15rem; } .tab-tools .attention-filter select { max-width: 6.5rem; text-overflow: ellipsis; } }
+	@media (min-width: 901px) and (max-width: 1440px) { .tab-tools .filter-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } .tab-tools .filter-tabs button { padding: 0 0.5rem; } }
+	.tabbar.selecting { background: color-mix(in srgb, var(--color-accent-soft) 55%, var(--color-surface)); }
+	.tabbar.selecting .tab-main { display: none; }
+	.bulkbar { display: flex; align-items: center; gap: 0.2rem; flex: 1; min-width: 0; padding-left: 0.6rem; }
+	.bulk-btn { display: inline-flex; align-items: center; gap: 0.375rem; height: 2rem; padding: 0 0.625rem; border-radius: 9px; font-size: 0.8125rem; font-weight: 500; color: var(--color-text-secondary); white-space: nowrap; transition: background 0.15s, color 0.15s; }
+	.bulk-btn:hover:not(:disabled) { background: var(--color-surface-hover); color: var(--color-text); }
+	.bulk-btn:disabled { opacity: 0.4; }
+	.clear-selection { margin-left: auto; }
+	.pager, .select-all { display: flex; align-items: center; gap: 0.2rem; min-width: 0; }
+	.select-all { position: relative; padding-right: 0.25rem; }
 	.caret { display: flex; align-items: center; color: var(--color-text-secondary); width: 1rem; }
 	.tool-btn { display: flex; align-items: center; justify-content: center; width: 2.125rem; height: 2.125rem; flex-shrink: 0; border-radius: 9px; color: var(--color-text-secondary); transition: background 0.15s, color 0.15s; }
 	.tool-btn:hover:not(:disabled) { background: var(--color-surface-hover); color: var(--color-text); }
 	.tool-btn:disabled { opacity: 0.4; }
-	.tool-btn.on { color: var(--color-accent-text); background: var(--color-surface); box-shadow: var(--shadow-xs); }
 	.starred { color: var(--color-star); }
-	.tool-divider { height: 1.25rem; border-left: 1px solid var(--color-line); margin: 0 0.4rem; }
-	.selected-count { font-size: 0.75rem; color: var(--color-accent-text); margin-left: 0.4rem; white-space: nowrap; }
-	.layout-toggle { background: var(--color-well); padding: 0.2rem; border-radius: 11px; }
-	.layout-toggle .tool-btn { width: 1.8rem; height: 1.8rem; }
+	.tool-divider { height: 1.25rem; border-left: 1px solid var(--color-line); margin: 0 0.25rem; }
+	.selected-count { font-size: 0.8125rem; font-weight: 600; color: var(--color-text); margin: 0 0.5rem 0 0.25rem; white-space: nowrap; }
 	.pager-label { font-size: 0.75rem; color: var(--color-text-secondary); white-space: nowrap; margin-right: 0.5rem; }
 	.pager-btn { display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 9px; color: var(--color-text-secondary); }
 	.pager-btn:hover { background: var(--color-well); }
 	.pager-btn.disabled { opacity: 0.3; pointer-events: none; }
+	.view-menu { min-width: 15rem; }
+	.menu-label { padding: 0.4rem 0.5rem 0.3rem; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-muted); }
+	.segmented { display: flex; gap: 0.2rem; padding: 0.2rem; margin: 0 0.25rem 0.4rem; border-radius: 10px; background: var(--color-well); }
+	.segmented button { display: flex; flex: 1; align-items: center; justify-content: center; gap: 0.35rem; height: 1.9rem; border-radius: 8px; font-size: 0.75rem; color: var(--color-text-secondary); }
+	.segmented button[aria-pressed='true'] { background: var(--color-surface); color: var(--color-text); font-weight: 500; box-shadow: var(--shadow-xs); }
 	.filter-tabs { display: flex; gap: 0.35rem; flex-wrap: wrap; }
 	.filter-tabs button { display: flex; align-items: center; gap: 0.4rem; min-height: 1.85rem; padding: 0 0.65rem; border-radius: 999px; font-size: 0.75rem; color: var(--color-muted); }
 	.filter-tabs button:hover { background: var(--color-well); color: var(--color-text); }
@@ -1089,7 +1169,6 @@
 	.card:hover { background: var(--color-surface-hover); }
 	.card.checked, .card.checked:hover { background: var(--color-accent-soft); }
 	.card.focused:focus-within { box-shadow: inset 3px 0 0 var(--color-accent); }
-	.card.pinned { border-left: 3px solid var(--color-accent); }
 	.card:has(.backdrop) { z-index: 47; }
 	.card-bar { display: flex; align-items: center; }
 	.card-link { display: flex; grid-column: 1 / -1; gap: 0.75rem; min-width: 0; color: inherit; }
@@ -1119,8 +1198,7 @@
 	.mobile-pager { display: none; }
 	.cards.layout-list { display: flex; flex-direction: column; gap: 0; }
 	.cards.layout-list .card { display: flex; align-items: center; gap: 0.55rem; min-height: 4.8rem; padding: 0.85rem 0.6rem; border: 0; border-bottom: 1px solid var(--color-line); border-radius: 0; }
-	@media (min-width: 901px) { .cards.layout-list.compact .card { min-height: 3rem; padding-top: 0.15rem; padding-bottom: 0.15rem; } }
-	@media (min-width: 901px) { .indicators :global(.ri-star-fill) { display: none; } }
+	@media (min-width: 901px) { .cards:not(.layout-list) .indicators :global(.ri-star-fill) { display: none; } }
 	.cards.layout-list .card:first-child { border-radius: 10px 10px 0 0; }
 	.cards.layout-list .card:last-child { border-radius: 0 0 10px 10px; }
 	.cards.layout-list .card-link { flex: 1; align-items: center; padding: 0.25rem 2rem 0.25rem 0.3rem; }
@@ -1133,9 +1211,30 @@
 	.cards.layout-list .card-meta { grid-column: 4; grid-row: 1; }
 	.cards.layout-list .date { grid-column: 5; grid-row: 1; text-align: right; }
 	.cards.layout-list .card-actions { top: 50%; margin-top: -1.0625rem; right: 0.5rem; }
-	.cards.layout-list .card-actions > .tool-btn { background: var(--color-well); }
-	.cards.layout-list .unread .card-actions > .tool-btn { background: var(--color-surface); }
-	.card:hover .card-actions > .tool-btn { background: var(--color-surface-hover); }
+	.group-head { grid-column: 1 / -1; list-style: none; }
+	.group-head h2 { padding: 1rem 0.75rem 0.375rem 1.25rem; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--color-text-secondary); }
+	.group-head:first-child h2 { padding-top: 0.625rem; }
+	.cards:not(.layout-list) .group-head h2 { padding-left: 0.25rem; }
+	/* Desktop list rows: the avatar turns into a checkbox on hover, and the date gives way to quick actions. */
+	@media (min-width: 901px) {
+		.cards.layout-list .card { min-height: 3.25rem; padding: 0 0.75rem 0 1.25rem; }
+		.cards.layout-list.compact .card { min-height: 2.5rem; }
+		.cards.layout-list .card-link { padding: 0.25rem 0; }
+		.cards.layout-list .row-star { display: none; }
+		.cards.layout-list .avatar { width: 2rem; height: 2rem; font-size: 0.8125rem; }
+		.cards.layout-list.compact .avatar { width: 1.75rem; height: 1.75rem; font-size: 0.75rem; }
+		.cards.layout-list .ios-unread-dot { display: block; position: absolute; left: 0.5rem; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; }
+		.cards.layout-list .ios-unread-dot.visible { background: var(--color-accent); }
+		.cards.layout-list .card-bar { position: absolute; z-index: 2; left: 1.25rem; top: 50%; width: 2rem; height: 2rem; margin-top: -1rem; justify-content: center; opacity: 0; pointer-events: none; }
+		.cards.layout-list.compact .card-bar { width: 1.75rem; }
+		.cards.layout-list .card:hover .card-bar, .cards.layout-list .card.checked .card-bar, .cards.layout-list.selecting .card-bar { opacity: 1; pointer-events: auto; }
+		.cards.layout-list .card:hover .avatar, .cards.layout-list .card.checked .avatar, .cards.layout-list.selecting .avatar { visibility: hidden; }
+		.cards.layout-list .card-actions { opacity: 0; pointer-events: none; background: var(--color-surface-hover); }
+		.cards.layout-list .card.checked .card-actions { background: linear-gradient(var(--color-accent-soft), var(--color-accent-soft)), var(--color-surface); }
+		.cards.layout-list .card:hover .card-actions, .cards.layout-list .card:focus-within .card-actions, .cards.layout-list .card.menu-open .card-actions { opacity: 1; pointer-events: auto; }
+		.cards.layout-list .row-quick-actions { opacity: 1; pointer-events: auto; background: transparent; }
+		.cards.layout-list .card:hover .date, .cards.layout-list .card:focus-within .date, .cards.layout-list .card.menu-open .date { visibility: hidden; }
+	}
 	.ios-header, .ios-search, .ios-bulk-bar, .ios-unread-dot, .ios-select-toggle, .swipe-under { display: none; }
 	@media (min-width:901px) and (max-width:1150px) {
 		.cards { grid-template-columns: repeat(2,minmax(0,1fr)); }
@@ -1143,12 +1242,15 @@
 		.cards.layout-list .preview { display: none; }
 		.cards.layout-list .card-meta { grid-column: 3; }
 		.cards.layout-list .date { grid-column: 4; }
-		.selected-count { display: none; }
-		.density-toggle { display: none; }
+		.bulk-btn span { display: none; }
+		.bulk-btn.clear-selection span { display: inline; }
 	}
 	@media (max-width:900px) {
 		.mailbox-head { position: static; }
-		.mailbox-heading, .toolbar { display: none; }
+		.mailbox-bar, .tab-tools, .bulkbar { display: none; }
+		.tabbar, .tabbar.selecting { padding: 0; border-bottom: 0; background: transparent; }
+		.tabbar.selecting .tab-main { display: flex; }
+		.group-head h2 { padding: 0.875rem 1rem 0.25rem; }
 		.refine-bar { display: flex; margin: 0 1rem; padding: 0 0 0.6rem; flex-wrap: wrap; gap: 0.25rem 0.5rem; }
 		.card { position: relative; overflow: hidden; touch-action: pan-y; }
 		.card-link, .cards.layout-list .card-link, .card-actions { position: relative; z-index: 1; transform: translateX(var(--swipe-x, 0px)); transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1); }

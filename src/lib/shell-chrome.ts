@@ -40,6 +40,11 @@ export function hideTopbarOnMobile(pathname: string): boolean {
 	);
 }
 
+/** Mailbox pages carry their own header with search, so the topbar steps aside at every width. */
+export function hideTopbar(pathname: string): boolean {
+	return isMailboxRoute(pathname);
+}
+
 /** Inbox dock covers the reading surface; hide it on compose and open mail. */
 export function hideMobileDock(pathname: string): boolean {
 	return isComposeRoute(pathname) || isMailRoute(pathname);
@@ -55,7 +60,7 @@ export function resolveSearchFocusAction(input: {
 	pathname: string;
 	mobileViewport: boolean;
 }): SearchFocusAction {
-	if (input.mobileViewport && isMailboxRoute(input.pathname)) return 'mailbox';
+	if (isMailboxRoute(input.pathname)) return 'mailbox';
 	if (input.mobileViewport && isHubRoute(input.pathname)) return 'inbox-then-mailbox';
 	return 'topbar';
 }

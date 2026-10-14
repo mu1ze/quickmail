@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
 	hideDockSearch,
+	hideTopbar,
 	hideTopbarOnMobile,
 	hideMobileDock,
 	isComposeRoute,
@@ -35,6 +36,13 @@ describe('shell chrome routing', () => {
 		assert.equal(hideTopbarOnMobile('/onboarding'), false);
 	});
 
+	test('Topbar steps aside on mailbox pages at every width', () => {
+		assert.equal(hideTopbar('/inbox'), true);
+		assert.equal(hideTopbar('/trash'), true);
+		assert.equal(hideTopbar('/settings'), false);
+		assert.equal(hideTopbar('/mail/abc'), false);
+	});
+
 	test('mobile dock hides on compose and open mail', () => {
 		assert.equal(hideMobileDock('/compose'), true);
 		assert.equal(hideMobileDock('/mail/abc'), true);
@@ -59,6 +67,10 @@ describe('shell chrome routing', () => {
 		);
 		assert.equal(
 			resolveSearchFocusAction({ pathname: '/inbox', mobileViewport: true }),
+			'mailbox'
+		);
+		assert.equal(
+			resolveSearchFocusAction({ pathname: '/inbox', mobileViewport: false }),
 			'mailbox'
 		);
 		assert.equal(

@@ -19,6 +19,7 @@
 	import {
 		hideDockSearch,
 		hideMobileDock,
+		hideTopbar,
 		hideTopbarOnMobile,
 		isComposeRoute,
 		isHubRoute,
@@ -56,6 +57,7 @@
 	const mailboxRoute = $derived(isMailboxRoute($page.url.pathname));
 	const mailRoute = $derived(isMailRoute($page.url.pathname));
 	const hideMobileTopbar = $derived(hideTopbarOnMobile($page.url.pathname));
+	const hideAllTopbar = $derived(hideTopbar($page.url.pathname));
 	const hideHubSearch = $derived(hideDockSearch($page.url.pathname));
 	const hideDock = $derived(hideMobileDock($page.url.pathname));
 
@@ -244,6 +246,7 @@
 		class:compose-mobile={composing}
 		class:mail-mobile={mailRoute}
 		class:hide-topbar-mobile={hideMobileTopbar}
+		class:hide-topbar={hideAllTopbar}
 		data-collapsed={collapsed}
 	>
 		<Sidebar

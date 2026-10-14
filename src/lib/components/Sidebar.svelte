@@ -118,7 +118,8 @@
 		{/each}
 	</nav>
 
-	{#if expanded && domains.length > 1}
+	<!-- On desktop the domain scope lives in the mailbox header; the phone drawer keeps it here. -->
+	{#if mobileOpen && domains.length > 1}
 		<div class="section">
 			<p class="section-title">Domains</p>
 			<div class="section-body">

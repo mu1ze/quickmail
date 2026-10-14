@@ -47,7 +47,7 @@
 </nav>
 
 <style>
-	.categories { display: flex; align-items: center; gap: 0.5rem; margin: 0 0.75rem 0.4rem; position: relative; --category-mint: var(--color-accent-text); --category-blue: #548ac6; --category-amber: #a87b2e; --category-pink: #b66b93; --category-violet: #8d7bc6; --category-cyan: #408e99; }
+	.categories { display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 0; margin: 0; position: relative; --category-mint: var(--color-accent-text); --category-blue: #548ac6; --category-amber: #a87b2e; --category-pink: #b66b93; --category-violet: #8d7bc6; --category-cyan: #408e99; }
 	.category-track { display: flex; gap: 0.25rem; flex: 1; min-width: 0; padding: 0.25rem; border-radius: 14px; background: var(--color-well); overflow-x: auto; scrollbar-width: none; }
 	.category-track::-webkit-scrollbar { display: none; }
 	.category { display: flex; align-items: center; gap: 0.5rem; flex: none; position: relative; min-width: 0; padding: 0.4rem 0.85rem 0.4rem 0.6rem; border: 1px solid transparent; border-radius: 10px; text-align: left; transition: background 150ms, border-color 150ms, color 150ms; }
@@ -70,6 +70,18 @@
 	.category-menu button:hover, .category-menu button.chosen { background: var(--color-accent-soft); color: var(--color-accent-text); }
 	:global(:root[data-theme='dark']) .categories { --category-blue: #83b2e5; --category-amber: #d6b16b; --category-pink: #d79bbc; --category-violet: #b4a3e6; --category-cyan: #7cbdc7; }
 	@media (max-width: 1200px) { summary span { display: none; } }
+	/* Desktop: a plain underline tab row that shares its line with the filters. */
+	@media (min-width: 901px) {
+		.category-track { gap: 0.125rem; padding: 0; border-radius: 0; background: transparent; }
+		.category { height: 2.875rem; gap: 0.375rem; padding: 0 0.625rem; border: 0; border-radius: 0; }
+		.category:hover { background: transparent; }
+		.category:hover .category-name { color: var(--color-text); }
+		.category.active { background: transparent; box-shadow: inset 0 -2px 0 var(--color-accent); }
+		.category.active .category-name { font-weight: 600; }
+		.category-icon { display: none; }
+		summary { padding: 0.4rem 0.5rem; }
+	}
+	@media (min-width: 901px) and (max-width: 1280px) { .category { padding: 0 0.4rem; } .category-name { font-size: 0.78rem; } }
 	@media (max-width: 900px) {
 		.categories { margin: 0.35rem 1rem 0.75rem; gap: 0.3rem; }
 		.category-track { display: flex; overflow-x: auto; scrollbar-width: none; border-radius: 13px; gap: 0.2rem; padding: 0.25rem; }
