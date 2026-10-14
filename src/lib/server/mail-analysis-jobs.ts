@@ -14,14 +14,26 @@ const MAX_ATTEMPTS = 5;
 
 /** Delivery is already persisted; failed queue sends are repaired by cron. */
 export async function dispatchAnalysis(env: AnalysisEnv, userId: string, emailId?: string): Promise<void> {
-	if (!env.SUBQ_API_KEY) return;
+	if (emailId) { await dispatchBatch(env, userId, emailId); return; }
+	// A 200-message backfill must not wait 10 cron cycles at 20 jobs each: keep
+	// draining within a time and round budget; cron picks up whatever remains.
+	const deadline = Date.now() + 20_000;
+	for (let round = 0; round < 10 && Date.now() < deadline; round++) {
+		if ((await dispatchBatch(env, userId)) < BATCH) return;
+	}
+}
+
+const BATCH = 20;
+/** Returns how many due jobs this pass handled (0 when paused, disabled, or idle). */
+async function dispatchBatch(env: AnalysisEnv, userId: string, emailId?: string): Promise<number> {
+	if (!env.SUBQ_API_KEY) return 0;
 	const pause = await env.DB.prepare('SELECT pause_until FROM mail_analysis_provider_state WHERE id=1').first<{ pause_until: number }>();
-	if (pause && pause.pause_until > now()) return;
+	if (pause && pause.pause_until > now()) return 0;
 	const { results } = await env.DB.prepare(`SELECT j.email_id,j.user_id,j.attempts FROM email_analysis_jobs j
 		JOIN mail_analysis_settings s ON s.user_id=j.user_id AND s.enabled=1
 		JOIN emails e ON e.id=j.email_id AND e.user_id=j.user_id AND e.deleted_at IS NULL
 		WHERE j.user_id=? AND j.version=? AND j.status='pending' AND j.next_attempt_at<=? AND j.queued_until<=?
-		${emailId ? 'AND j.email_id=?' : ''} ORDER BY j.next_attempt_at,j.email_id LIMIT 20`)
+		${emailId ? 'AND j.email_id=?' : ''} ORDER BY j.next_attempt_at,j.email_id LIMIT ${BATCH}`)
 		.bind(userId, ANALYSIS_VERSION, now(), now(), ...(emailId ? [emailId] : [])).all<Job>();
 	for (const job of results) {
 		if (env.MAIL_ANALYSIS_QUEUE) {
@@ -35,6 +47,7 @@ export async function dispatchAnalysis(env: AnalysisEnv, userId: string, emailId
 			await processAnalysisJob(env, { emailId: job.email_id, userId: job.user_id, version: ANALYSIS_VERSION });
 		}
 	}
+	return results.length;
 }
 
 export async function processAnalysisJob(env: AnalysisEnv, message: AnalysisQueueMessage): Promise<void> {
