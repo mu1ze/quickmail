@@ -9,6 +9,7 @@
 	import { prepareEmailHtml } from '$lib/utils/email-content';
 	import type { EmailAttachmentMeta } from '$lib/types';
 	import { browser } from '$app/environment';
+	import { untrack } from 'svelte';
 	import {
 		readRemoteContentPreference,
 		shouldLoadRemoteContent,
@@ -37,10 +38,11 @@
 	});
 
 	let frame = $state<HTMLIFrameElement | null>(null);
-	let height = $state(0);
+	let height = $state(240);
 
 	let content: ResizeObserver | null = null;
 	let theme: MutationObserver | null = null;
+	let preparedDocument: Document | null = null;
 
 	/**
 	 * The frame has no scrollbar of its own; it is sized to its content. Measured
@@ -52,7 +54,7 @@
 		const doc = frame?.contentDocument;
 		if (!doc?.body) return;
 
-		const body = Math.max(doc.body.scrollHeight, doc.body.offsetHeight);
+		const body = Math.max(doc.body.scrollHeight, doc.body.offsetHeight, doc.body.getBoundingClientRect().height);
 		const next = Math.ceil(body || doc.documentElement.scrollHeight);
 		if (next > 0 && Math.abs(next - height) > 1) height = next;
 	}
@@ -86,7 +88,9 @@
 
 	function onLoad() {
 		const doc = frame?.contentDocument;
-		if (!doc?.body) return;
+		if (!doc?.body || doc.URL !== 'about:srcdoc') return;
+		if (preparedDocument === doc) { measure(); return; }
+		preparedDocument = doc;
 
 		applyStyles(doc);
 		syncTheme();
@@ -110,6 +114,10 @@
 			attributes: true,
 			attributeFilter: ['data-theme']
 		});
+		// Recheck after the browser has painted the document, including cached
+		// images and fonts that can settle before their load handlers are attached.
+		requestAnimationFrame(measure);
+		void doc.fonts?.ready.then(() => { if (frame?.contentDocument === doc) measure(); });
 	}
 
 	/**
@@ -119,24 +127,29 @@
 	 * readable height and left to scroll rather than hidden.
 	 */
 	$effect(() => {
-		void srcdoc;
-
-		const doc = frame?.contentDocument;
-		if (doc?.readyState === 'complete' && doc.body?.hasChildNodes()) onLoad();
-
+		const source = srcdoc;
+		const target = frame;
+		if (!source || !target) return;
+		untrack(() => {
+			content?.disconnect();
+			theme?.disconnect();
+			preparedDocument = null;
+		});
+		// A remote image can delay iframe load indefinitely. Measure as soon as
+		// the document is parsed instead of waiting for every remote request.
+		const poll = setInterval(() => {
+			const doc = target.contentDocument;
+			if (doc?.URL === 'about:srcdoc' && doc.readyState !== 'loading' && doc.body) onLoad();
+		}, 80);
 		const timer = setTimeout(() => {
-			// onLoad is idempotent, and reaching here without it having run would
-			// reveal an unstyled, light-schemed frame.
+			clearInterval(poll);
 			onLoad();
 			measure();
-			if (height === 0) {
-				const document_ = frame?.contentDocument;
-				if (document_) document_.documentElement.style.overflowY = 'auto';
-				height = Math.round(window.innerHeight * 0.6);
+			if (!preparedDocument && target.contentDocument) {
+				target.contentDocument.documentElement.style.overflowY = 'auto';
 			}
-		}, 700);
-
-		return () => clearTimeout(timer);
+		}, 2000);
+		return () => { clearInterval(poll); clearTimeout(timer); };
 	});
 
 	$effect(() => () => {
@@ -156,13 +169,12 @@
 	bind:this={frame}
 	class="frame"
 	class:rich
-	class:sized={height > 0}
 	title="Message content"
 	sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
 	referrerpolicy="no-referrer"
 	{srcdoc}
 	onload={onLoad}
-	style:height={height ? `${height}px` : undefined}
+	style:height={`${height}px`}
 ></iframe>
 
 <style>
@@ -192,16 +204,9 @@
 	.frame {
 		display: block;
 		width: 100%;
-		min-height: 1px;
+		min-height: 48px;
 		border: 0;
 		background: transparent;
-		/* Until the first measurement lands the height is a guess; hide the jump. */
-		opacity: 0;
-	}
-
-	.frame.sized {
-		opacity: 1;
-		transition: opacity 0.12s;
 	}
 	.frame.rich { background: #fff; border-radius: 0.5rem; }
 	@media (max-width: 600px) { .remote-notice { align-items: flex-start; flex-direction: column; } }

@@ -74,7 +74,7 @@
 	<div class="sidebar-top">
 		<a href="/inbox" class="brand" title="Mail" onclick={() => (mobileOpen = false)}>
 			<Logo size={30} />
-			{#if expanded}<span class="brand-name">Mail</span>{/if}
+			{#if expanded}<span class="brand-name">QuickMail<span class="brand-detail">MAKE ROOM FOR FOCUS</span></span>{/if}
 		</a>
 		{#if mobileOpen}
 			<button
@@ -93,7 +93,7 @@
 		{#if expanded}<span>Compose</span><kbd>C</kbd>{/if}
 	</a>
 
-	<nav class="nav">
+	<nav class="nav" aria-label="Mailboxes">
 		{#each mailboxes as item (item.href)}
 			<a
 				href={item.href}
@@ -181,6 +181,7 @@
 <style>
 	.sidebar {
 		overflow-y: auto;
+		scrollbar-width: none;
 		position: relative;
 		z-index: 40;
 		display: flex;
@@ -191,6 +192,8 @@
 		background: transparent;
 		transition: width 0.2s ease, transform 0.22s cubic-bezier(0.23, 1, 0.32, 1);
 	}
+	.sidebar::-webkit-scrollbar { display: none; }
+	.sidebar > * { flex-shrink: 0; }
 
 	.sidebar.collapsed {
 		width: var(--sidebar-width-collapsed);
@@ -206,6 +209,8 @@
 		padding: 0 0.75rem 0.75rem;
 	}
 
+	.brand-name { display: flex; flex-direction: column; gap: 0.25rem; }
+	.brand-detail { font-size: 0.5rem; letter-spacing: 0.14em; font-weight: 500; color: var(--color-muted); }
 	.brand {
 		display: flex;
 		align-items: center;
@@ -224,7 +229,7 @@
 		height: 3.25rem;
 		padding: 0 1.2rem;
 		margin-bottom: 1.25rem;
-		border-radius: 16px;
+		border-radius: 14px;
 		font-size: 14px;
 		font-weight: 500;
 		color: var(--color-on-accent);
@@ -237,7 +242,7 @@
 		background: var(--color-accent-hover);
 	}
 	.new-message kbd { margin-left: auto; font-size: 0.625rem; padding: 0.1rem 0.3rem; border: 1px solid rgba(255,255,255,0.25); border-radius: 4px; opacity: 0.65; }
-	.sidebar.collapsed .new-message { justify-content: center; padding: 0; }
+	.sidebar.collapsed .new-message { justify-content: center; padding: 0; height: 3rem; }
 
 	.nav {
 		display: flex;

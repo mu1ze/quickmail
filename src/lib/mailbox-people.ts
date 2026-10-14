@@ -1,12 +1,20 @@
 import type { MailboxView, ThreadParticipant, ThreadSummary } from './types';
 
-/** Use a supplied display name, while keeping bare addresses intact. */
-function displayAddress(address: string): string {
+/** Prefer a supplied display name; otherwise format a readable address label. */
+export function displayAddress(address: string): string {
 	const supplied = /^(.*?)\s*<[^>]+>\s*$/.exec(address);
-	return supplied?.[1]?.trim().replace(/^"|"$/g, '') || address;
+	const name = supplied?.[1]?.trim().replace(/^"|"$/g, '');
+	if (name) return name;
+	const [local, domain] = address.split('@');
+	if (!domain) return address;
+	// Old mail may predate name storage. This is a readable address label, not
+	// a recovered From name; the complete address remains on the row tooltip.
+	const generic = /^(?:hello|hi|info|contact|mail|email|no[._-]?reply|notifications?|updates?|support|team|news|newsletter|billing|receipts?|alerts?|bounces?)(?:[+._-].*)?$/i;
+	const words = generic.test(local) ? domain.split('.').slice(-2, -1)[0] : local.split('+')[0];
+	return words.replace(/[._-]+/g, ' ').replace(/\b\p{L}/gu, (letter) => letter.toUpperCase()) || address;
 }
 
-/** Address shown on the first line of a mailbox row. */
+/** Name or address label shown on the first line of a mailbox row. */
 export function participantName(participant: ThreadParticipant): string {
 	return participant.name?.trim() || displayAddress(participant.address);
 }

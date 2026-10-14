@@ -5,6 +5,7 @@
 	import { page as currentPage } from '$app/stores';
 	import AnalysisBadges from './AnalysisBadges.svelte';
 	import AnalysisControls from './AnalysisControls.svelte';
+	import MailCategories from './MailCategories.svelte';
 	import { CATEGORY_LABELS } from '$lib/mail-analysis';
 	import Icon from './Icon.svelte';
 	import Check from './Check.svelte';
@@ -108,8 +109,10 @@
 			if (filters.unreadOnly) parts.push('Unread');
 			if (filters.starredOnly) parts.push('Starred');
 			if (filters.attachmentsOnly) parts.push('Attachments');
+			if (filters.category) parts.push(({ primary: 'Primary', transactions: 'Transactions', promotions: 'Promotions', updates: 'Updates', newsletters: 'Newsletters', ...CATEGORY_LABELS } as Record<string, string>)[filters.category] ?? 'Filtered');
+			if (filters.needs) parts.push('Needs attention');
 		} else {
-			parts.push('All Mail');
+			parts.push('All mail');
 		}
 		if (view === 'inbox' && counts.drafts > 0) {
 			parts.push(`${counts.drafts} Unsent Message${counts.drafts === 1 ? '' : 's'}`);
@@ -589,52 +592,6 @@
 		</div>
 	{/if}
 
-	<div class="ios-filters">
-		<div class="ios-filter-icons">
-			<button
-				type="button"
-				class="ios-filter-icon"
-				class:active={filters.unreadOnly}
-				aria-label="Unread"
-				aria-pressed={filters.unreadOnly}
-				onclick={() => apply({ unread: filters.unreadOnly ? null : '1' })}
-			>
-				<Icon name="mail-unread-line" size={18} />
-			</button>
-			<button
-				type="button"
-				class="ios-filter-icon"
-				class:active={filters.starredOnly}
-				aria-label="Starred"
-				aria-pressed={filters.starredOnly}
-				onclick={() => apply({ starred: filters.starredOnly ? null : '1' })}
-			>
-				<Icon name="star-line" size={18} />
-			</button>
-			<button
-				type="button"
-				class="ios-filter-icon"
-				class:active={filters.attachmentsOnly}
-				aria-label="Has attachments"
-				aria-pressed={filters.attachmentsOnly}
-				onclick={() => apply({ attachments: filters.attachmentsOnly ? null : '1' })}
-			>
-				<Icon name="attachment-2" size={18} />
-			</button>
-			<a class="ios-filter-icon" aria-label="Later" href="/later">
-				<Icon name="time-line" size={18} />
-			</a>
-		</div>
-		<button
-			type="button"
-			class="ios-filter-pill"
-			class:active={activeFilterCount === 0 && !filters.q}
-			onclick={() => apply({ unread: null, starred: null, attachments: null, category: null, needs: null, q: null })}
-		>
-			<Icon name="mail-line" size={16} />
-			All messages
-		</button>
-	</div>
 
 	{#if searchOpen || filters.q}
 		<form class="ios-search" role="search" onsubmit={submitSearch}>
@@ -655,9 +612,10 @@
 	{/if}
 
 	<div class="mailbox-heading">
-		<div><p class="eyebrow">YOUR MAILBOX</p><h1>{filters.q ? 'Search results' : activeLabel?.name ?? meta.title}<span>{mailbox.total} conversation{mailbox.total === 1 ? '' : 's'}</span></h1></div>
-		<a href="/compose" class="heading-compose"><Icon name="add-line" size={16} />New message</a>
+		<div><p class="eyebrow">YOUR SPACE, AT YOUR PACE</p><h1>{filters.q ? 'Search results' : activeLabel?.name ?? meta.title}<span>{mailbox.total} conversation{mailbox.total === 1 ? '' : 's'}</span></h1></div>
+		{#if view === 'inbox' && counts.inbox_unread > 0}<span class="unread-summary"><span></span>{counts.inbox_unread} unread in your inbox</span>{/if}
 	</div>
+	<MailCategories value={filters.category ?? ''} onChange={(category) => apply({ category })} />
 	<header class="toolbar" aria-label="Mailbox tools" aria-busy={busy}>
 		<div class="toolbar-left">
 			<div class="select-all">
@@ -735,23 +693,16 @@
 			</div>
 		</div>
 	</header>
-	<nav class="filter-tabs" aria-label="Filter conversations">
-		<button type="button" class:active={!activeFilterCount} aria-pressed={!activeFilterCount} onclick={() => apply({ unread: null, starred: null, attachments: null, category: null, needs: null })}><Icon name="inbox-line" size={17} />All messages</button>
-		<button type="button" class:active={filters.unreadOnly} aria-pressed={filters.unreadOnly} onclick={() => apply({ unread: filters.unreadOnly ? null : '1' })}><Icon name="mail-unread-line" size={17} />Unread</button>
-		<button type="button" class:active={filters.starredOnly} aria-pressed={filters.starredOnly} onclick={() => apply({ starred: filters.starredOnly ? null : '1' })}><Icon name="star-line" size={17} />Starred</button>
-		<button type="button" class:active={filters.attachmentsOnly} aria-pressed={filters.attachmentsOnly} onclick={() => apply({ attachments: filters.attachmentsOnly ? null : '1' })}><Icon name="attachment-2" size={17} />Attachments</button>
-	</nav>
-
-	<div class="analysis-filters">
-		<label>Category<select aria-label="Filter email category" value={filters.category ?? ''} onchange={(e)=>apply({category:e.currentTarget.value || null})}>
-			<option value="">All categories</option>
-			<optgroup label="Inbox groups"><option value="primary">Primary</option><option value="transactions">Transactions</option><option value="promotions">Promotions</option><option value="updates">Updates</option><option value="newsletters">Newsletters</option></optgroup>
-			<optgroup label="Specific categories">
-			{#each Object.entries(CATEGORY_LABELS) as [value,label]}<option {value}>{label}</option>{/each}</optgroup>
-		</select></label>
-		<label>Attention<select aria-label="Filter email attention" value={filters.needs ?? ''} onchange={(e)=>apply({needs:e.currentTarget.value || null})}>
-			<option value="">All messages</option><option value="attention">Needs attention</option><option value="review">Review</option><option value="reply">Reply suggested</option><option value="deadline">Deadline mentioned</option>
-		</select></label>
+	<div class="refine-bar">
+		<nav class="filter-tabs" aria-label="Filter conversations">
+			<button type="button" class:active={filters.unreadOnly} aria-pressed={filters.unreadOnly} onclick={() => apply({ unread: filters.unreadOnly ? null : '1' })}><Icon name="mail-unread-line" size={15} />Unread</button>
+			<button type="button" class:active={filters.starredOnly} aria-pressed={filters.starredOnly} onclick={() => apply({ starred: filters.starredOnly ? null : '1' })}><Icon name="star-line" size={15} />Starred</button>
+			<button type="button" class:active={filters.attachmentsOnly} aria-pressed={filters.attachmentsOnly} onclick={() => apply({ attachments: filters.attachmentsOnly ? null : '1' })}><Icon name="attachment-2" size={15} />Attachments</button>
+		</nav>
+		<label class="attention-filter"><Icon name="focus-3-line" size={15} /><select aria-label="Filter email attention" value={filters.needs ?? ''} onchange={(e)=>apply({needs:e.currentTarget.value || null})}>
+			<option value="">Any attention level</option><option value="attention">Needs attention</option><option value="review">Review</option><option value="reply">Reply suggested</option><option value="deadline">Deadline mentioned</option>
+		</select><Icon name="arrow-down-s-line" size={14} /></label>
+		{#if activeFilterCount}<button type="button" class="reset-filters" onclick={() => apply({ unread: null, starred: null, attachments: null, category: null, needs: null })} aria-label="Clear all filters"><Icon name="close-line" size={14} /><span>Reset</span></button>{/if}
 	</div>
 	{#if filters.q}
 		<div class="search-note">
@@ -809,7 +760,7 @@
 
 							<span class="card-body">
 								<span class="card-top-row">
-									<span class="sender" title={people(thread)}>
+									<span class="sender" title={thread.participants.filter((person) => !person.self).map((person) => person.address).join(', ') || people(thread)}>
 										<span class="sender-names">{people(thread)}</span>
 										{#if thread.message_count > 1}
 											<span class="count">{thread.message_count}</span>
@@ -1025,20 +976,22 @@
 </section>
 
 <style>
-	.analysis-filters { display:flex; flex-wrap:wrap; gap:0.7rem; padding:0.6rem 1rem; border-bottom:1px solid var(--color-line); }
-	.analysis-filters label { display:flex; align-items:center; gap:0.4rem; font-size:0.75rem; color:var(--color-text-secondary); min-width:0; }
-	.analysis-filters select { max-width:100%; min-width:0; min-height:2.5rem; padding:0.3rem; color:var(--color-text); background:var(--color-surface); border:1px solid var(--color-line); border-radius:7px; }
-	@media(max-width:500px) { .analysis-filters label { flex:1 1 100%; } .analysis-filters select { flex:1; } }
 
 	.mailbox { display: flex; flex-direction: column; min-height: 100%; }
-	.mailbox-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.1rem 1.5rem 1.25rem; }
+	.mailbox-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.7rem 1.7rem 1.5rem; }
 	.eyebrow { font-size: 0.625rem; font-weight: 600; letter-spacing: 0.13em; color: var(--color-text-secondary); margin-bottom: 0.45rem; }
-	.mailbox-heading h1 { display: flex; align-items: baseline; gap: 0.8rem; font-size: 1.65rem; font-weight: 600; letter-spacing: -0.045em; }
+	.mailbox-heading h1 { display: flex; align-items: baseline; gap: 0.8rem; font-size: 2.5rem; font-weight: 600; letter-spacing: -0.045em; }
 	.mailbox-heading > div { min-width: 0; }
 	.mailbox-heading h1 { flex-wrap: wrap; overflow-wrap: anywhere; }
-	.mailbox-heading h1 span { font-size: 0.75rem; font-weight: 400; letter-spacing: 0; color: var(--color-text-secondary); }
-	.heading-compose { display: flex; align-items: center; gap: 0.35rem; font-size: 0.8125rem; color: var(--color-accent-text); }
-	.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 3.5rem; padding: 0.4rem 1.2rem; border-top: 1px solid var(--color-line); }
+	.mailbox-heading h1 span { margin-left: 0.3rem; font-size: 0.75rem; font-weight: 400; letter-spacing: 0; color: var(--color-text-secondary); }
+	.unread-summary { display: flex; align-items: center; gap: 0.5rem; flex: none; color: var(--color-text-secondary); font-size: 0.75rem; }
+	.unread-summary > span { width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent); box-shadow: 0 0 0 4px var(--color-accent-soft); }
+	.refine-bar { display: flex; align-items: center; gap: 0.65rem; margin: 0 1.5rem; padding: 0.4rem 0 0.8rem; border-bottom: 1px solid var(--color-line); }
+	.attention-filter { display: flex; align-items: center; gap: 0.4rem; margin-left: auto; color: var(--color-text-secondary); font-size: 0.75rem; min-width: 0; }
+	.attention-filter select { appearance: none; background: transparent; color: var(--color-text-secondary); min-height: 2.25rem; padding: 0 0.15rem; max-width: 100%; min-width: 0; cursor: pointer; }
+	.attention-filter select option { background: var(--color-surface); color: var(--color-text); }
+	.reset-filters { display: flex; align-items: center; gap: 0.25rem; color: var(--color-muted); font-size: 0.7rem; min-height: 2rem; }
+	.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 3.5rem; padding: 0.4rem 1.2rem;  }
 	.toolbar-left, .toolbar-right, .bulk-actions, .select-all, .pager, .layout-toggle { display: flex; align-items: center; gap: 0.2rem; min-width: 0; }
 	.toolbar-right { gap: 1rem; }
 	.select-all { position: relative; padding-right: 0.5rem; }
@@ -1056,10 +1009,11 @@
 	.pager-btn { display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 9px; color: var(--color-text-secondary); }
 	.pager-btn:hover { background: var(--color-well); }
 	.pager-btn.disabled { opacity: 0.3; pointer-events: none; }
-	.filter-tabs { display: flex; gap: 0.5rem; padding: 0 1.2rem; border-bottom: 1px solid var(--color-line); }
-	.filter-tabs button { display: flex; align-items: center; gap: 0.5rem; min-height: 3rem; padding: 0 1rem; font-size: 0.8125rem; color: var(--color-text-secondary); border-bottom: 2px solid transparent; }
-	.filter-tabs button:hover { background: var(--color-well); border-radius: 8px 8px 0 0; }
-	.filter-tabs button.active { color: var(--color-accent-text); border-bottom-color: var(--color-accent); font-weight: 600; }
+	.filter-tabs { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+	.filter-tabs button { display: flex; align-items: center; gap: 0.4rem; min-height: 2rem; padding: 0 0.7rem; border-radius: 7px; font-size: 0.75rem; color: var(--color-muted); }
+	.filter-tabs button:hover { background: var(--color-well); color: var(--color-text); }
+	.filter-tabs button.active { color: var(--color-accent-text); background: var(--color-accent-soft); font-weight: 500; }
+
 	.more, .snooze-wrap, .ios-more { position: relative; }
 	.backdrop { position: fixed; inset: 0; z-index: 45; cursor: default; }
 	.menu { position: absolute; top: calc(100% + 0.3rem); z-index: 46; min-width: 12.5rem; padding: 0.4rem; border: 1px solid var(--color-line); border-radius: 12px; background: var(--color-surface); box-shadow: var(--mat-float); }
@@ -1075,7 +1029,7 @@
 	.search-note { display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; color: var(--color-text-secondary); background: var(--color-well); font-size: 0.8125rem; }
 	.search-clear { margin-left: auto; color: var(--color-accent-text); }
 	.empty-actions { display: flex; justify-content: center; margin-top: -2rem; margin-bottom: 2rem; }
-	.list { padding: 0.7rem 1rem; }
+	.list { padding: 0.5rem 1.5rem 1rem; }
 	.cards { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 0.75rem; list-style: none; margin: 0; padding: 0; }
 	.card { position: relative; display: grid; grid-template-columns: auto auto 1fr; align-content: start; min-width: 0; min-height: 10rem; gap: 0.5rem; padding: 0.875rem; background: var(--color-well); border: 1px solid var(--color-line); border-radius: 14px; transition: background 0.15s, box-shadow 0.15s; }
 	.card.unread { background: var(--color-surface); }
@@ -1086,7 +1040,7 @@
 	.card:has(.backdrop) { z-index: 47; }
 	.card-bar { display: flex; align-items: center; }
 	.card-link { display: flex; grid-column: 1 / -1; gap: 0.75rem; min-width: 0; color: inherit; }
-	.avatar { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 2.25rem; height: 2.25rem; border-radius: 12px; font-size: 0.875rem; font-weight: 600; background: color-mix(in srgb, var(--avatar-bg) 15%, var(--color-surface)); color: var(--avatar-bg); }
+	.avatar { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 2.25rem; height: 2.25rem; border-radius: 12px; font-size: 0.875rem; font-weight: 600; background: color-mix(in srgb, var(--avatar-bg) 15%, var(--color-surface)); color: color-mix(in srgb, var(--avatar-bg) 60%, var(--color-text)); }
 	.card-body { display: flex; flex-direction: column; min-width: 0; width: 100%; gap: 0.35rem; }
 	.card-top-row { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; min-width: 0; }
 	.sender { display: flex; align-items: center; gap: 0.3rem; min-width: 0; font-size: 0.8125rem; color: var(--color-text-secondary); }
@@ -1111,14 +1065,14 @@
 	.list-foot { display: flex; justify-content: flex-end; padding: 0.5rem 1.5rem 1rem; font-size: 0.75rem; color: var(--color-text-secondary); }
 	.mobile-pager { display: none; }
 	.cards.layout-list { display: flex; flex-direction: column; gap: 0; }
-	.cards.layout-list .card { display: flex; align-items: center; gap: 0.45rem; min-height: 3.5rem; padding: 0.55rem 0.6rem; border: 0; border-bottom: 1px solid var(--color-line); border-radius: 0; }
-	@media (min-width: 901px) { .cards.layout-list.compact .card { min-height: 2.75rem; padding-top: 0.15rem; padding-bottom: 0.15rem; } }
+	.cards.layout-list .card { display: flex; align-items: center; gap: 0.55rem; min-height: 4.8rem; padding: 0.85rem 0.6rem; border: 0; border-bottom: 1px solid var(--color-line); border-radius: 0; }
+	@media (min-width: 901px) { .cards.layout-list.compact .card { min-height: 3rem; padding-top: 0.15rem; padding-bottom: 0.15rem; } }
 	@media (min-width: 901px) { .indicators :global(.ri-star-fill) { display: none; } }
 	.cards.layout-list .card:first-child { border-radius: 10px 10px 0 0; }
 	.cards.layout-list .card:last-child { border-radius: 0 0 10px 10px; }
 	.cards.layout-list .card-link { flex: 1; align-items: center; padding: 0.25rem 2rem 0.25rem 0.3rem; }
-	.cards.layout-list .avatar { display: none; }
-	.cards.layout-list .card-body { display: grid; grid-template-columns: minmax(7rem,11rem) minmax(8rem,0.8fr) minmax(0,1.2fr) auto 4.5rem; align-items: center; gap: 0.75rem; }
+	.cards.layout-list .avatar { display: flex; width: 2.3rem; height: 2.3rem; border-radius: 50%; }
+	.cards.layout-list .card-body { display: grid; grid-template-columns: minmax(7rem,10rem) minmax(8rem,0.9fr) minmax(0,1.1fr) auto 4rem; align-items: center; gap: 0.75rem; }
 	.cards.layout-list .card-top-row { display: contents; }
 	.cards.layout-list .sender { grid-column: 1; grid-row: 1; }
 	.cards.layout-list .subject { grid-column: 2; grid-row: 1; }
@@ -1129,7 +1083,7 @@
 	.cards.layout-list .card-actions > .tool-btn { background: var(--color-well); }
 	.cards.layout-list .unread .card-actions > .tool-btn { background: var(--color-surface); }
 	.card:hover .card-actions > .tool-btn { background: var(--color-surface-hover); }
-	.ios-header, .ios-filters, .ios-search, .ios-bulk-bar, .ios-unread-dot, .ios-select-toggle { display: none; }
+	.ios-header, .ios-search, .ios-bulk-bar, .ios-unread-dot, .ios-select-toggle { display: none; }
 	@media (min-width:901px) and (max-width:1150px) {
 		.cards { grid-template-columns: repeat(2,minmax(0,1fr)); }
 		.cards.layout-list .card-body { grid-template-columns: minmax(6rem,9rem) minmax(7rem,1fr) auto 3rem; gap: 0.5rem; }
@@ -1140,11 +1094,16 @@
 		.density-toggle { display: none; }
 	}
 	@media (max-width:900px) {
-		.mailbox-heading, .toolbar, .filter-tabs { display: none; }
+		.mailbox-heading, .toolbar { display: none; }
+		.refine-bar { margin: 0 1rem; padding: 0 0 0.6rem; flex-wrap: wrap; gap: 0.25rem 0.5rem; }
+		.filter-tabs { width: 100%; gap: 0.2rem; }
+		.filter-tabs button { min-height: 2.5rem; padding: 0 0.55rem; }
+		.attention-filter { margin-left: 0; }
+		.reset-filters { margin-left: auto; }
 		.ios-header { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.75rem; padding: max(0.75rem,env(safe-area-inset-top)) 1rem 0.75rem; }
 		.ios-back, .ios-icon-btn { display: flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; border-radius: 12px; color: var(--color-text-secondary); }
 		.ios-back:hover, .ios-icon-btn:hover { background: var(--color-well); }
-		.ios-title { font-size: 1.3rem; font-weight: 600; letter-spacing: -0.035em; }
+		.ios-title { font-size: 1.8rem; font-weight: 600; letter-spacing: -0.035em; }
 		.ios-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 		.ios-subtitle { font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 0.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 		.ios-title-block { min-width: 0; }
@@ -1152,12 +1111,6 @@
 		.ios-select { font-size: 0.8125rem; color: var(--color-accent-text); }
 		.ios-bulk-bar { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 1rem; background: var(--color-accent-soft); }
 		.ios-bulk-count { font-size: 0.8125rem; color: var(--color-accent-text); }
-		.ios-filters { display: flex; align-items: center; justify-content: space-between; padding: 0.25rem 1rem 0.75rem; border-bottom: 1px solid var(--color-line); }
-		.ios-filter-icons { display: flex; gap: 0.3rem; }
-		.ios-filter-icon { display: flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.5rem; border-radius: 10px; color: var(--color-text-secondary); }
-		.ios-filter-icon.active { color: var(--color-accent-text); background: var(--color-accent-soft); }
-		.ios-filter-pill { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; height: 2.25rem; padding: 0 0.7rem; border-radius: 9px; color: var(--color-text-secondary); background: var(--color-well); }
-		.ios-filter-pill.active { color: var(--color-accent-text); background: var(--color-accent-soft); }
 		.ios-search { display: flex; align-items: center; gap: 0.5rem; margin: 0.75rem 1rem; padding: 0.4rem 0.75rem; min-height: 2.75rem; border-radius: 12px; background: var(--color-well); color: var(--color-text-secondary); }
 		.ios-search input { min-width: 0; flex: 1; background: transparent; color: var(--color-text); font-size: 1rem; }
 		.ios-search-close { display: flex; }

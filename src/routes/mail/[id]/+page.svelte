@@ -553,7 +553,7 @@
 	.mail-reading {
 		flex: 1;
 		min-width: 0;
-		padding: 1.25rem 1.5rem 2rem;
+		width: 100%; max-width: 62rem; margin: 0 auto; padding: 2rem 2rem 3rem;
 	}
 
 	.toolbar-actions {
@@ -586,7 +586,7 @@
 	}
 
 	.mail-reading h1 {
-		font-size: 1.25rem;
+		font-size: 1.7rem;
 		font-weight: 600;
 		letter-spacing: -0.02em;
 		line-height: 1.35;

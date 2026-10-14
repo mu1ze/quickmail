@@ -69,7 +69,10 @@ themes. Intercept send requests or use a test provider to avoid real delivery.
 | Spam | Move a conversation to Spam. Ordinary mailboxes exclude it. Use Not spam or Move to inbox to recover it. Search can explicitly include Spam/Trash with `in:spam`, `in:trash` or `in:anywhere`. |
 | Search | Search globally from the topbar or mobile search, and through the native search-options dialog. Combine `from:`, `to:`, `subject:`, `is:unread`, `has:attachment`, `filename:`, `label:`, `after:` and `before:`. Quoted phrases and negations work. Escape closes the dialog and restores focus. |
 | Labels | Create a label in the sidebar, select conversations and apply it. Verify the sidebar filter, row badges, search and reader state. Remove it from a conversation and delete it from the manager; deleting labels preserves messages. Duplicate names show an error; failed apply retains changes for retry. |
-| Sender names | Receive messages with named From headers via both providers. Mailbox rows use the decoded sender name and retain the address when no name exists. Older messages whose names were discarded keep their address fallback. |
+| Sender names | Receive messages with named From headers via both providers. Mailbox rows and reader headers use the decoded sender name. Older messages reuse known names only from the same account; otherwise they use a readable local-part/domain label. The row tooltip and reader header retain the full address. |
+| Reader repaint | Open HTML mail with remote content blocked, opt in, and hold the image response open. Text must remain visible before images finish, without highlighting or zooming. Repeat with remote loading already enabled, theme changes, cached images, and browser back/forward navigation. |
+| Categories | Use the category strip, specific-category menu and attention filter. Combine categories with Unread, Starred, Attachments and search; Reset clears filters. Check the horizontally scrollable category strip and labeled filters at 320px. |
+| Sidebar | Collapse and expand at both tall and short desktop heights. The scrollbar is hidden, Compose keeps its height, and all navigation remains reachable by scrolling and keyboard. |
 | Text previews | HTML styles, scripts, tags, comments and image placeholders stay out of snippets, including mail with CSS in its plain-text alternative. Ordinary text, placeholders and URLs remain readable. |
 | Row options | Right-click a conversation, use Shift+F10 on its link, or hold on touch for 550 ms. The same options open without navigating. Moving to scroll cancels the hold; a normal tap still opens mail. Check Escape, outside tap, keyboard navigation and menus near the viewport bottom. |
 | Density | Switch between comfortable/compact list spacing. Reload and verify persistence; Appearance settings use the same preference. Card view remains available. |
@@ -87,3 +90,10 @@ Escape closes label dialogs without clearing the underlying mailbox selection.
 
 Local browser checks validate rendering, storage, and intercepted delivery
 payloads. They do not verify live provider delivery, DNS, or production webhooks.
+
+The October 14 category redesign was checked locally in Chromium in both themes
+at 1440, 1024, 900, 390 and 320 pixels with an isolated sample mailbox. Checks
+covered category and attention filtering, sender names, both layouts, collapsed
+navigation, and HTML text staying visible while a remote-image response was held
+open. The downloaded WebKit runtime stalled during page creation, so the exact
+Safari repaint symptom remains unverified in that engine.

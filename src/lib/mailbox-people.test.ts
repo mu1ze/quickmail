@@ -25,10 +25,12 @@ function thread(participants: ThreadSummary['participants']): ThreadSummary {
 }
 
 describe('mailbox row headline', () => {
-	test('prefers the stored sender name and keeps the address as a fallback', () => {
+	test('prefers the stored sender name and uses a readable address fallback', () => {
 		assert.equal(threadHeadline(thread([{ label: 'hello', name: 'Paystack', address: 'hello@m.paystack.com', self: false }]), 'inbox'), 'Paystack');
 		assert.equal(threadHeadline(thread([{ label: 'uber', name: 'Uber', address: 'uber@uber.com', self: false }]), 'inbox'), 'Uber');
-		assert.equal(threadHeadline(thread([{ label: 'hello', name: '  ', address: 'hello@example.com', self: false }]), 'inbox'), 'hello@example.com');
+		assert.equal(threadHeadline(thread([{ label: 'hello', name: '  ', address: 'hello@example.com', self: false }]), 'inbox'), 'Example');
+		assert.equal(threadHeadline(thread([{ label: 'hello', address: 'hello@m.paystack.com', self: false }]), 'inbox'), 'Paystack');
+		assert.equal(threadHeadline(thread([{ label: 'alex', address: 'alex.chen+project@example.com', self: false }]), 'inbox'), 'Alex Chen');
 	});
 	test('names multiple senders without including our own identity', () => {
 		assert.equal(threadHeadline(thread([
@@ -37,24 +39,24 @@ describe('mailbox row headline', () => {
 			{ label: 'jo', name: 'Jo', address: 'jo@example.com', self: false }
 		]), 'inbox'), 'Alex Chen, Jo');
 	});
-	test('shows a sender-supplied display name without guessing one from the address', () => {
+	test('shows a sender-supplied display name ahead of an address label', () => {
 		assert.equal(threadHeadline(thread([{ label: 'guess', address: '"Alex Chen" <alex@example.com>', self: false }]), 'inbox'), 'Alex Chen');
-		assert.equal(threadHeadline(thread([{ label: 'guess', address: 'alex@example.com', self: false }]), 'inbox'), 'alex@example.com');
+		assert.equal(threadHeadline(thread([{ label: 'guess', address: 'alex@example.com', self: false }]), 'inbox'), 'Alex');
 	});
-	test('inbox shows the sender email, not a guessed display name', () => {
+	test('inbox formats the local part when the sender supplied no name', () => {
 		assert.equal(
 			threadHeadline(
 				thread([{ label: 'charles', address: 'charles@example.com', self: false }]),
 				'inbox'
 			),
-			'charles@example.com'
+			'Charles'
 		);
 	});
 
-	test('sent and drafts show the recipient email', () => {
+	test('sent and drafts show a readable recipient label', () => {
 		assert.equal(
 			threadHeadline(thread([{ label: 'me', address: 'ada@example.com', self: true }]), 'sent'),
-			'ada@example.com'
+			'Ada'
 		);
 		assert.equal(
 			threadHeadline(
@@ -64,7 +66,7 @@ describe('mailbox row headline', () => {
 				]),
 				'sent'
 			),
-			'michael@example.com'
+			'Michael'
 		);
 	});
 });

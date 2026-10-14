@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { D1Database } from '@cloudflare/workers-types';
-import { expandToThreads, getMailboxCounts, insertEmail, listEmails, listMailbox, setEmailFlags } from './mail-store';
+import { expandToThreads, getEmailForUser, getMailboxCounts, insertEmail, listEmails, listMailbox, listThreadMessages, setEmailFlags } from './mail-store';
 import { threadHeadline } from '../mailbox-people';
 import { handleCloudflareInbound } from './cloudflare-inbound';
 import { handleResendWebhook } from './inbound';
@@ -47,6 +47,23 @@ beforeEach(() => {
 afterEach(() => sqlite.close());
 
 describe('mail folders', () => {
+	test('older mail reuses the most recent sender name from the same account in list and reader', async () => {
+		await insertEmail(db, { userId: 'owner', direction: 'inbound', from: 'alex@example.com', fromName: 'Alex Chen', to: 'owner@example.com', subject: 'Another conversation', bodyText: 'Hello' });
+		await insertEmail(db, { userId: 'other', direction: 'inbound', from: 'alex@example.com', fromName: 'A different name', to: 'other@example.com', subject: 'Private', bodyText: 'Private' });
+		const thread = (await listMailbox(db, 'owner', { view: 'inbox' })).threads.find((t) => t.thread_id === 'thread')!;
+		assert.equal(threadHeadline(thread, 'inbox'), 'Alex Chen');
+		const email = (await getEmailForUser(db, 'owner', 'received'))!;
+		const messages = await listThreadMessages(db, 'owner', email);
+		assert.equal(messages.find((m) => m.id === 'received')?.from_name, 'Alex Chen');
+		assert.equal((await listMailbox(db, 'other', { view: 'inbox' })).threads.find((t) => t.thread_id === 'foreign')?.participants[0].name, 'A different name');
+	});
+	test('missing sender names never reuse another account name', async () => {
+		await insertEmail(db, { userId: 'other', direction: 'inbound', from: 'alex@example.com', fromName: 'Private name', to: 'other@example.com', subject: 'Private', bodyText: 'Private' });
+		const thread = (await listMailbox(db, 'owner', { view: 'inbox' })).threads[0];
+		assert.equal(thread.participants[0].name, null);
+		const email = (await getEmailForUser(db, 'owner', 'received'))!;
+		assert.equal((await listThreadMessages(db, 'owner', email)).find((m) => m.id === 'received')?.from_name, null);
+	});
 	test('Cloudflare inbound preserves the MIME sender name separately from the envelope address', async () => {
 		sqlite.exec("UPDATE users SET is_admin=1 WHERE id='owner'; INSERT INTO domains(id,name) VALUES('test-domain','example.com'); INSERT INTO addresses(id,user_id,domain_id,address) VALUES('test-address','owner','test-domain','owner@example.com')");
 		const raw = new Response('From: =?UTF-8?Q?Jos=C3=A9?= <jose@example.com>\r\nTo: owner@example.com\r\nSubject: MIME name\r\nMessage-ID: <mime-name@example.com>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHello from José.').body!;

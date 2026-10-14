@@ -7,6 +7,7 @@
 	import { formatFullDate, formatRelativeDate } from '$lib/utils/date';
 	import { splitQuotedText } from '$lib/utils/quotes';
 	import { buildMessagePreview } from '$lib/utils/message-preview';
+	import { displayAddress } from '$lib/mailbox-people';
 	import type { ThreadMessage } from '$lib/types';
 
 	let {
@@ -20,8 +21,8 @@
 	} = $props();
 
 	const outbound = $derived(message.direction === 'outbound');
-	const sender = $derived(outbound ? 'me' : message.from_addr);
-	const initial = $derived((message.from_addr[0] ?? '?').toUpperCase());
+	const sender = $derived(outbound ? 'me' : message.from_name?.trim() || displayAddress(message.from_addr));
+	const initial = $derived((sender[0] ?? '?').toUpperCase());
 
 	/** Text-only messages get the same treatment as HTML ones. */
 	const text = $derived(splitQuotedText(message.body_text ?? ''));
@@ -41,6 +42,7 @@
 			<button type="button" class="who" onclick={onToggle} aria-expanded={expanded} aria-label={`Collapse message from ${sender}`}>
 				<p class="name">{sender}</p>
 				<p class="route">
+					{#if !outbound && sender !== message.from_addr}<span>{message.from_addr}</span>{/if}
 					<span>to {message.to_addr}</span>
 					{#if message.cc_addr}
 						<span>cc {message.cc_addr}</span>
@@ -57,7 +59,7 @@
 			{/if}
 		</header>
 		{#if message.body_html && message.body_text?.trim()}
-			<button type="button" class="content-mode" aria-pressed={plain} onclick={() => (plain = !plain)}>{plain ? 'View formatted message' : 'View plain text'}</button>
+			<button type="button" class="content-mode" aria-pressed={plain} onclick={() => (plain = !plain)}><Icon name={plain ? 'layout-line' : 'text'} size={13} />{plain ? 'View formatted message' : 'View plain text'}</button>
 		{/if}
 
 		<div class="body mail-body">
@@ -108,7 +110,8 @@
 </article>
 
 <style>
-	.content-mode { margin-top: 0.75rem; color: var(--color-muted); font-size: 0.75rem; text-decoration: underline; text-underline-offset: 2px; }
+	.content-mode { display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 1rem; padding: 0.45rem 0.65rem; border: 1px solid var(--color-line); border-radius: 8px; color: var(--color-text-secondary); font-size: 0.7rem; }
+	.content-mode:hover { background: var(--color-well); color: var(--color-text); }
 	.message {
 		padding: 1.25rem 0;
 		box-shadow: inset 0 -1px 0 var(--color-line);

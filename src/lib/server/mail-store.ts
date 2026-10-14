@@ -333,6 +333,12 @@ export async function listMailbox(
 		.map((threadId) => byThread.get(threadId))
 		.filter((group): group is ThreadMessageRow[] => Boolean(group?.length))
 		.map(toThreadSummary);
+	const names = await knownSenderNames(db, userId, messages);
+	for (const thread of threads) {
+		for (const person of thread.participants) {
+			if (!person.self && !person.name?.trim()) person.name = names.get(person.address.toLowerCase()) ?? null;
+		}
+	}
 
 	const { results: inbound } = await db.prepare(`SELECT id,COALESCE(thread_id,id) AS thread_id FROM emails WHERE user_id=? AND direction='inbound' AND deleted_at IS NULL AND COALESCE(thread_id,id) IN (${placeholders}) ORDER BY datetime(created_at),rowid`)
 		.bind(userId,...threadIds).all<{id:string;thread_id:string}>();
@@ -368,6 +374,30 @@ export async function listMailbox(
 	}
 
 	return { threads, total, page, pageCount, pageSize };
+}
+
+/** Recover missing names from this account's other mail, never another user. */
+async function knownSenderNames(
+	db: D1Database, userId: string,
+	messages: { direction: string; from_addr: string; from_name?: string | null }[]
+): Promise<Map<string, string>> {
+	const addresses = [...new Set(messages.filter((m) => m.direction === 'inbound' && !m.from_name?.trim())
+		.map((m) => m.from_addr.toLowerCase()))];
+	if (!addresses.length) return new Map();
+	const { results } = await db.prepare(`SELECT from_addr, from_name FROM (
+		SELECT from_addr, from_name, ROW_NUMBER() OVER (
+			PARTITION BY LOWER(from_addr) ORDER BY datetime(created_at) DESC, rowid DESC
+		) AS name_rank FROM emails
+		WHERE user_id = ? AND direction = 'inbound' AND LOWER(from_addr) IN (${addresses.map(() => '?').join(',')})
+		AND TRIM(COALESCE(from_name, '')) <> ''
+	) WHERE name_rank = 1`)
+		.bind(userId, ...addresses).all<{ from_addr: string; from_name: string }>();
+	const names = new Map<string, string>();
+	for (const row of results) {
+		const address = row.from_addr.toLowerCase();
+		if (!names.has(address)) names.set(address, row.from_name.trim());
+	}
+	return names;
 }
 
 /** `messages` is the whole conversation, oldest first. */
@@ -836,7 +866,7 @@ export async function listThreadMessages(
 
 	const { results } = await db
 		.prepare(
-			`SELECT e.id, e.direction, e.from_addr, e.to_addr, e.cc_addr, e.bcc_addr, e.subject,
+			`SELECT e.id, e.direction, e.from_addr, e.from_name, e.to_addr, e.cc_addr, e.bcc_addr, e.subject,
 			        e.body_text, e.body_html, e.message_id, e.references_header,
 			        e.status, e.status_detail, e.is_read, e.is_starred, e.is_pinned, e.deleted_at, e.created_at
 			 FROM emails e
@@ -870,11 +900,13 @@ export async function listThreadMessages(
 		.all<EmailAttachmentMeta>();
 
 	const analyses = await loadMailAnalyses(db,userId,results.map(m=>m.id));
+	const names = await knownSenderNames(db, userId, results);
 
 	// The query already filters drafts out, so `status` is a delivery state or null
 	// and needs no further narrowing here.
 	return results.map((message) => ({
 		...message,
+		from_name: message.from_name?.trim() || names.get(message.from_addr.toLowerCase()) || null,
 		is_read: message.is_read === 1,
 		is_starred: message.is_starred === 1,
 		is_pinned: message.is_pinned === 1,
