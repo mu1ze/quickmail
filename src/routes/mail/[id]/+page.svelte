@@ -1,7 +1,7 @@
 <script lang="ts">
 	import AnalysisBadges from '$lib/components/AnalysisBadges.svelte';
 	import AnalysisControls from '$lib/components/AnalysisControls.svelte';
-	import { goto, invalidateAll } from '$app/navigation';
+	import { goto, invalidate, invalidateAll } from '$app/navigation';
 	import { untrack } from 'svelte';
 	import { tooltip } from '$lib/actions/tooltip';
 	import { requireOk, requestError } from '$lib/utils/request';
@@ -111,6 +111,22 @@
 		await requireOk(response);
 	}
 
+	/**
+	 * Opening a conversation marks it read. This lives here, not in the load,
+	 * so hovering a link (which preloads the load) never changes read state.
+	 * Keyed on a primitive so refreshing the layout counts doesn't refire it.
+	 */
+	const unreadFocus = $derived(data.unread ? data.focusId : null);
+	let markingRead: Promise<unknown> = Promise.resolve();
+	$effect(() => {
+		const id = unreadFocus;
+		if (!id) return;
+		markingRead = untrack(() => patch(id, { isRead: true })).then(
+			() => invalidate('app:mailbox-counts'),
+			() => undefined
+		);
+	});
+
 	function toggleStar() {
 		return act(async () => { if (!latest) return; await patch(latest.id, { isStarred: !starred }); await invalidateAll(); });
 	}
@@ -119,7 +135,7 @@
 	}
 	function forwardLatest() { if (latest) void goto(`/compose?forward=${latest.id}`); }
 	function markUnread() {
-		return act(async () => { if (!latest) return; await patch(latest.id, { isRead: false }); await goto(backHref); });
+		return act(async () => { if (!latest) return; await markingRead; await patch(latest.id, { isRead: false }); await goto(backHref, { invalidateAll: true }); });
 	}
 	function trash() {
 		return act(async () => {

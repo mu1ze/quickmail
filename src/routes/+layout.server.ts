@@ -13,8 +13,10 @@ const EMPTY_COUNTS: MailboxCounts = {
 	trash: 0
 };
 
-export const load: LayoutServerLoad = async ({ locals, platform }) => {
+export const load: LayoutServerLoad = async ({ locals, platform, depends }) => {
 	const db = platform?.env.DB;
+	// Refreshed on its own when a page changes read state outside a load.
+	depends('app:mailbox-counts');
 
 	// The sidebar shows these on every page, so they load with the shell.
 	const counts =

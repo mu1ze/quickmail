@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-import { getEmailForUser, listThreadMessages, markThreadRead } from '$lib/server/mail-store';
+import { getEmailForUser, listThreadMessages } from '$lib/server/mail-store';
 import { listSignatures } from '$lib/server/email-signature';
 import { maybeRefreshThreadSummary } from '$lib/server/mail-summaries';
 import { resolveReplyFromAddress } from '$lib/server/outbox';
@@ -17,8 +17,8 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
 		throw error(404, 'Email not found');
 	}
 
-	// Opening any message opens its whole conversation.
-	await markThreadRead(platform.env.DB, locals.user.id, email);
+	// No marking read here: hover preloading runs this load before the reader
+	// opens anything. The page marks the conversation read once it mounts.
 	const messages = await listThreadMessages(platform.env.DB, locals.user.id, email);
 
 	const latest = messages[messages.length - 1] ?? email;
@@ -53,6 +53,8 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
 		replyFromName: replyIdentity?.label?.trim() || null,
 		signatures,
 		addresses: locals.addresses,
+		/** Anything still unread — the page marks the conversation read on open. */
+		unread: messages.some((message) => !message.is_read),
 		messages: messages.map((message) => ({ ...message, is_read: true }))
 	};
 };
