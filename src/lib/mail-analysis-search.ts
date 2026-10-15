@@ -11,13 +11,15 @@ const warning = '(COALESCE(c.warning_dismissed,0)=0 AND (a.phishing=1 OR a.spam=
 const reply = `(m.id=(${latest}) AND a.needs_reply=1 AND COALESCE(c.task_done,0)=0 AND a.phishing=0 AND a.spam=0
 	AND NOT EXISTS(SELECT 1 FROM emails sent WHERE sent.user_id=m.user_id AND sent.direction='outbound' AND sent.reply_to_email_id=m.id AND sent.status IN ('sent','delivered','delayed')))`;
 const deadline = `(m.id=(${latest}) AND a.deadline=1 AND COALESCE(c.task_done,0)=0 AND a.phishing=0 AND a.spam=0)`;
+/** Corrected, then confident, then the model's best guess unless the mail looks risky. Mirrors loadMailAnalyses. */
+const filedCategory = 'COALESCE(c.category,a.category,CASE WHEN a.phishing=0 AND a.spam=0 THEN a.predicted_category END)';
 const review = `(${warning} OR j.status='failed' OR (m.id=(${latest}) AND a.confidence IS NOT NULL AND COALESCE(c.category,a.category) IS NULL))`;
 
 export function analysisSearch(operator: string, value: string): { condition: string; bindings: string[] } | null {
 	if (operator === 'category') {
 		const categories = CATEGORY_GROUPS[value] ?? (isMailCategory(value) ? [value] : null);
 		if (!categories) return null;
-		return { condition: `EXISTS(SELECT 1 FROM emails m ${joins} WHERE ${active} AND m.id=(${latest}) AND COALESCE(c.category,a.category) IN (${categories.map(()=>'?').join(',')}))`, bindings: [...categories] };
+		return { condition: `EXISTS(SELECT 1 FROM emails m ${joins} WHERE ${active} AND m.id=(${latest}) AND ${filedCategory} IN (${categories.map(()=>'?').join(',')}))`, bindings: [...categories] };
 	}
 	const predicate = operator === 'risk' ? {
 		phishing: '(a.phishing=1 AND COALESCE(c.warning_dismissed,0)=0)',

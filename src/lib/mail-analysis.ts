@@ -43,6 +43,8 @@ export type MailAnalysis = {
 	emailId: string;
 	status: 'pending' | 'analyzed' | 'failed';
 	category: MailCategory | null;
+	/** The category is the model's best guess below CATEGORY_CONFIDENCE, not a confident call. */
+	suggested: boolean;
 	confidence: number | null;
 	review: boolean;
 	phishing: boolean;

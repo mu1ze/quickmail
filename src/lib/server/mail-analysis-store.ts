@@ -62,7 +62,7 @@ export async function continueBackfill(db: D1Database, userId: string, batch = 2
 
 type AnalysisRow = {
 	id: string; status: 'pending' | 'processing' | 'analyzed' | 'failed' | null;
-	category: string | null; correction_category: string | null; confidence: number | null;
+	category: string | null; predicted_category: string | null; correction_category: string | null; confidence: number | null;
 	review: number | null; phishing: number | null; spam: number | null;
 	needs_reply: number | null; deadline: number | null; urgency: number | null;
 	warning_dismissed: number | null; task_done: number | null; replied: number;
@@ -74,7 +74,7 @@ export async function loadMailAnalyses(db: D1Database, userId: string, ids: stri
 		return result;
 	}
 	if (!ids.length) return result;
-	const { results } = await db.prepare(`SELECT e.id,j.status,a.category,a.confidence,a.review,a.phishing,a.spam,a.needs_reply,a.deadline,a.urgency,
+	const { results } = await db.prepare(`SELECT e.id,j.status,a.category,a.predicted_category,a.confidence,a.review,a.phishing,a.spam,a.needs_reply,a.deadline,a.urgency,
 		c.category AS correction_category,c.warning_dismissed,c.task_done,
 		EXISTS(SELECT 1 FROM emails sent WHERE sent.user_id=e.user_id AND sent.direction='outbound'
 			AND sent.reply_to_email_id=e.id AND sent.status IN ('sent','delivered','delayed')) AS replied
@@ -86,13 +86,17 @@ export async function loadMailAnalyses(db: D1Database, userId: string, ids: stri
 	for (const row of results) {
 		if (row.confidence === null && !row.status && !row.correction_category) continue;
 		const corrected = isMailCategory(row.correction_category);
-		const category = corrected ? row.correction_category as MailCategory : isMailCategory(row.category) ? row.category : null;
+		const confident = isMailCategory(row.category) ? row.category : null;
+		// Below the confidence bar the model's best guess still files the mail under a tab, flagged for review.
+		// Possible phishing or spam is never filed by a guess.
+		const guess = !corrected && !confident && row.phishing !== 1 && row.spam !== 1 && isMailCategory(row.predicted_category) ? row.predicted_category : null;
+		const category = corrected ? row.correction_category as MailCategory : confident ?? guess;
 		const phishing = row.phishing === 1 && row.warning_dismissed !== 1;
 		const spam = row.spam === 1 && row.warning_dismissed !== 1;
 		result.set(row.id, {
 			emailId: row.id, status: row.confidence !== null ? 'analyzed' : row.status === 'failed' ? 'failed' : 'pending',
-			category, corrected, confidence: row.confidence,
-			review: phishing || spam || (!corrected && row.confidence !== null && !category) || row.status === 'failed',
+			category, suggested: guess !== null, corrected, confidence: row.confidence,
+			review: phishing || spam || (!corrected && row.confidence !== null && !confident) || row.status === 'failed',
 			phishing, spam, needsReply: row.needs_reply === 1 && !row.task_done && !row.replied && !phishing && !spam,
 			deadline: row.deadline === 1 && !row.task_done && !phishing && !spam,
 			urgency: row.urgency

@@ -355,7 +355,7 @@ export async function listMailbox(
 		const phishing = flagged('phishing'), spam = flagged('spam'), reply = base?.needsReply ? latest : undefined, deadline = base?.deadline ? latest : undefined;
 		const review = group.some(m=>analyses.get(m.id)?.status==='failed') || Boolean(base?.review);
 		if (base || phishing || spam || reply || deadline || review) {
-			thread.analysis = { ...(base ?? {emailId:latest.id,status:'pending',category:null,confidence:null,corrected:false,urgency:null}), review:review || Boolean(phishing || spam), phishing:Boolean(phishing), spam:Boolean(spam),needsReply:Boolean(reply),deadline:Boolean(deadline) };
+			thread.analysis = { ...(base ?? {emailId:latest.id,status:'pending',category:null,suggested:false,confidence:null,corrected:false,urgency:null}), review:review || Boolean(phishing || spam), phishing:Boolean(phishing), spam:Boolean(spam),needsReply:Boolean(reply),deadline:Boolean(deadline) };
 			thread.analysisMessageId=latest.id;
 			thread.analysisPhishingId=phishing?.id;thread.analysisSpamId=spam?.id;
 			thread.analysisReplyId=reply?.id;thread.analysisDeadlineId=deadline?.id;

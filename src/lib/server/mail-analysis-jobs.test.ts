@@ -227,3 +227,16 @@ test('turning analysis off cancels analyze-all', async () => {
  await setAnalysisEnabled(db,'owner',true);
  assert.equal(await backfillAllActive(db,'owner'),false);
 });
+
+test('low-confidence mail is filed under its best-guess tab, flagged for review, until corrected', async () => {
+ await setAnalysisEnabled(db,'owner',true); const id=await receive();
+ await processAnalysisJob({DB:db,SUBQ_API_KEY:'test',fetch:(async () => Response.json({model:SUBQ_MODEL,answers:answers(0.45),usage:{input_tokens:500,output_tokens:0}})) as typeof fetch},message(id));
+ let a=(await loadMailAnalyses(db,'owner',[id])).get(id)!;
+ assert.equal(a.category,'work'); assert.equal(a.suggested,true); assert.equal(a.review,true);
+ for (const q of ['category:primary','needs:review']) assert.equal((await listMailbox(db,'owner',{view:'inbox',q})).total,1,q);
+ assert.equal((await listMailbox(db,'owner',{view:'inbox',category:'primary'})).total,1);
+ await correctMailAnalysis(db,'owner',id,{category:'work'});
+ a=(await loadMailAnalyses(db,'owner',[id])).get(id)!;
+ assert.equal(a.suggested,false); assert.equal(a.corrected,true); assert.equal(a.review,false);
+ assert.equal((await listMailbox(db,'owner',{view:'inbox',q:'needs:review'})).total,0);
+});

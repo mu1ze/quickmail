@@ -18,7 +18,7 @@
 
 <div class="analysis-controls">
 	<label>Category
-		<select aria-label="Correct email category" disabled={busy} value={analysis.category ?? ''} onchange={(e)=>update([categoryId],{category:e.currentTarget.value || null})}>
+		<select aria-label="Correct email category" disabled={busy} value={analysis.suggested ? '' : analysis.category ?? ''} onchange={(e)=>update([categoryId],{category:e.currentTarget.value || null})}>
 			<option value="">Use model suggestion</option>
 			{#each Object.entries(CATEGORY_LABELS) as [value,label]}<option {value}>{label}</option>{/each}
 		</select>
