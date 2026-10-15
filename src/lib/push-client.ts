@@ -127,6 +127,17 @@ export async function savePushSubscription(subscription: PushSubscription): Prom
 	if (!response.ok) throw new Error(await readError(response));
 }
 
+/**
+ * Ask for permission and register this device in one step. Must run from a
+ * tap: iOS only shows the permission prompt in response to a user gesture.
+ */
+export async function enablePushNotifications(publicKey: string): Promise<NotificationPermission> {
+	const permission = await Notification.requestPermission();
+	if (permission !== 'granted') return permission;
+	await savePushSubscription(await subscribeToPush(publicKey));
+	return permission;
+}
+
 export async function deletePushSubscription(subscription: PushSubscription): Promise<void> {
 	const response = await fetch('/api/push/subscriptions', {
 		method: 'DELETE',

@@ -4,7 +4,7 @@ import { htmlToPlainText } from '$lib/utils/html';
 export type AnalysisMetadata = {
 	replyTo?: string; date?: string; envelopeFrom?: string;
 	visibleTo?: string[]; visibleCc?: string[];
-	hasListUnsubscribe?: boolean; listId?: string; autoSubmitted?: string;
+	hasListUnsubscribe?: boolean; listId?: string; autoSubmitted?: string; precedence?: string;
 	authResults?: string; provider?: 'cloudflare' | 'resend';
 	attachments?: { filename: string; type: string }[];
 };
@@ -13,7 +13,7 @@ export function inboundAnalysisMetadata(headers: Headers | Record<string, string
 	const read = (name: string, max = 500) => h.get(name)?.slice(0, max) || undefined;
 	return { ...extra, provider, replyTo: read('reply-to'), date: read('date'),
 		hasListUnsubscribe: h.has('list-unsubscribe'), listId: read('list-id'),
-		autoSubmitted: read('auto-submitted'), authResults: read('authentication-results', 1500) };
+		autoSubmitted: read('auto-submitted'), precedence: read('precedence', 40), authResults: read('authentication-results', 1500) };
 }
 
 /** Remove tracking/credential parameters but keep destination identity and path. */

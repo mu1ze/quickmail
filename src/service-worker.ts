@@ -9,7 +9,26 @@ type PushPayload = {
 	body?: unknown;
 	tag?: unknown;
 	url?: unknown;
+	emailId?: unknown;
+	unread?: unknown;
 };
+
+type BadgeNavigator = WorkerNavigator & {
+	setAppBadge?: (count?: number) => Promise<void>;
+	clearAppBadge?: () => Promise<void>;
+};
+
+/** Keep the home-screen icon's count in step, even while the app is closed. */
+async function setBadge(count: unknown): Promise<void> {
+	const nav = worker.navigator as BadgeNavigator;
+	if (typeof count !== 'number' || !Number.isFinite(count) || !nav.setAppBadge) return;
+	try {
+		if (count > 0) await nav.setAppBadge(Math.round(count));
+		else await nav.clearAppBadge?.();
+	} catch {
+		/* badging needs notification permission; ignore when it is missing */
+	}
+}
 
 const worker = globalThis as unknown as ServiceWorkerGlobalScope;
 
@@ -110,22 +129,57 @@ worker.addEventListener('push', (event: PushEvent) => {
 	const payload = readPushPayload(event);
 	const url = stringValue(payload.url, '/inbox');
 
+	const emailId = typeof payload.emailId === 'string' ? payload.emailId : null;
+
 	event.waitUntil(
 		(async () => {
 			if (!(await currentAccountOwnsSubscription())) return;
-			await worker.registration.showNotification(stringValue(payload.title, 'New message'), {
+			const options: NotificationOptions & { renotify?: boolean; timestamp?: number; actions?: { action: string; title: string }[] } = {
 				body: stringValue(payload.body, 'You received a new email.'),
 				icon: '/icon-192.png',
 				badge: '/icon-192.png',
+				// One notification per conversation; a new reply replaces it and alerts again.
 				tag: stringValue(payload.tag, 'quickmail-new-message'),
-				data: { url }
-			});
+				renotify: true,
+				timestamp: Date.now(),
+				data: { url, emailId, unread: payload.unread }
+			};
+			// Shown on desktop and Android; iOS has no notification buttons and ignores them.
+			if (emailId) {
+				options.actions = [
+					{ action: 'archive', title: 'Archive' },
+					{ action: 'read', title: 'Mark as read' }
+				];
+			}
+			await Promise.all([
+				worker.registration.showNotification(stringValue(payload.title, 'New message'), options),
+				setBadge(payload.unread)
+			]);
 		})()
 	);
 });
 
 worker.addEventListener('notificationclick', (event: NotificationEvent) => {
 	event.notification.close();
+	const data = (event.notification.data ?? {}) as { emailId?: unknown; unread?: unknown };
+
+	// Archive / Mark as read act in place without opening the app.
+	if ((event.action === 'archive' || event.action === 'read') && typeof data.emailId === 'string') {
+		const emailId = data.emailId;
+		event.waitUntil(
+			(async () => {
+				const response = await fetch('/api/mail/actions', {
+					method: 'POST',
+					credentials: 'same-origin',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ action: event.action, ids: [emailId] })
+				}).catch(() => null);
+				if (response?.ok && typeof data.unread === 'number') await setBadge(Math.max(0, data.unread - 1));
+			})()
+		);
+		return;
+	}
+
 	const requested = stringValue((event.notification.data as { url?: unknown } | null)?.url, '/inbox');
 	const requestedDestination = new URL(requested, worker.location.origin);
 	const destination =

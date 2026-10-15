@@ -130,21 +130,22 @@ test('push delivery is handed to the runtime background scheduler', async () => 
 });
 
 describe('new-mail push payloads', () => {
-	test('contain no message body and link to the stored email', () => {
-		const payload = buildNewMailPayload({
-			emailId: 'mail/id',
-			userId: 'user-1',
-			from: 'Ada <ada@example.com>',
-			subject: 'Project update'
-		});
+	test('contain no message body unless previews are on, and link to the stored email', () => {
+		const input = { emailId: 'mail/id', userId: 'user-1', from: 'ada@example.com', subject: 'Project update' };
+		const details = { fromName: 'Ada Lovelace', threadId: 'thread-9', preview: 'The message body says hello', unread: 4 };
+		const payload = buildNewMailPayload(input, details);
 
 		assert.deepEqual(payload, {
-			title: 'Project update',
-			body: 'From Ada <ada@example.com>',
-			tag: 'quickmail-mail/id',
-			url: '/mail/mail%2Fid'
+			title: 'Ada Lovelace',
+			body: 'Project update',
+			tag: 'quickmail-thread-thread-9',
+			url: '/mail/mail%2Fid',
+			emailId: 'mail/id',
+			unread: 4
 		});
 		assert.equal(JSON.stringify(payload).includes('message body'), false);
+		assert.equal(buildNewMailPayload(input, details, { preview: true }).body, 'Project update\nThe message body says hello');
+		assert.equal(buildNewMailPayload(input).title, 'ada@example.com');
 	});
 
 	test('recognizes expired subscription responses', () => {

@@ -2,6 +2,7 @@ import type { LayoutServerLoad } from './$types';
 import { getMailboxCounts } from '$lib/server/mail-store';
 import type { MailboxCounts } from '$lib/types';
 import { listMailLabels } from '$lib/server/mail-labels';
+import { readVapidConfiguration } from '$lib/server/push-notifications';
 
 const EMPTY_COUNTS: MailboxCounts = {
 	inbox: 0,
@@ -30,6 +31,8 @@ export const load: LayoutServerLoad = async ({ locals, platform, depends }) => {
 		domains: locals.domains,
 		addresses: locals.addresses,
 		activeDomainId: locals.activeDomainId,
-		counts
+		counts,
+		// Lets the inbox offer to turn on notifications without a trip to Settings.
+		pushPublicKey: platform?.env ? (readVapidConfiguration(platform.env)?.publicKey ?? null) : null
 	};
 };

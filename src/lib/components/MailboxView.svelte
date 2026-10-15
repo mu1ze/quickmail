@@ -10,6 +10,7 @@
 	import AnalysisControls from './AnalysisControls.svelte';
 	import MailCategories from './MailCategories.svelte';
 	import DomainSwitcher from './DomainSwitcher.svelte';
+	import NotificationPrompt from './NotificationPrompt.svelte';
 	import { CATEGORY_LABELS } from '$lib/mail-analysis';
 	import Icon from './Icon.svelte';
 	import Check from './Check.svelte';
@@ -808,6 +809,9 @@
 	</div>
 	<div class="refine-bar">{@render filterControls()}</div>
 	</div>
+	{#if view === 'inbox' && !filters.q}
+		<NotificationPrompt publicKey={($currentPage.data.pushPublicKey ?? null) as string | null} />
+	{/if}
 	{#if filters.q}
 		<div class="search-note">
 			<Icon name="search-line" size={14} />

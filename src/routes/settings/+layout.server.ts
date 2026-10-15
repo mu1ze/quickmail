@@ -3,6 +3,8 @@ import { listApiTokens } from '$lib/server/api-tokens';
 import { BRRR_SOUND_OPTIONS, loadBrrrSettings } from '$lib/server/brrr';
 import { listSignatures } from '$lib/server/email-signature';
 import { readVapidConfiguration } from '$lib/server/push-notifications';
+import { loadNotificationPrefs } from '$lib/server/notification-preferences';
+import { DEFAULT_NOTIFICATION_PREFS } from '$lib/notification-rules';
 
 export const load: LayoutServerLoad = async ({ locals, platform }) => {
 	const db = platform?.env.DB;
@@ -34,6 +36,7 @@ export const load: LayoutServerLoad = async ({ locals, platform }) => {
 		},
 		brrr,
 		brrrSounds: BRRR_SOUND_OPTIONS,
+		notificationPrefs: locals.user && db ? await loadNotificationPrefs(db, locals.user.id) : DEFAULT_NOTIFICATION_PREFS,
 		isAdmin: locals.user?.is_admin ?? false,
 		userName: locals.user?.name ?? ''
 	};
