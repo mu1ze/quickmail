@@ -27,8 +27,8 @@
 	}
 </script>
 
-<button type="button" class="manage" aria-label="Manage labels" title="Manage labels" onclick={() => { error = ''; dialog?.showModal(); }}>
-	{#if !collapsed}<span>Labels</span>{:else}<Icon name="price-tag-3-line" size={18} />{/if}<Icon name="add-line" size={18} />
+<button type="button" class="manage" class:collapsed aria-label="Manage labels" title="Manage labels" onclick={() => { error = ''; dialog?.showModal(); }}>
+	{#if !collapsed}<span>Labels</span>{/if}<Icon name="add-line" size={18} />
 </button>
 <dialog bind:this={dialog} aria-labelledby="manage-labels-title">
 	<header><div><h2 id="manage-labels-title">Your labels</h2><p>Give conversations a place of their own.</p></div><button type="button" class="icon-btn" aria-label="Close label manager" onclick={() => dialog?.close()}><Icon name="close-line" size={20} /></button></header>
@@ -43,6 +43,7 @@
 <style>
 	.manage { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; width: 100%; padding: 0.6rem 0.875rem; color: var(--color-text-secondary); font-size: 0.75rem; font-weight: 600; }
 	.manage:hover { color: var(--color-accent-text); }
+	.manage.collapsed { justify-content: center; height: 2.5rem; padding: 0; border-radius: 12px; }
 	dialog { width: min(30rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); margin: auto; padding: 1.5rem; border: 1px solid var(--color-line); border-radius: 20px; color: var(--color-text); background: var(--color-surface); box-shadow: var(--mat-float); }
 	dialog::backdrop { background: var(--color-scrim); backdrop-filter: blur(3px); }
 	header { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }

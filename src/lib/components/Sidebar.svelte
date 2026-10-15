@@ -244,10 +244,11 @@
 	.sidebar::-webkit-scrollbar { display: none; }
 	.sidebar > * { flex-shrink: 0; }
 
+	/* The rail is just the 2.5rem icon targets with a sliver of margin. */
 	.sidebar.collapsed {
 		width: var(--sidebar-width-collapsed);
-		padding-left: 0.5rem;
-		padding-right: 0.5rem;
+		padding-left: 0.25rem;
+		padding-right: 0.25rem;
 	}
 
 	.sidebar-top {
@@ -292,7 +293,7 @@
 		background: var(--color-accent-hover);
 	}
 	.new-message kbd { margin-left: auto; font-size: 0.625rem; padding: 0.1rem 0.3rem; border: 1px solid rgba(255,255,255,0.25); border-radius: 4px; opacity: 0.65; }
-	.sidebar.collapsed .new-message { justify-content: center; padding: 0; height: 3rem; }
+	.sidebar.collapsed .new-message { justify-content: center; padding: 0; height: 2.5rem; border-radius: 12px; }
 
 	.nav {
 		display: flex;

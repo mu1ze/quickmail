@@ -43,7 +43,7 @@
 	--shadow-md: var(--mat-float);
 	--shadow-header: inset 0 -1px 0 var(--color-line);
 	--sidebar-width: 14rem;
-	--sidebar-width-collapsed: 4.5rem;
+	--sidebar-width-collapsed: 3rem;
 	--topbar-height: 4.5rem;
 	--mobile-dock-height: 4.5rem;
 	--radius-panel: 22px;
