@@ -13,8 +13,9 @@ export const LONG_THREAD_CHARS = 1500;
 /** How much of a long thread Haiku reads. */
 export const LONG_SUMMARY_INPUT_CHARS = 12000;
 
-const SUMMARY_PROMPT =
-	'Summarize opened email for an inbox row. At most two short sentences. Plain text. No greeting.';
+/** What the prompt asks for, leaving headroom under SUMMARY_MAX_CHARS. */
+const SUMMARY_TARGET_CHARS = 180;
+const SUMMARY_PROMPT = `Summarize opened email for an inbox row. At most two short sentences, under ${SUMMARY_TARGET_CHARS} characters in total. Plain text. No greeting.`;
 
 export type WorkersAiBinding = {
 	run(model: string, input: Record<string, unknown>, options?: Record<string, unknown>): Promise<unknown>;
@@ -90,7 +91,23 @@ export function parseAiSummaryResponse(raw: unknown): string | null {
 		.replace(/\s+/g, ' ')
 		.trim();
 	if (!cleaned || cleaned.length < 8) return null;
-	return cleaned.slice(0, SUMMARY_MAX_CHARS);
+	return fitSummary(cleaned);
+}
+
+/**
+ * Over-long replies end on their last full sentence instead of mid-word.
+ * With no usable sentence break, cut at a word and mark the cut.
+ */
+function fitSummary(text: string): string {
+	if (text.length <= SUMMARY_MAX_CHARS) return text;
+	const head = text.slice(0, SUMMARY_MAX_CHARS + 1);
+	let end = -1;
+	for (const match of head.matchAll(/[.!?](?=\s|$)/g)) {
+		if (match.index < SUMMARY_MAX_CHARS) end = match.index + 1;
+	}
+	if (end >= 40) return text.slice(0, end);
+	const space = text.lastIndexOf(' ', SUMMARY_MAX_CHARS - 1);
+	return `${text.slice(0, space > 0 ? space : SUMMARY_MAX_CHARS - 1).replace(/[\s,;:]+$/, '')}…`;
 }
 
 export async function loadThreadSummaries(

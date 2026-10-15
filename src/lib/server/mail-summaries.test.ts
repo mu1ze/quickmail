@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 import {
 	LONG_SUMMARY_INPUT_CHARS,
 	LONG_THREAD_CHARS,
+	SUMMARY_MAX_CHARS,
 	parseAiSummaryResponse,
 	summarizeThread,
 	type SummaryModels
@@ -17,6 +18,30 @@ describe('thread summary parser', () => {
 		assert.equal(parseAiSummaryResponse('Sure.\n```\nTeam agreed to ship Friday.\n```'), 'Team agreed to ship Friday.');
 		assert.equal(parseAiSummaryResponse('no'), null);
 		assert.equal(parseAiSummaryResponse(''), null);
+	});
+});
+
+describe('thread summary length', () => {
+	test('an over-long reply ends on its last full sentence', () => {
+		const reply =
+			'Dana moved the billing cutover from November 3 to November 10 after QA found a double-proration bug in staging. ' +
+			'She needs decisions by Wednesday noon on notifying about 1,200 legacy annual customers and on the rollback budget.';
+		const summary = parseAiSummaryResponse(reply)!;
+		assert.ok(reply.length > SUMMARY_MAX_CHARS);
+		assert.equal(
+			summary,
+			'Dana moved the billing cutover from November 3 to November 10 after QA found a double-proration bug in staging.'
+		);
+	});
+
+	test('without a usable sentence break it cuts at a word and marks the cut', () => {
+		const summary = parseAiSummaryResponse(`Launch update ${'with more detail '.repeat(20)}`)!;
+		assert.ok(summary.length <= SUMMARY_MAX_CHARS);
+		assert.ok(summary.endsWith('detail…') || summary.endsWith('more…') || summary.endsWith('with…'));
+	});
+
+	test('short replies are left alone', () => {
+		assert.equal(parseAiSummaryResponse('Team agreed to ship Friday. Ada owns the release notes.'), 'Team agreed to ship Friday. Ada owns the release notes.');
 	});
 });
 
@@ -50,6 +75,13 @@ describe('thread summary routing', () => {
 		assert.equal(calls.long.length, 1);
 		assert.ok(calls.long[0].length > LONG_THREAD_CHARS);
 		assert.ok(calls.long[0].length <= LONG_SUMMARY_INPUT_CHARS + 200);
+	});
+
+	test('the prompt states the character limit', async () => {
+		let system = '';
+		const models: SummaryModels = { summarizeLong: async (prompt) => { system = prompt; return 'Launch slipped to Friday.'; } };
+		await summarizeThread(models, { from: 'ada@example.com', subject: 'Launch', body: longBody });
+		assert.match(system, /under \d+ characters/);
 	});
 
 	test('short mail stays on Workers AI', async () => {
