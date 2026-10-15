@@ -35,8 +35,13 @@ export function nextThemePreference(current: ThemePreference): ThemePreference {
  * script in app.html so the first paint is already correct.
  */
 export function applyTheme(preference: ThemePreference): void {
-	document.documentElement.dataset.theme = resolveTheme(preference);
+	const theme = resolveTheme(preference);
+	document.documentElement.dataset.theme = theme;
+	document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_SURFACE[theme]);
 }
+
+/** The panel colour per theme, used for the browser chrome and the installed app's status bar. */
+export const THEME_SURFACE: Record<'light' | 'dark', string> = { light: '#ffffff', dark: '#191e25' };
 
 export function setThemePreference(preference: ThemePreference): void {
 	localStorage.setItem(THEME_STORAGE_KEY, preference);

@@ -96,6 +96,37 @@ body {
 	height: 100%;
 }
 
+html {
+	/* No grey flash on tap and no font inflation when the phone rotates. */
+	-webkit-tap-highlight-color: transparent;
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+}
+
+/* Installed to the home screen: behave like an app rather than a page. */
+@media (display-mode: standalone) {
+	html,
+	body {
+		/* The shell scrolls inside its panels; stop the whole window rubber-banding. */
+		overscroll-behavior: none;
+	}
+
+	/* Controls and chrome are not text: no selection handles or long-press callouts. */
+	.sidebar,
+	.topbar,
+	.dock,
+	.tabbar,
+	.ios-header,
+	.hub-header,
+	button,
+	[role='tab'],
+	[role='radio'] {
+		-webkit-user-select: none;
+		user-select: none;
+		-webkit-touch-callout: none;
+	}
+}
+
 body {
 	@apply min-h-screen bg-[var(--color-bezel)] font-sans text-[var(--color-text)] antialiased;
 	font-size: 13px;

@@ -2,8 +2,20 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<!-- maximum-scale stops iOS zooming into small inputs on focus; pinch-zoom still works. -->
+		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
 		<meta name="text-scale" content="scale" />
+
+		<!-- Installable app: home-screen icon, standalone window, status bar that follows the theme. -->
+		<link rel="manifest" href="/manifest.json" />
+		<link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png" />
+		<meta name="application-name" content="QuickMail" />
+		<meta name="apple-mobile-web-app-title" content="QuickMail" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+		<meta name="format-detection" content="telephone=no" />
+		<meta name="theme-color" content="#ffffff" />
 		<script>
 			// Resolve the theme before first paint so there is no light flash.
 			(() => {
@@ -13,6 +25,8 @@
 						stored === 'dark' ||
 						(stored === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
 					document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+					// Match the browser and status-bar colour to the app's surface (kept in sync by theme.ts).
+					document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#191e25' : '#ffffff');
 				} catch {
 					document.documentElement.dataset.theme = 'light';
 				}

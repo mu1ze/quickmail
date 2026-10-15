@@ -1,6 +1,6 @@
 <script lang="ts">
 	import './layout.css';
-	import { goto, onNavigate } from '$app/navigation';
+	import { goto, invalidateAll, onNavigate } from '$app/navigation';
 	import { page } from '$app/stores';
 	import favicon from '$lib/assets/favicon.svg';
 	import Sidebar from '$lib/components/Sidebar.svelte';
@@ -63,6 +63,27 @@
 
 	// app.html already applied the theme; this keeps "System" live afterwards.
 	$effect(() => watchSystemTheme());
+
+	// An installed app has no reload button and iOS keeps it suspended in the background,
+	// so pick up new mail when it comes back to the foreground after a while.
+	$effect(() => {
+		if (!showShell) return;
+		let hiddenAt = 0;
+		const onVisibility = () => {
+			if (document.visibilityState === 'hidden') hiddenAt = Date.now();
+			else if (hiddenAt && Date.now() - hiddenAt > 30_000) void invalidateAll();
+		};
+		document.addEventListener('visibilitychange', onVisibility);
+		return () => document.removeEventListener('visibilitychange', onVisibility);
+	});
+
+	// The unread count on the home-screen icon (iOS 16.4+ once notifications are allowed).
+	$effect(() => {
+		const unread = showShell ? (data.counts?.inbox_unread ?? 0) : 0;
+		const nav = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
+		if (!nav.setAppBadge) return;
+		void (unread > 0 ? nav.setAppBadge(unread) : nav.clearAppBadge?.())?.catch(() => {});
+	});
 
 	// Remember the collapsed sidebar between visits.
 	$effect(() => {

@@ -2,7 +2,7 @@
 /// <reference lib="esnext" />
 /// <reference lib="webworker" />
 
-export {};
+import { version } from '$service-worker';
 
 type PushPayload = {
 	title?: unknown;
@@ -13,12 +13,64 @@ type PushPayload = {
 
 const worker = globalThis as unknown as ServiceWorkerGlobalScope;
 
-worker.addEventListener('install', () => {
-	void worker.skipWaiting();
+const CACHE = `quickmail-${version}`;
+/** Shown when a page can't be reached; kept small so installing stays cheap. */
+const OFFLINE_PAGE = '/offline.html';
+const PRECACHE = [OFFLINE_PAGE, '/icon-192.png'];
+
+worker.addEventListener('install', (event) => {
+	event.waitUntil(
+		(async () => {
+			const cache = await caches.open(CACHE);
+			await cache.addAll(PRECACHE).catch(() => {});
+			await worker.skipWaiting();
+		})()
+	);
 });
 
 worker.addEventListener('activate', (event) => {
-	event.waitUntil(worker.clients.claim());
+	event.waitUntil(
+		(async () => {
+			for (const key of await caches.keys()) {
+				if (key !== CACHE && key.startsWith('quickmail-')) await caches.delete(key);
+			}
+			await worker.clients.claim();
+		})()
+	);
+});
+
+/**
+ * Deliberately narrow caching:
+ * - Fingerprinted app code under /_app/immutable/ is cache-first; its URL changes
+ *   whenever it does, so it can never be stale. This is what makes launches fast.
+ * - Page loads go to the network and fall back to the offline page only when it fails.
+ * - Everything else (mail data, API calls, images) is left to the network untouched.
+ */
+worker.addEventListener('fetch', (event: FetchEvent) => {
+	const { request } = event;
+	if (request.method !== 'GET') return;
+	const url = new URL(request.url);
+	if (url.origin !== worker.location.origin) return;
+
+	if (url.pathname.startsWith('/_app/immutable/')) {
+		event.respondWith(
+			(async () => {
+				const cache = await caches.open(CACHE);
+				const hit = await cache.match(request);
+				if (hit) return hit;
+				const response = await fetch(request);
+				if (response.ok) await cache.put(request, response.clone());
+				return response;
+			})()
+		);
+		return;
+	}
+
+	if (request.mode === 'navigate') {
+		event.respondWith(
+			fetch(request).catch(async () => (await caches.match(OFFLINE_PAGE)) ?? Response.error())
+		);
+	}
 });
 
 function stringValue(value: unknown, fallback: string): string {
@@ -63,8 +115,8 @@ worker.addEventListener('push', (event: PushEvent) => {
 			if (!(await currentAccountOwnsSubscription())) return;
 			await worker.registration.showNotification(stringValue(payload.title, 'New message'), {
 				body: stringValue(payload.body, 'You received a new email.'),
-				icon: '/favicon.svg',
-				badge: '/favicon.svg',
+				icon: '/icon-192.png',
+				badge: '/icon-192.png',
 				tag: stringValue(payload.tag, 'quickmail-new-message'),
 				data: { url }
 			});

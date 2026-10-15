@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+		<meta name="theme-color" content="#191e25" media="(prefers-color-scheme: dark)" />
+		<title>Offline — QuickMail</title>
+		<style>
+			:root {
+				color-scheme: light dark;
+				--bg: #ffffff;
+				--text: #202831;
+				--muted: #5f6b76;
+				--accent: #356c55;
+				--on-accent: #f5f7f9;
+			}
+			@media (prefers-color-scheme: dark) {
+				:root {
+					--bg: #191e25;
+					--text: #edf1f5;
+					--muted: #a6b1be;
+					--accent: #add9bd;
+					--on-accent: #17271e;
+				}
+			}
+			html,
+			body {
+				height: 100%;
+				margin: 0;
+			}
+			body {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				padding: max(2rem, env(safe-area-inset-top)) 1.5rem max(2rem, env(safe-area-inset-bottom));
+				box-sizing: border-box;
+				background: var(--bg);
+				color: var(--text);
+				font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+				text-align: center;
+				-webkit-tap-highlight-color: transparent;
+			}
+			main {
+				max-width: 20rem;
+			}
+			img {
+				width: 64px;
+				height: 64px;
+				border-radius: 16px;
+			}
+			h1 {
+				margin: 1.25rem 0 0.5rem;
+				font-size: 1.25rem;
+				font-weight: 600;
+				letter-spacing: -0.02em;
+			}
+			p {
+				margin: 0 0 1.5rem;
+				color: var(--muted);
+			}
+			button {
+				min-height: 44px;
+				padding: 0 1.25rem;
+				border: 0;
+				border-radius: 12px;
+				background: var(--accent);
+				color: var(--on-accent);
+				font: inherit;
+				font-weight: 500;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<img src="/icon-192.png" alt="" />
+			<h1>You're offline</h1>
+			<p>QuickMail needs a connection to load your mail. It will pick up where you left off once you're back online.</p>
+			<button type="button" onclick="location.reload()">Try again</button>
+		</main>
+		<script>
+			window.addEventListener('online', () => location.reload());
+		</script>
+	</body>
+</html>
