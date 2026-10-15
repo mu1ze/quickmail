@@ -17,6 +17,8 @@ declare global {
 		PUBLIC_APP_URL?: string;
 		PASSWORD_RESET_KEY?: string;
 		SUBQ_API_KEY?: string;
+		/** OpenRouter key for long-thread summaries (Claude Haiku 5.5). */
+		OPENROUTER_API_KEY?: string;
 		MAIL_ANALYSIS_QUEUE?: Queue<import('$lib/server/mail-analysis-jobs').AnalysisQueueMessage>;
 		/** Workers AI. Absent in local-bindings mode; automations then skip the model. */
 		AI?: {

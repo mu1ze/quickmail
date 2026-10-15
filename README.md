@@ -215,6 +215,16 @@ handler has no request URL to guess from.
 bun run db:migrate:remote
 ```
 
+### Long-thread summaries (optional)
+
+AI summaries (**Settings → Automations**) use Workers AI. Threads too long for
+its prompt go to Claude Haiku 5.5 through [OpenRouter](https://openrouter.ai/keys)
+when a key is set; without one, or if OpenRouter fails, they fall back to Workers AI.
+
+```bash
+bunx wrangler secret put OPENROUTER_API_KEY
+```
+
 ## Development
 
 Optional incoming email categorization and triage use SubQ Snap. See

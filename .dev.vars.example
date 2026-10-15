@@ -3,6 +3,10 @@
 
 # Optional incoming analysis (SubQ Snap). Enable per account in Settings → Automations.
 # SUBQ_API_KEY=...
+
+# Optional: AI summaries of long threads use Claude Haiku 5.5 through OpenRouter
+# (https://openrouter.ai/keys). Without it, every summary uses Workers AI.
+# OPENROUTER_API_KEY=sk-or-...
 #
 # In production these live as Worker secrets / vars instead.
 

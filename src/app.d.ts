@@ -31,6 +31,8 @@ declare global {
 				/** Shared secret required by /recover. Set with wrangler secret put. */
 				PASSWORD_RESET_KEY?: string;
 				SUBQ_API_KEY?: string;
+				/** OpenRouter key for long-thread summaries (Claude Haiku 5.5). Set with wrangler secret put. */
+				OPENROUTER_API_KEY?: string;
 				MAIL_ANALYSIS_QUEUE?: Queue<import('$lib/server/mail-analysis-jobs').AnalysisQueueMessage>;
 				/** Workers AI. Missing locally unless the AI binding is available. */
 				AI?: {

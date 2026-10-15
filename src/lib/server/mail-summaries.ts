@@ -1,3 +1,4 @@
+import Anthropic from '@anthropic-ai/sdk';
 import type { D1Database } from '@cloudflare/workers-types';
 import { extractAiText } from './mail-classify';
 import { htmlToPreviewText } from '$lib/utils/message-preview';
@@ -5,10 +6,59 @@ import { htmlToPreviewText } from '$lib/utils/message-preview';
 export const SUMMARY_BATCH = 20;
 export const SUMMARY_MAX_CHARS = 220;
 export const AI_SUMMARY_MODEL = '@cf/meta/llama-3.2-3b-instruct';
+/** Claude Haiku 5.5 through OpenRouter, for threads too long for the Workers AI model. */
+export const LONG_SUMMARY_MODEL = 'anthropic/claude-haiku-5.5';
+/** The Workers AI prompt only fits this much body; longer threads go to Haiku. */
+export const LONG_THREAD_CHARS = 1500;
+/** How much of a long thread Haiku reads. */
+export const LONG_SUMMARY_INPUT_CHARS = 12000;
+
+const SUMMARY_PROMPT =
+	'Summarize opened email for an inbox row. At most two short sentences. Plain text. No greeting.';
 
 export type WorkersAiBinding = {
 	run(model: string, input: Record<string, unknown>, options?: Record<string, unknown>): Promise<unknown>;
 };
+
+/** Returns the model's reply text, or null when it declined. */
+export type LongSummarizer = (system: string, user: string) => Promise<string | null>;
+
+/** Workers AI for short mail; Haiku for long threads when an OpenRouter key is set. */
+export type SummaryModels = {
+	ai?: WorkersAiBinding | null;
+	summarizeLong?: LongSummarizer | null;
+};
+
+export function openRouterSummarizer(apiKey: string): LongSummarizer {
+	// OpenRouter serves the Anthropic Messages API, authenticated with a bearer key.
+	const client = new Anthropic({
+		baseURL: 'https://openrouter.ai/api',
+		apiKey: null,
+		authToken: apiKey,
+		maxRetries: 1,
+		timeout: 20_000
+	});
+	return async (system, user) => {
+		const message = await client.messages.create({
+			model: LONG_SUMMARY_MODEL,
+			max_tokens: 1024,
+			system,
+			messages: [{ role: 'user', content: user }]
+		});
+		if (message.stop_reason === 'refusal') return null;
+		const text = message.content.map((block) => (block.type === 'text' ? block.text : '')).join('');
+		return text.trim() || null;
+	};
+}
+
+export function summaryModels(env: { AI?: WorkersAiBinding; OPENROUTER_API_KEY?: string }): SummaryModels {
+	const key = env.OPENROUTER_API_KEY?.trim();
+	return { ai: env.AI ?? null, summarizeLong: key ? openRouterSummarizer(key) : null };
+}
+
+function hasSummaryModel(models: SummaryModels): boolean {
+	return Boolean(models.ai || models.summarizeLong);
+}
 
 export type ThreadSummaryRow = {
 	thread_id: string;
@@ -24,10 +74,10 @@ type OpenedThread = {
 	body_head: string | null;
 };
 
-function previewBody(body: string | null): string {
+function bodyText(body: string | null): string {
 	if (!body) return '';
 	const text = /<[a-z][\s\S]*>/i.test(body) ? htmlToPreviewText(body) : body;
-	return text.replace(/\s+/g, ' ').trim().slice(0, 1500);
+	return text.replace(/\s+/g, ' ').trim();
 }
 
 export function parseAiSummaryResponse(raw: unknown): string | null {
@@ -85,19 +135,32 @@ export async function saveThreadSummary(
 		.run();
 }
 
-async function generateSummary(ai: WorkersAiBinding, thread: OpenedThread): Promise<string | null> {
+/** Long threads go to Haiku first; anything it can't do falls back to Workers AI. */
+export async function summarizeThread(
+	models: SummaryModels,
+	thread: { from: string; subject: string; body: string | null }
+): Promise<string | null> {
+	const body = bodyText(thread.body);
+	const prompt = (text: string) => `From: ${thread.from}\nSubject: ${thread.subject}\nBody: ${text}`;
+
+	if (body.length > LONG_THREAD_CHARS && models.summarizeLong) {
+		try {
+			const summary = parseAiSummaryResponse(
+				await models.summarizeLong(SUMMARY_PROMPT, prompt(body.slice(0, LONG_SUMMARY_INPUT_CHARS)))
+			);
+			if (summary) return summary;
+		} catch (error) {
+			const status = error instanceof Anthropic.APIError ? error.status : undefined;
+			console.warn('long thread summary failed; using Workers AI', status ?? error);
+		}
+	}
+
+	if (!models.ai) return null;
 	try {
-		const raw = await ai.run(AI_SUMMARY_MODEL, {
+		const raw = await models.ai.run(AI_SUMMARY_MODEL, {
 			messages: [
-				{
-					role: 'system',
-					content:
-						'Summarize opened email for an inbox row. At most two short sentences. Plain text. No greeting.'
-				},
-				{
-					role: 'user',
-					content: `From: ${thread.from_addr}\nSubject: ${thread.subject}\nBody: ${previewBody(thread.body_head)}`
-				}
+				{ role: 'system', content: SUMMARY_PROMPT },
+				{ role: 'user', content: prompt(body.slice(0, LONG_THREAD_CHARS)) }
 			],
 			max_tokens: 120
 		});
@@ -115,7 +178,7 @@ async function listOpenedThreadsNeedingSummary(
 	const { results } = await db
 		.prepare(
 			`SELECT COALESCE(e.thread_id, e.id) AS thread_id, e.id AS latest_id, e.from_addr, e.subject,
-			        substr(COALESCE(NULLIF(trim(e.body_text), ''), e.body_html, ''), 1, 4000) AS body_head
+			        substr(COALESCE(NULLIF(trim(e.body_text), ''), e.body_html, ''), 1, ${LONG_SUMMARY_INPUT_CHARS}) AS body_head
 			 FROM emails e
 			 WHERE e.user_id = ?
 			   AND e.direction = 'inbound'
@@ -144,13 +207,17 @@ async function listOpenedThreadsNeedingSummary(
 export async function backfillThreadSummaries(
 	db: D1Database,
 	userId: string,
-	ai: WorkersAiBinding
+	models: SummaryModels
 ): Promise<number> {
 	const threads = await listOpenedThreadsNeedingSummary(db, userId);
 	let written = 0;
 
 	for (const thread of threads) {
-		const summary = await generateSummary(ai, thread);
+		const summary = await summarizeThread(models, {
+			from: thread.from_addr,
+			subject: thread.subject,
+			body: thread.body_head
+		});
 		if (!summary) continue;
 		await saveThreadSummary(db, userId, {
 			thread_id: thread.thread_id,
@@ -165,11 +232,11 @@ export async function backfillThreadSummaries(
 
 export async function maybeRefreshThreadSummary(
 	db: D1Database,
-	ai: WorkersAiBinding | null | undefined,
+	models: SummaryModels,
 	userId: string,
 	thread: { threadId: string; latestId: string; from: string; subject: string; body: string | null }
 ): Promise<boolean> {
-	if (!ai) return false;
+	if (!hasSummaryModel(models)) return false;
 
 	const enabled = await db
 		.prepare('SELECT ai_summaries FROM mail_automations WHERE user_id = ?')
@@ -185,13 +252,7 @@ export async function maybeRefreshThreadSummary(
 		.first<{ source_latest_id: string }>();
 	if (existing?.source_latest_id === thread.latestId) return false;
 
-	const summary = await generateSummary(ai, {
-		thread_id: thread.threadId,
-		latest_id: thread.latestId,
-		from_addr: thread.from,
-		subject: thread.subject,
-		body_head: thread.body
-	});
+	const summary = await summarizeThread(models, thread);
 	if (!summary) return false;
 
 	await saveThreadSummary(db, userId, {

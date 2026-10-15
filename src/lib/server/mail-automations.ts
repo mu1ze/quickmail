@@ -10,7 +10,7 @@ import {
 	type ClassifyDecision,
 	type ClassifyInput
 } from './mail-classify';
-import { backfillThreadSummaries, type WorkersAiBinding } from './mail-summaries';
+import { backfillThreadSummaries, summaryModels, type WorkersAiBinding } from './mail-summaries';
 
 export const CLEANUP_BATCH = 100;
 export const WEEKLY_CRON = '0 8 * * 0';
@@ -308,7 +308,8 @@ export async function runUserCleanup(
 export async function runUserAutomations(
 	db: D1Database,
 	userId: string,
-	ai?: WorkersAiBinding | null
+	ai?: WorkersAiBinding | null,
+	openRouterKey?: string
 ): Promise<{ scanned: number; trashed: number; summarized: number }> {
 	const settings = await loadMailAutomations(db, userId);
 	let scanned = 0;
@@ -321,8 +322,9 @@ export async function runUserAutomations(
 		trashed = cleanup.trashed;
 	}
 
-	if (settings.aiSummaries && ai) {
-		summarized = await backfillThreadSummaries(db, userId, ai);
+	const summaries = summaryModels({ AI: ai ?? undefined, OPENROUTER_API_KEY: openRouterKey });
+	if (settings.aiSummaries && (summaries.ai || summaries.summarizeLong)) {
+		summarized = await backfillThreadSummaries(db, userId, summaries);
 	}
 
 	return { scanned, trashed, summarized };
@@ -336,6 +338,7 @@ export async function runUserAutomations(
 export async function runWeeklyMailAutomations(env: {
 	DB: D1Database;
 	AI?: WorkersAiBinding;
+	OPENROUTER_API_KEY?: string;
 }): Promise<WeeklyAutomationsResult> {
 	const users = await listUsers(env.DB);
 	const totals: WeeklyAutomationsResult = { users: 0, scanned: 0, trashed: 0, summarized: 0 };
@@ -345,7 +348,7 @@ export async function runWeeklyMailAutomations(env: {
 			const settings = await loadMailAutomations(env.DB, user.id);
 			if (!settings.weeklyCleanup && !settings.aiSummaries) continue;
 			totals.users += 1;
-			const result = await runUserAutomations(env.DB, user.id, env.AI);
+			const result = await runUserAutomations(env.DB, user.id, env.AI, env.OPENROUTER_API_KEY);
 			totals.scanned += result.scanned;
 			totals.trashed += result.trashed;
 			totals.summarized += result.summarized;

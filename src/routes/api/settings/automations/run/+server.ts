@@ -25,7 +25,7 @@ export const POST: RequestHandler = async ({ locals, platform }) => {
 		);
 	}
 
-	const result = await runUserAutomations(db, locals.user.id, platform.env.AI);
+	const result = await runUserAutomations(db, locals.user.id, platform.env.AI, platform.env.OPENROUTER_API_KEY);
 	const next = await loadMailAutomations(db, locals.user.id);
 	return json({
 		...result,

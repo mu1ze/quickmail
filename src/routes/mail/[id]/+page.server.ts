@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { getEmailForUser, listThreadMessages } from '$lib/server/mail-store';
 import { listSignatures } from '$lib/server/email-signature';
-import { maybeRefreshThreadSummary } from '$lib/server/mail-summaries';
+import { maybeRefreshThreadSummary, summaryModels } from '$lib/server/mail-summaries';
 import { resolveReplyFromAddress } from '$lib/server/outbox';
 import { displaySubject } from '$lib/server/threads';
 import { loadThreadLabels } from '$lib/server/mail-labels';
@@ -25,9 +25,9 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
 	const replyIdentity = await resolveReplyFromAddress(platform.env.DB, locals.user, latest);
 	const signatures = await listSignatures(platform.env.DB, locals.user.id);
 
-	if (platform.env.AI && platform.ctx) {
+	if ((platform.env.AI || platform.env.OPENROUTER_API_KEY) && platform.ctx) {
 		platform.ctx.waitUntil(
-			maybeRefreshThreadSummary(platform.env.DB, platform.env.AI, locals.user.id, {
+			maybeRefreshThreadSummary(platform.env.DB, summaryModels(platform.env), locals.user.id, {
 				threadId: email.thread_id ?? email.id,
 				latestId: latest.id,
 				from: latest.from_addr,
