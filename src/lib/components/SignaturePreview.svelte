@@ -1,14 +1,17 @@
 <script lang="ts">
 	let {
 		html,
-		empty = 'No signature'
+		empty = 'No signature',
+		dark = false
 	}: {
 		html: string;
 		empty?: string;
+		/** Show it on a dark email background, matching the chosen matte. */
+		dark?: boolean;
 	} = $props();
 </script>
 
-<div class="preview" class:empty={!html}>
+<div class="preview" class:empty={!html} class:dark>
 	{#if html}
 		<!-- Compiled output only: every field is escaped in compileSignature. -->
 		{@html html}
@@ -25,6 +28,11 @@
 		color: #222222;
 		box-shadow: inset 0 0 0 1px var(--color-line);
 		overflow: auto;
+	}
+
+	.preview.dark {
+		background: #1f1f1f;
+		color: #e8e8e8;
 	}
 
 	.preview.empty {

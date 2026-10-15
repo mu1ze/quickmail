@@ -1,3 +1,5 @@
+import { isLiveDate, isValidTimeZone, liveStatusPath, pickLiveState } from './signature-live';
+
 export const SIGNATURE_LAYOUTS = ['plain', 'stacked', 'photo', 'logo'] as const;
 export type SignatureLayout = (typeof SIGNATURE_LAYOUTS)[number];
 
@@ -9,8 +11,37 @@ export type SignatureSocialKind = (typeof SIGNATURE_SOCIALS)[number];
  * set because the CSS is emitted verbatim into outbound mail — a fixed enum
  * means no user string ever reaches a stylesheet.
  */
-export const SIGNATURE_ANIMATIONS = ['none', 'float', 'pulse', 'spin', 'wave', 'glow'] as const;
+export const SIGNATURE_ANIMATIONS = ['none', 'halo', 'ripple', 'float', 'shine', 'glow', 'pulse', 'wave', 'spin'] as const;
 export type SignatureAnimation = (typeof SIGNATURE_ANIMATIONS)[number];
+
+/** Background the animated images are rendered against (GIF has no soft transparency). */
+export const SIGNATURE_MATTES = ['light', 'dark'] as const;
+export type SignatureMatte = (typeof SIGNATURE_MATTES)[number];
+
+export const SIGNATURE_SCRIPT_FONTS = ['vibes', 'allura', 'caveat', 'apple'] as const;
+export type SignatureScriptFont = (typeof SIGNATURE_SCRIPT_FONTS)[number];
+
+/**
+ * An image rendered in the browser (animated GIF or PNG) and stored as a
+ * signature asset. `key` fingerprints the inputs it was rendered from, so the
+ * editor knows when it is stale.
+ */
+export type BakedImage = { id: string; w: number; h: number; key: string };
+
+export type SignatureScript = { enabled: boolean; font: SignatureScriptFont; loop: boolean };
+
+export type SignatureLive = {
+	enabled: boolean;
+	tz: string;
+	start: number;
+	end: number;
+	days: number[];
+	city: string;
+	oooFrom: string;
+	oooTo: string;
+};
+
+export type SignatureLiveImages = { available: BakedImage | null; away: BakedImage | null; ooo: BakedImage | null };
 
 export type SignatureSocial = {
 	kind: SignatureSocialKind;
@@ -33,6 +64,14 @@ export type SignatureConfig = {
 	socials: SignatureSocial[];
 	/** Used when layout is `plain`. */
 	text: string;
+	matte: SignatureMatte;
+	/** The photo/logo with its animation baked into a GIF, so it moves in Gmail and Outlook too. */
+	motion: BakedImage | null;
+	script: SignatureScript;
+	/** The name written out in a script font, revealed stroke by stroke. */
+	scriptImage: BakedImage | null;
+	live: SignatureLive;
+	liveImages: SignatureLiveImages;
 };
 
 export const DEFAULT_SIGNATURE_ACCENT = '#1a1a1a';
@@ -64,7 +103,13 @@ export const EMPTY_SIGNATURE: SignatureConfig = {
 	logoId: null,
 	animation: 'none',
 	socials: [],
-	text: ''
+	text: '',
+	matte: 'light',
+	motion: null,
+	script: { enabled: false, font: 'vibes', loop: false },
+	scriptImage: null,
+	live: { enabled: false, tz: 'UTC', start: 9 * 60, end: 17 * 60, days: [1, 2, 3, 4, 5], city: '', oooFrom: '', oooTo: '' },
+	liveImages: { available: null, away: null, ooo: null }
 };
 
 export function escapeSignatureHtml(value: string): string {
@@ -125,6 +170,43 @@ function isAnimation(value: unknown): value is SignatureAnimation {
 	return typeof value === 'string' && (SIGNATURE_ANIMATIONS as readonly string[]).includes(value);
 }
 
+function sanitizeBaked(value: unknown): BakedImage | null {
+	if (!value || typeof value !== 'object') return null;
+	const raw = value as Partial<BakedImage>;
+	if (!isSignatureAssetId(raw.id ?? null)) return null;
+	const w = Math.round(Number(raw.w));
+	const h = Math.round(Number(raw.h));
+	if (!(w > 0 && w <= 600 && h > 0 && h <= 300)) return null;
+	const key = typeof raw.key === 'string' ? raw.key.slice(0, 200) : '';
+	return { id: raw.id as string, w, h, key };
+}
+
+function sanitizeMinutes(value: unknown, fallback: number): number {
+	const n = Math.round(Number(value));
+	return Number.isFinite(n) && n >= 0 && n <= 1440 ? n - (n % 15) : fallback;
+}
+
+function sanitizeLive(input: Partial<SignatureLive> | undefined): SignatureLive {
+	const base = EMPTY_SIGNATURE.live;
+	const days = Array.isArray(input?.days)
+		? [...new Set(input.days.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))].sort()
+		: base.days;
+	const tz = typeof input?.tz === 'string' && isValidTimeZone(input.tz) ? input.tz : base.tz;
+	let oooFrom = typeof input?.oooFrom === 'string' && isLiveDate(input.oooFrom) ? input.oooFrom : '';
+	let oooTo = typeof input?.oooTo === 'string' && isLiveDate(input.oooTo) ? input.oooTo : '';
+	if (!oooFrom || !oooTo || oooFrom > oooTo) oooFrom = oooTo = '';
+	return {
+		enabled: input?.enabled === true,
+		tz,
+		start: sanitizeMinutes(input?.start, base.start),
+		end: sanitizeMinutes(input?.end, base.end),
+		days,
+		city: clip(typeof input?.city === 'string' ? input.city : '', 40),
+		oooFrom,
+		oooTo
+	};
+}
+
 export function sanitizeSignatureConfig(input: Partial<SignatureConfig> | null | undefined): SignatureConfig {
 	const socials: SignatureSocial[] = [];
 	if (Array.isArray(input?.socials)) {
@@ -151,7 +233,23 @@ export function sanitizeSignatureConfig(input: Partial<SignatureConfig> | null |
 		logoId: sanitizeAssetId(input?.logoId),
 		animation: isAnimation(input?.animation) ? input.animation : 'none',
 		socials,
-		text: (input?.text ?? '').replace(/\r\n?/g, '\n').trimEnd().slice(0, MAX_SIGNATURE_TEXT_LENGTH).trim()
+		text: (input?.text ?? '').replace(/\r\n?/g, '\n').trimEnd().slice(0, MAX_SIGNATURE_TEXT_LENGTH).trim(),
+		matte: input?.matte === 'dark' ? 'dark' : 'light',
+		motion: sanitizeBaked(input?.motion),
+		script: {
+			enabled: input?.script?.enabled === true,
+			font: (SIGNATURE_SCRIPT_FONTS as readonly string[]).includes(input?.script?.font ?? '')
+				? (input!.script!.font as SignatureScriptFont)
+				: 'vibes',
+			loop: input?.script?.loop === true
+		},
+		scriptImage: sanitizeBaked(input?.scriptImage),
+		live: sanitizeLive(input?.live),
+		liveImages: {
+			available: sanitizeBaked(input?.liveImages?.available),
+			away: sanitizeBaked(input?.liveImages?.away),
+			ooo: sanitizeBaked(input?.liveImages?.ooo)
+		}
 	};
 }
 
@@ -171,7 +269,7 @@ export function isSignatureEmpty(config: SignatureConfig): boolean {
 }
 
 /** Stored form: compact JSON for templates, raw text for a plain-only sign-off. */
-export function serializeSignatureConfig(config: SignatureConfig): string {
+export function serializeSignatureConfig(config: Partial<SignatureConfig>): string {
 	const sanitized = sanitizeSignatureConfig(config);
 	if (isSignatureEmpty(sanitized)) return '';
 	if (sanitized.layout === 'plain' && !hasStructuredFields(sanitized)) {
@@ -301,6 +399,9 @@ function wrapTable(inner: string): string {
 
 /** Keyframe bodies per preset. `ACCENT` is swapped for the sanitized accent hex. */
 const ANIMATION_KEYFRAMES: Record<Exclude<SignatureAnimation, 'none'>, string> = {
+	halo: 'to{transform:rotate(360deg)}',
+	ripple: '0%,100%{transform:scale(1)}50%{transform:scale(1.05)}',
+	shine: '0%,100%{filter:brightness(1)}50%{filter:brightness(1.12)}',
 	float: '0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}',
 	pulse: '0%,100%{transform:scale(1)}50%{transform:scale(1.08)}',
 	spin: 'to{transform:rotate(360deg)}',
@@ -310,6 +411,9 @@ const ANIMATION_KEYFRAMES: Record<Exclude<SignatureAnimation, 'none'>, string> =
 
 /** Timing/easing per preset, appended after the shared `NAME` animation name. */
 const ANIMATION_TIMING: Record<Exclude<SignatureAnimation, 'none'>, string> = {
+	halo: '8s linear infinite;transform-origin:center',
+	ripple: '2.4s ease-in-out infinite',
+	shine: '3s ease-in-out infinite',
 	float: '3s ease-in-out infinite',
 	pulse: '2.4s ease-in-out infinite',
 	spin: '6s linear infinite;transform-origin:center',
@@ -341,9 +445,52 @@ function buildImageAnimation(
 	return { style, className };
 }
 
+export type CompileOptions = {
+	/** Where each asset is served from; the editor maps unsaved renders to local blob URLs. */
+	assetUrl?: (assetId: string) => string;
+	/** Show the live badge for `now` directly instead of linking the server endpoint. */
+	preview?: boolean;
+	now?: Date;
+};
+
+function bakedImg(image: BakedImage, url: string, alt: string): string {
+	return `<img src="${escapeSignatureHtml(url)}" width="${image.w}" height="${image.h}" alt="${escapeSignatureHtml(alt)}" style="display:block;border:0;width:${image.w}px;height:${image.h}px;">`;
+}
+
+/** The rendered name, the typed details, then the live badge. */
+function detailsBlock(config: SignatureConfig, resolve: (id: string) => string, origin: string, options: CompileOptions): string {
+	const parts: string[] = [];
+	if (config.script.enabled && config.scriptImage) {
+		parts.push(`<div style="padding-bottom:4px;">${bakedImg(config.scriptImage, resolve(config.scriptImage.id), config.name || 'Signature')}</div>`);
+	}
+	parts.push(detailsHtml(config));
+	const live = liveBadge(config, resolve, origin, options);
+	if (live) parts.push(`<div style="padding-top:8px;">${live}</div>`);
+	return parts.join('');
+}
+
+function liveBadge(config: SignatureConfig, resolve: (id: string) => string, origin: string, options: CompileOptions): string {
+	const { live, liveImages } = config;
+	if (!live.enabled || !liveImages.available || !liveImages.away) return '';
+	const hasOoo = Boolean(liveImages.ooo && live.oooFrom && live.oooTo);
+	if (options.preview) {
+		const state = pickLiveState(options.now ?? new Date(), live, hasOoo);
+		const image = (state === 'ooo' ? liveImages.ooo : liveImages[state]) ?? liveImages.away;
+		return bakedImg(image, resolve(image.id), 'Availability');
+	}
+	if (!origin) return '';
+	const path = liveStatusPath(
+		{ available: liveImages.available.id, away: liveImages.away.id, ooo: hasOoo ? liveImages.ooo!.id : null },
+		live
+	);
+	// Every state is rendered at the same size, so the layout never shifts between opens.
+	return bakedImg(liveImages.available, `${origin.replace(/\/$/, '')}${path}`, 'Availability');
+}
+
 export function compileSignature(
-	config: SignatureConfig,
-	origin = ''
+	config: Partial<SignatureConfig>,
+	origin = '',
+	options: CompileOptions = {}
 ): { html: string; text: string } {
 	const sanitized = sanitizeSignatureConfig(config);
 	if (isSignatureEmpty(sanitized)) return { html: '', text: '' };
@@ -353,29 +500,31 @@ export function compileSignature(
 		return { html: escapeSignatureHtml(text).replaceAll('\n', '<br>\n'), text };
 	}
 
-	const details = detailsHtml(sanitized);
+	const resolve = options.assetUrl ?? ((id: string) => (origin ? signatureAssetUrl(origin, id) : ''));
+	const details = detailsBlock(sanitized, resolve, origin, options);
 	const text = detailsText(sanitized);
 
 	const photoUrl =
-		sanitized.layout === 'photo' && sanitized.photoId && origin
-			? signatureAssetUrl(origin, sanitized.photoId)
-			: '';
+		sanitized.layout === 'photo' && sanitized.photoId ? resolve(sanitized.photoId) : '';
 	const logoUrl =
-		sanitized.layout === 'logo' && sanitized.logoId && origin
-			? signatureAssetUrl(origin, sanitized.logoId)
-			: '';
+		sanitized.layout === 'logo' && sanitized.logoId ? resolve(sanitized.logoId) : '';
+	// A baked animation replaces the still image; CSS motion is only a fallback for older signatures.
+	const motion = sanitized.animation !== 'none' ? sanitized.motion : null;
 
 	// A photo/logo can stand on its own — an animated mark is a valid sign-off
 	// with no words. Only bail when there is neither an image nor any detail.
 	if (!details && !photoUrl && !logoUrl) return { html: '', text: '' };
 
 	if (photoUrl) {
-		const motion = buildImageAnimation(sanitized.animation, sanitized.photoId as string, sanitized.accent);
-		const classAttr = motion.className ? ` class="${motion.className}"` : '';
 		const detailsCell = details ? `<td valign="top">${details}</td>` : '';
 		const pad = details ? 'padding-right:14px;' : '';
+		if (motion) {
+			return { html: wrapTable(`<tr><td valign="top" style="${pad}">${bakedImg(motion, resolve(motion.id), '')}</td>${detailsCell}</tr>`), text };
+		}
+		const css = buildImageAnimation(sanitized.animation, sanitized.photoId as string, sanitized.accent);
+		const classAttr = css.className ? ` class="${css.className}"` : '';
 		const html =
-			motion.style +
+			css.style +
 			wrapTable(
 				`<tr><td valign="top" style="${pad}"><img${classAttr} src="${escapeSignatureHtml(photoUrl)}" width="72" height="72" alt="" style="display:block;border:0;width:72px;height:72px;object-fit:cover;"></td>${detailsCell}</tr>`
 			);
@@ -383,12 +532,15 @@ export function compileSignature(
 	}
 
 	if (logoUrl) {
-		const motion = buildImageAnimation(sanitized.animation, sanitized.logoId as string, sanitized.accent);
-		const classAttr = motion.className ? ` class="${motion.className}"` : '';
 		const detailsRow = details ? `<tr><td>${details}</td></tr>` : '';
 		const pad = details ? 'padding-bottom:10px;' : '';
+		if (motion) {
+			return { html: wrapTable(`<tr><td style="${pad}">${bakedImg(motion, resolve(motion.id), '')}</td></tr>${detailsRow}`), text };
+		}
+		const css = buildImageAnimation(sanitized.animation, sanitized.logoId as string, sanitized.accent);
+		const classAttr = css.className ? ` class="${css.className}"` : '';
 		const html =
-			motion.style +
+			css.style +
 			wrapTable(
 				`<tr><td style="${pad}"><img${classAttr} src="${escapeSignatureHtml(logoUrl)}" alt="" height="36" style="display:block;border:0;max-height:36px;height:36px;width:auto;"></td></tr>${detailsRow}`
 			);

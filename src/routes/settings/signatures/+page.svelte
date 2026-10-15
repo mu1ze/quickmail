@@ -20,6 +20,7 @@
 	let signatureBusy = $state(false);
 	let signatureError = $state('');
 	let signatureSaved = $state(false);
+	let editor = $state<ReturnType<typeof SignatureEditor>>();
 
 	const activeSignature = $derived(
 		signatures.find((signature) => signature.id === activeSignatureId) ?? null
@@ -75,6 +76,8 @@
 		signatureError = '';
 		signatureSaved = false;
 		try {
+			// Finish rendering any effects and upload them before the signature points at them.
+			if (editor) bodyDraft = await editor.bake();
 			const res = await fetch(`/api/signatures/${activeSignatureId}`, {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
@@ -87,8 +90,8 @@
 			}
 			applySignatures(body.signatures, activeSignatureId);
 			signatureSaved = true;
-		} catch {
-			signatureError = 'Network error';
+		} catch (cause) {
+			signatureError = cause instanceof Error && cause.message !== 'Failed to fetch' ? cause.message : 'Network error';
 		} finally {
 			signatureBusy = false;
 		}
@@ -189,6 +192,7 @@
 				/>
 
 				<SignatureEditor
+					bind:this={editor}
 					bind:value={bodyDraft}
 					disabled={signatureBusy}
 					placeholderName={data.userName}

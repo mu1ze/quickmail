@@ -238,3 +238,62 @@ describe('signature templates', () => {
 		assert.match(html, /Ada/);
 	});
 });
+
+describe('signature effects', () => {
+	const id = (n: number) => `${n}${n}${n}${n}${n}${n}${n}${n}-${n}${n}${n}${n}-4${n}${n}${n}-8${n}${n}${n}-${n}${n}${n}${n}${n}${n}${n}${n}${n}${n}${n}${n}`;
+	const baked = (n: number, w = 88, h = 88) => ({ id: id(n), w, h, key: 'k' });
+	const base = {
+		version: 1 as const,
+		layout: 'photo' as const,
+		name: 'Ada Lovelace',
+		photoId: id(1),
+		animation: 'halo' as const
+	};
+
+	test('a baked animation replaces the still photo and its CSS', () => {
+		const { html } = compileSignature(parseSignatureConfig(JSON.stringify({ ...base, motion: baked(2) })), 'https://mail.example');
+		assert.match(html, new RegExp(`/s/${id(2)}`));
+		assert.doesNotMatch(html, /<style>/);
+		assert.doesNotMatch(html, new RegExp(`/s/${id(1)}`));
+	});
+
+	test('older signatures without a baked image keep the CSS fallback', () => {
+		const { html } = compileSignature(parseSignatureConfig(JSON.stringify(base)), 'https://mail.example');
+		assert.match(html, /@keyframes/);
+		assert.match(html, new RegExp(`/s/${id(1)}`));
+	});
+
+	test('the handwritten name sits above the details with the name as alt text', () => {
+		const config = parseSignatureConfig(JSON.stringify({ ...base, script: { enabled: true, font: 'allura', loop: false }, scriptImage: baked(3, 220, 60) }));
+		const { html } = compileSignature(config, 'https://mail.example');
+		assert.match(html, new RegExp(`<img src="https://mail.example/s/${id(3)}" width="220" height="60" alt="Ada Lovelace"`));
+		assert.ok(html.indexOf(id(3)) < html.indexOf('>Ada Lovelace</div>'));
+	});
+
+	test('live availability links the status endpoint in mail and shows the current badge in preview', () => {
+		const config = parseSignatureConfig(
+			JSON.stringify({
+				...base,
+				live: { enabled: true, tz: 'UTC', start: 540, end: 1020, days: [1, 2, 3, 4, 5], city: '', oooFrom: '', oooTo: '' },
+				liveImages: { available: baked(4, 160, 24), away: baked(5, 160, 24), ooo: baked(6, 160, 24) }
+			})
+		);
+		const sent = compileSignature(config, 'https://mail.example').html;
+		assert.match(sent, /src="https:\/\/mail\.example\/s\/status\?a=/);
+		assert.doesNotMatch(sent, /[?&]v=/, 'no out-of-office range, so no out-of-office badge');
+		const monday10 = new Date('2026-10-12T10:00:00Z');
+		const sunday = new Date('2026-10-11T10:00:00Z');
+		assert.match(compileSignature(config, '', { preview: true, now: monday10, assetUrl: (asset) => `blob:${asset}` }).html, new RegExp(`blob:${id(4)}`));
+		assert.match(compileSignature(config, '', { preview: true, now: sunday, assetUrl: (asset) => `blob:${asset}` }).html, new RegExp(`blob:${id(5)}`));
+	});
+
+	test('bad effect data is dropped rather than emitted', () => {
+		const config = parseSignatureConfig(
+			JSON.stringify({ ...base, motion: { id: 'nope', w: 88, h: 88 }, live: { enabled: true, tz: 'Mars/Base', start: 'x' }, scriptImage: { id: id(7), w: 9000, h: 10 } })
+		);
+		assert.equal(config.motion, null);
+		assert.equal(config.scriptImage, null);
+		assert.equal(config.live.tz, 'UTC');
+		assert.equal(config.live.start, 540);
+	});
+});

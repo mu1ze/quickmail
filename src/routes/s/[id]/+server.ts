@@ -18,11 +18,7 @@ export const GET: RequestHandler = async ({ params, platform }) => {
 		throw error(404, 'Not found');
 	}
 
-	const body = object.body;
-	if (!body) {
-		throw error(404, 'Not found');
-	}
-
+	// Read the object once; touching `body` first leaves nothing for arrayBuffer() in some runtimes.
 	return new Response(await object.arrayBuffer(), {
 		headers: {
 			'Content-Type': asset.content_type,

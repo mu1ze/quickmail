@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import Icon from './Icon.svelte';
 	import SignaturePreview from './SignaturePreview.svelte';
@@ -6,11 +7,24 @@
 		compileSignature,
 		parseSignatureConfig,
 		serializeSignatureConfig,
+		type BakedImage,
 		type SignatureAnimation,
 		type SignatureConfig,
 		type SignatureLayout,
+		type SignatureLive,
+		type SignatureScriptFont,
 		type SignatureSocialKind
 	} from '$lib/signature-template';
+	import {
+		SCRIPT_FONTS,
+		liveBadgeLabels,
+		loadSignatureFonts,
+		renderHandwrittenName,
+		renderLiveBadges,
+		renderLogoMotion,
+		renderPhotoMotion,
+		type Rendered
+	} from '$lib/signature-motion';
 
 	let {
 		value = $bindable(''),
@@ -31,7 +45,136 @@
 	let uploading = $state(false);
 	let lastValue = value;
 
-	const compiled = $derived(compileSignature(config, $page.url.origin));
+	/** Renders made in this browser but not uploaded yet, keyed by their placeholder asset id. */
+	let pending = $state<Record<string, { blob: Blob; url: string }>>({});
+	let rendering = $state(0);
+	let renderError = $state('');
+
+	const compiled = $derived(
+		compileSignature(config, $page.url.origin, {
+			preview: true,
+			assetUrl: (id) => pending[id]?.url ?? `${$page.url.origin}/s/${id}`
+		})
+	);
+
+	// What each baked image should be rendered from; when it differs from the stored key, re-render.
+	const motionSource = $derived(
+		config.layout === 'photo' ? config.photoId : config.layout === 'logo' ? config.logoId : null
+	);
+	const motionKey = $derived(
+		config.animation !== 'none' && motionSource
+			? [config.layout, config.animation, motionSource, config.accent, config.matte].join('|')
+			: ''
+	);
+	const scriptKey = $derived(
+		config.layout !== 'plain' && config.script.enabled && config.name.trim()
+			? [config.name.trim(), config.script.font, config.script.loop, config.accent, config.matte].join('|')
+			: ''
+	);
+	const liveKey = $derived(
+		config.layout !== 'plain' && config.live.enabled
+			? [JSON.stringify(liveBadgeLabels(config.live)), config.matte].join('|')
+			: ''
+	);
+
+	function keep(rendered: Rendered, key: string): BakedImage {
+		const id = crypto.randomUUID();
+		pending = { ...pending, [id]: { blob: rendered.blob, url: URL.createObjectURL(rendered.blob) } };
+		return { id, w: rendered.w, h: rendered.h, key };
+	}
+
+	/** Renders whatever is out of date. Results for a key that changed meanwhile are dropped. */
+	async function renderStale() {
+		const jobs: Promise<void>[] = [];
+		const run = async (job: () => Promise<void>) => {
+			rendering++;
+			try {
+				await job();
+			} catch (cause) {
+				renderError = cause instanceof Error ? cause.message : 'Could not render the effect';
+			} finally {
+				rendering--;
+			}
+		};
+		renderError = '';
+		const mKey = motionKey;
+		if (mKey && config.motion?.key !== mKey && motionSource) {
+			const source = `/s/${motionSource}`;
+			const effect = config.animation as Exclude<SignatureAnimation, 'none'>;
+			const isPhoto = config.layout === 'photo';
+			jobs.push(run(async () => {
+				const out = await (isPhoto ? renderPhotoMotion : renderLogoMotion)(source, effect, config.accent, config.matte);
+				if (motionKey === mKey) patch({ motion: keep(out, mKey) });
+			}));
+		} else if (!mKey && config.motion) {
+			patch({ motion: null });
+		}
+		const sKey = scriptKey;
+		if (sKey && config.scriptImage?.key !== sKey) {
+			const { name, accent, matte, script } = config;
+			jobs.push(run(async () => {
+				const out = await renderHandwrittenName(name.trim(), script.font, accent, matte, script.loop);
+				if (scriptKey === sKey) patch({ scriptImage: keep(out, sKey) });
+			}));
+		}
+		const lKey = liveKey;
+		if (lKey && config.liveImages.available?.key !== lKey) {
+			const live = config.live;
+			const matte = config.matte;
+			jobs.push(run(async () => {
+				const out = await renderLiveBadges(live, matte);
+				if (liveKey === lKey) {
+					patch({ liveImages: { available: keep(out.available, lKey), away: keep(out.away, lKey), ooo: keep(out.ooo, lKey) } });
+				}
+			}));
+		}
+		await Promise.all(jobs);
+	}
+
+	let renderTimer: ReturnType<typeof setTimeout> | undefined;
+	$effect(() => {
+		// Re-run whenever any render input changes; wait for typing to settle.
+		void [motionKey, scriptKey, liveKey];
+		clearTimeout(renderTimer);
+		renderTimer = setTimeout(() => void renderStale(), 450);
+		return () => clearTimeout(renderTimer);
+	});
+
+	async function uploadBlob(blob: Blob): Promise<string> {
+		const body = new FormData();
+		body.set('file', new File([blob], 'signature.gif', { type: blob.type }));
+		const res = await fetch('/api/signature-assets', { method: 'POST', body });
+		const json = (await res.json()) as { error?: string; id?: string };
+		if (!res.ok || !json.id) throw new Error(json.error ?? 'Could not upload the rendered effect');
+		return json.id;
+	}
+
+	/**
+	 * Finishes any render and uploads the results, swapping placeholder ids for
+	 * stored ones. Call before saving; returns the value to store.
+	 */
+	export async function bake(): Promise<string> {
+		clearTimeout(renderTimer);
+		await renderStale();
+		const swap = async (image: BakedImage | null): Promise<BakedImage | null> => {
+			if (!image || !pending[image.id]) return image;
+			return { ...image, id: await uploadBlob(pending[image.id].blob) };
+		};
+		const [motion, scriptImage, available, away, ooo] = await Promise.all([
+			swap(config.motion),
+			swap(config.scriptImage),
+			swap(config.liveImages.available),
+			swap(config.liveImages.away),
+			swap(config.liveImages.ooo)
+		]);
+		patch({ motion, scriptImage, liveImages: { available, away, ooo } });
+		return serializeSignatureConfig(config);
+	}
+
+	onDestroy(() => {
+		clearTimeout(renderTimer);
+		for (const entry of Object.values(pending)) URL.revokeObjectURL(entry.url);
+	});
 
 	$effect(() => {
 		if (value !== lastValue) {
@@ -42,9 +185,21 @@
 
 	function commit(next: SignatureConfig) {
 		config = next;
-		const stored = serializeSignatureConfig(next);
+		// Unsaved renders live only in this editor; the stored value never points at them,
+		// so a remount simply renders them again instead of showing broken images.
+		const stored = serializeSignatureConfig(withoutPending(next));
 		lastValue = stored;
 		value = stored;
+	}
+
+	function withoutPending(next: SignatureConfig): SignatureConfig {
+		const drop = (image: BakedImage | null) => (image && pending[image.id] ? null : image);
+		return {
+			...next,
+			motion: drop(next.motion),
+			scriptImage: drop(next.scriptImage),
+			liveImages: { available: drop(next.liveImages.available), away: drop(next.liveImages.away), ooo: drop(next.liveImages.ooo) }
+		};
 	}
 
 	function patch(partial: Partial<SignatureConfig>) {
@@ -65,14 +220,63 @@
 		{ kind: 'instagram', label: 'Instagram' }
 	];
 
-	const animations: { id: SignatureAnimation; label: string }[] = [
-		{ id: 'none', label: 'None' },
-		{ id: 'float', label: 'Float' },
-		{ id: 'pulse', label: 'Pulse' },
-		{ id: 'spin', label: 'Spin' },
-		{ id: 'wave', label: 'Wave' },
-		{ id: 'glow', label: 'Glow' }
+	const animations: { id: SignatureAnimation; label: string; hint: string }[] = [
+		{ id: 'none', label: 'Still', hint: 'No motion' },
+		{ id: 'halo', label: 'Halo', hint: 'A ring of colour circles' },
+		{ id: 'ripple', label: 'Ripple', hint: 'Rings pulse outward' },
+		{ id: 'shine', label: 'Shine', hint: 'A glint sweeps across' },
+		{ id: 'glow', label: 'Glow', hint: 'Breathes in your colour' },
+		{ id: 'float', label: 'Float', hint: 'Bobs gently' },
+		{ id: 'pulse', label: 'Pulse', hint: 'Swells softly' },
+		{ id: 'wave', label: 'Wave', hint: 'Rocks side to side' },
+		{ id: 'spin', label: 'Spin', hint: 'Turns slowly' }
 	];
+
+	const scriptFonts = Object.entries(SCRIPT_FONTS) as [SignatureScriptFont, (typeof SCRIPT_FONTS)[SignatureScriptFont]][];
+	const weekdays = [
+		{ day: 1, label: 'Mon' },
+		{ day: 2, label: 'Tue' },
+		{ day: 3, label: 'Wed' },
+		{ day: 4, label: 'Thu' },
+		{ day: 5, label: 'Fri' },
+		{ day: 6, label: 'Sat' },
+		{ day: 0, label: 'Sun' }
+	];
+	const timeZones: string[] = (() => {
+		try {
+			return (Intl as unknown as { supportedValuesOf(key: string): string[] }).supportedValuesOf('timeZone');
+		} catch {
+			return ['UTC'];
+		}
+	})();
+
+	function patchLive(partial: Partial<SignatureLive>) {
+		patch({ live: { ...config.live, ...partial } });
+	}
+
+	function enableLive(on: boolean) {
+		// Start from this browser's zone the first time.
+		const tz = config.live.tz === 'UTC' ? Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' : config.live.tz;
+		patchLive({ enabled: on, tz });
+	}
+
+	function toTime(minutes: number): string {
+		return `${String(Math.floor(minutes / 60) % 24).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+	}
+
+	function fromTime(value: string): number {
+		const [h, m] = value.split(':').map(Number);
+		return (h || 0) * 60 + (m || 0);
+	}
+
+	function toggleDay(day: number) {
+		const days = config.live.days.includes(day) ? config.live.days.filter((d) => d !== day) : [...config.live.days, day];
+		patchLive({ days });
+	}
+
+	$effect(() => {
+		if (config.script.enabled) void loadSignatureFonts();
+	});
 
 	async function upload(kind: 'photo' | 'logo', files: FileList | null) {
 		const file = files?.[0];
@@ -113,7 +317,11 @@
 	}
 
 	async function save() {
-		await onsave?.(serializeSignatureConfig(config));
+		try {
+			await onsave?.(await bake());
+		} catch (cause) {
+			renderError = cause instanceof Error ? cause.message : 'Could not save the signature';
+		}
 	}
 
 	async function clearCustom() {
@@ -248,9 +456,12 @@
 			{#if uploadError}<p class="error">{uploadError}</p>{/if}
 
 			{#if (config.layout === 'photo' && config.photoId) || (config.layout === 'logo' && config.logoId)}
-				<div class="animation" role="radiogroup" aria-label="Image animation">
-					<span class="label">Animation</span>
-					<div class="animation-grid">
+				<div class="animation">
+					<div class="section-head">
+						<span class="label" id="sig-effect-label">Effect</span>
+						<span class="section-note">Baked into an animated image, so it plays in Gmail, Apple Mail and Outlook on the web.</span>
+					</div>
+					<div class="animation-grid" role="radiogroup" aria-labelledby="sig-effect-label">
 						{#each animations as animation (animation.id)}
 							<button
 								type="button"
@@ -261,7 +472,8 @@
 								{disabled}
 								onclick={() => patch({ animation: animation.id })}
 							>
-								{animation.label}
+								<span class="anim-name">{animation.label}</span>
+								{#if !compact}<span class="anim-hint">{animation.hint}</span>{/if}
 							</button>
 						{/each}
 					</div>
@@ -302,11 +514,121 @@
 				</div>
 			{/if}
 		</div>
+
+		<div class="extras">
+			<div class="extra">
+				<div class="extra-head">
+					<span class="extra-text">
+						<span class="extra-title">Email background</span>
+						<span class="section-note">Animated images are drawn on this colour. Pick what most of your readers use.</span>
+					</span>
+					<div class="segmented" role="radiogroup" aria-label="Email background">
+						<button type="button" role="radio" aria-checked={config.matte === 'light'} {disabled} onclick={() => patch({ matte: 'light' })}>Light</button>
+						<button type="button" role="radio" aria-checked={config.matte === 'dark'} {disabled} onclick={() => patch({ matte: 'dark' })}>Dark</button>
+					</div>
+				</div>
+			</div>
+
+			<div class="extra">
+				<label class="extra-head">
+					<span class="extra-text">
+						<span class="extra-title">Handwritten name</span>
+						<span class="section-note">Your name writes itself in ink when the email is opened.</span>
+					</span>
+					<input
+						class="switch"
+						type="checkbox"
+						role="switch"
+						checked={config.script.enabled}
+						{disabled}
+						onchange={(event) => patch({ script: { ...config.script, enabled: event.currentTarget.checked } })}
+					/>
+				</label>
+				{#if config.script.enabled}
+					{#if !config.name.trim()}<p class="section-note">Add your name above to see it written.</p>{/if}
+					<div class="script-fonts" role="radiogroup" aria-label="Handwriting style">
+						{#each scriptFonts as [id, font] (id)}
+							<button
+								type="button"
+								role="radio"
+								class="script-card"
+								class:selected={config.script.font === id}
+								aria-checked={config.script.font === id}
+								aria-label={font.label}
+								{disabled}
+								onclick={() => patch({ script: { ...config.script, font: id } })}
+							>
+								<span style="font-family: '{font.family}', cursive; font-weight: {font.weight}; font-size: {Math.round(font.size * 0.62)}px; color: {config.accent};">{config.name.trim() || 'Your name'}</span>
+							</button>
+						{/each}
+					</div>
+					<div class="segmented" role="radiogroup" aria-label="Replay">
+						<button type="button" role="radio" aria-checked={!config.script.loop} {disabled} onclick={() => patch({ script: { ...config.script, loop: false } })}>Write once</button>
+						<button type="button" role="radio" aria-checked={config.script.loop} {disabled} onclick={() => patch({ script: { ...config.script, loop: true } })}>Replay</button>
+					</div>
+				{/if}
+			</div>
+
+			<div class="extra">
+				<label class="extra-head">
+					<span class="extra-text">
+						<span class="extra-title">Live availability</span>
+						<span class="section-note">A badge that changes when it is opened: available during your hours, away after, out of office on dates you set. Even weeks-old emails stay current.</span>
+					</span>
+					<input
+						class="switch"
+						type="checkbox"
+						role="switch"
+						checked={config.live.enabled}
+						{disabled}
+						onchange={(event) => enableLive(event.currentTarget.checked)}
+					/>
+				</label>
+				{#if config.live.enabled}
+					<div class="fields">
+						<label class="field">
+							<span>Time zone</span>
+							<select class="text-input" value={config.live.tz} {disabled} onchange={(event) => patchLive({ tz: event.currentTarget.value })}>
+								{#each timeZones as zone (zone)}<option value={zone}>{zone.replaceAll('_', ' ')}</option>{/each}
+							</select>
+						</label>
+						<label class="field">
+							<span>City (optional)</span>
+							<input class="text-input" value={config.live.city} maxlength="40" placeholder="Toronto" {disabled} oninput={(event) => patchLive({ city: event.currentTarget.value })} />
+						</label>
+						<label class="field">
+							<span>Hours start</span>
+							<input class="text-input" type="time" step="900" value={toTime(config.live.start)} {disabled} onchange={(event) => patchLive({ start: fromTime(event.currentTarget.value) })} />
+						</label>
+						<label class="field">
+							<span>Hours end</span>
+							<input class="text-input" type="time" step="900" value={toTime(config.live.end)} {disabled} onchange={(event) => patchLive({ end: fromTime(event.currentTarget.value) })} />
+						</label>
+					</div>
+					<div class="days" role="group" aria-label="Working days">
+						{#each weekdays as item (item.day)}
+							<button type="button" class="day" aria-pressed={config.live.days.includes(item.day)} {disabled} onclick={() => toggleDay(item.day)}>{item.label}</button>
+						{/each}
+					</div>
+					<div class="fields">
+						<label class="field">
+							<span>Out of office from</span>
+							<input class="text-input" type="date" value={config.live.oooFrom} {disabled} onchange={(event) => patchLive({ oooFrom: event.currentTarget.value })} />
+						</label>
+						<label class="field">
+							<span>Back after</span>
+							<input class="text-input" type="date" value={config.live.oooTo} min={config.live.oooFrom || undefined} {disabled} onchange={(event) => patchLive({ oooTo: event.currentTarget.value })} />
+						</label>
+					</div>
+				{/if}
+			</div>
+		</div>
 	{/if}
 
 	<div class="preview-block">
-		<span class="label">Sent as</span>
-		<SignaturePreview html={compiled.html} empty="Nothing will be appended yet." />
+		<span class="label">Sent as {#if rendering}<span class="render-note" aria-live="polite">Rendering…</span>{/if}</span>
+		{#if renderError}<p class="error" role="alert">{renderError}</p>{/if}
+		<SignaturePreview html={compiled.html} dark={config.matte === 'dark'} empty="Nothing will be appended yet." />
 	</div>
 
 	{#if onsave}
@@ -473,17 +795,158 @@
 
 	.animation-grid {
 		display: grid;
-		grid-template-columns: repeat(6, minmax(0, 1fr));
+		grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
 		gap: 0.4rem;
 	}
 
 	.anim-card {
-		padding: 0.45rem 0.4rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+		padding: 0.5rem 0.6rem;
 		border-radius: 0.6rem;
-		font-size: 0.75rem;
-		font-weight: 600;
-		text-align: center;
+		text-align: left;
 		box-shadow: inset 0 0 0 1px var(--color-line);
+	}
+
+	.anim-name {
+		font-size: 0.8125rem;
+		font-weight: 600;
+	}
+
+	.anim-hint {
+		font-size: 0.6875rem;
+		line-height: 1.3;
+		color: var(--color-muted);
+	}
+
+	.section-head {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+	}
+
+	.section-note {
+		font-size: 0.75rem;
+		line-height: 1.4;
+		color: var(--color-muted);
+	}
+
+	.extras {
+		display: flex;
+		flex-direction: column;
+		border-radius: 0.85rem;
+		box-shadow: inset 0 0 0 1px var(--color-line);
+	}
+
+	.extra {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		padding: 0.85rem 0.95rem;
+	}
+
+	.extra + .extra {
+		box-shadow: inset 0 1px 0 var(--color-line);
+	}
+
+	.extra-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
+	.extra-text {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		min-width: 0;
+	}
+
+	.extra-title {
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--color-text);
+	}
+
+	.segmented {
+		display: inline-flex;
+		flex-shrink: 0;
+		align-self: flex-start;
+		gap: 0.2rem;
+		padding: 0.2rem;
+		border-radius: 0.65rem;
+		background: var(--color-well);
+	}
+
+	.extra-head .segmented {
+		align-self: center;
+	}
+
+	.segmented button {
+		height: 1.85rem;
+		padding: 0 0.75rem;
+		border-radius: 0.5rem;
+		font-size: 0.75rem;
+		color: var(--color-text-secondary);
+	}
+
+	.segmented button[aria-checked='true'] {
+		background: var(--color-surface);
+		color: var(--color-text);
+		font-weight: 500;
+		box-shadow: var(--shadow-xs);
+	}
+
+	.script-fonts {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.4rem;
+	}
+
+	.script-card {
+		display: flex;
+		align-items: center;
+		min-height: 3.25rem;
+		padding: 0.35rem 0.75rem;
+		overflow: hidden;
+		border-radius: 0.6rem;
+		background: #ffffff;
+		white-space: nowrap;
+		box-shadow: inset 0 0 0 1px var(--color-line);
+	}
+
+	.script-card.selected {
+		box-shadow: inset 0 0 0 2px var(--color-accent);
+	}
+
+	.days {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+	}
+
+	.day {
+		min-width: 2.75rem;
+		height: 2rem;
+		padding: 0 0.5rem;
+		border-radius: 0.5rem;
+		font-size: 0.75rem;
+		color: var(--color-text-secondary);
+		box-shadow: inset 0 0 0 1px var(--color-line);
+	}
+
+	.day[aria-pressed='true'] {
+		color: var(--color-accent-text);
+		background: var(--color-accent-soft);
+		box-shadow: none;
+		font-weight: 600;
+	}
+
+	.render-note {
+		margin-left: 0.4rem;
+		color: var(--color-accent-text);
 	}
 
 	.anim-card:hover:not(:disabled) {

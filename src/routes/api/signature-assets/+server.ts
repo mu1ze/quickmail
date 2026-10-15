@@ -1,7 +1,8 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import {
 	insertSignatureAsset,
-	MAX_SIGNATURE_ASSET_BYTES
+	MAX_SIGNATURE_ASSET_BYTES,
+	SIGNATURE_ASSET_LIMIT_LABEL
 } from '$lib/server/signature-assets';
 
 export const POST: RequestHandler = async ({ request, locals, platform }) => {
@@ -23,7 +24,7 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 		return json({ error: 'Choose an image to upload' }, { status: 400 });
 	}
 	if (file.size > MAX_SIGNATURE_ASSET_BYTES) {
-		return json({ error: 'Image must be 512KB or smaller' }, { status: 400 });
+		return json({ error: `Image must be ${SIGNATURE_ASSET_LIMIT_LABEL} or smaller` }, { status: 400 });
 	}
 
 	const bytes = new Uint8Array(await file.arrayBuffer());

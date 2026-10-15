@@ -1,7 +1,9 @@
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
 
-export const MAX_SIGNATURE_ASSET_BYTES = 512 * 1024;
-export const MAX_SIGNATURE_ASSETS_PER_USER = 20;
+/** Room for a rendered animation; still photos are far smaller. */
+export const MAX_SIGNATURE_ASSET_BYTES = 1024 * 1024;
+export const MAX_SIGNATURE_ASSETS_PER_USER = 100;
+export const SIGNATURE_ASSET_LIMIT_LABEL = '1MB';
 
 const ALLOWED_TYPES: Record<string, string> = {
 	'image/jpeg': 'image/jpeg',
@@ -75,13 +77,30 @@ export async function insertSignatureAsset(
 		throw new Error('Image is empty');
 	}
 	if (bytes.byteLength > MAX_SIGNATURE_ASSET_BYTES) {
-		throw new Error('Image must be 512KB or smaller');
+		throw new Error(`Image must be ${SIGNATURE_ASSET_LIMIT_LABEL} or smaller`);
 	}
 
 	const sniffed = sniffSignatureImageType(bytes);
 	const type = sniffed ?? normalizeSignatureContentType(contentType);
 	if (!type) {
 		throw new Error('Use a JPEG, PNG, WebP, or GIF image');
+	}
+
+	// The same bytes uploaded again (a re-rendered effect, say) reuse the stored copy.
+	// Until migration 0028 has run, the hash column is missing: skip reuse and store as before.
+	const digest = await crypto.subtle.digest('SHA-256', bytes.slice());
+	let sha256: string | null = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+	try {
+		const duplicate = await db
+			.prepare(
+				`SELECT id, user_id, content_type, byte_size, created_at
+				 FROM signature_assets WHERE user_id = ? AND sha256 = ? LIMIT 1`
+			)
+			.bind(userId, sha256)
+			.first<SignatureAsset>();
+		if (duplicate) return duplicate;
+	} catch {
+		sha256 = null;
 	}
 
 	const existing = await countSignatureAssets(db, userId);
@@ -94,13 +113,23 @@ export async function insertSignatureAsset(
 	await bucket.put(key, bytes, { httpMetadata: { contentType: type } });
 
 	const createdAt = new Date().toISOString();
-	await db
-		.prepare(
-			`INSERT INTO signature_assets (id, user_id, content_type, byte_size, created_at)
-			 VALUES (?, ?, ?, ?, ?)`
-		)
-		.bind(id, userId, type, bytes.byteLength, createdAt)
-		.run();
+	if (sha256) {
+		await db
+			.prepare(
+				`INSERT INTO signature_assets (id, user_id, content_type, byte_size, created_at, sha256)
+				 VALUES (?, ?, ?, ?, ?, ?)`
+			)
+			.bind(id, userId, type, bytes.byteLength, createdAt, sha256)
+			.run();
+	} else {
+		await db
+			.prepare(
+				`INSERT INTO signature_assets (id, user_id, content_type, byte_size, created_at)
+				 VALUES (?, ?, ?, ?, ?)`
+			)
+			.bind(id, userId, type, bytes.byteLength, createdAt)
+			.run();
+	}
 
 	return { id, user_id: userId, content_type: type, byte_size: bytes.byteLength, created_at: createdAt };
 }
