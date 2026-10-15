@@ -43,6 +43,7 @@ export const SHORTCUTS: Shortcut[] = [
 	{ keys: 'x', action: 'Select', group: 'Move' },
 	{ keys: '/', action: 'Search', group: 'Move' },
 	{ keys: '⌘K', action: 'Command palette', group: 'Move' },
+	{ keys: '[', action: 'Collapse / expand sidebar', group: 'Move' },
 	{ keys: 'e', action: 'Archive', group: 'Act' },
 	{ keys: '#', action: 'Move to trash', group: 'Act' },
 	{ keys: 's', action: 'Toggle star', group: 'Act' },

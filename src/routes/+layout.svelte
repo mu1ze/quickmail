@@ -171,6 +171,12 @@
 			sheetOpen = true;
 			return;
 		}
+		if (key === '[' && !mobileViewport) {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			collapsed = !collapsed;
+			return;
+		}
 		if (key === 'g') {
 			event.preventDefault();
 			event.stopImmediatePropagation();

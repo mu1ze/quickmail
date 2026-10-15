@@ -5,6 +5,7 @@
 	import DomainSwitcher from './DomainSwitcher.svelte';
 	import ThemeSwitcher from './ThemeSwitcher.svelte';
 	import LabelManager from './LabelManager.svelte';
+	import { tooltip } from '$lib/actions/tooltip';
 	import { isHubRoute } from '$lib/shell-chrome';
 	import { isSettingsLinkActive, settingsGroups } from '$lib/settings-nav';
 	import type { Domain, MailboxCounts, MailLabel } from '$lib/types';
@@ -82,6 +83,18 @@
 			<Logo size={30} />
 			{#if expanded}<span class="brand-name">QuickMail<span class="brand-detail">MAKE ROOM FOR FOCUS</span></span>{/if}
 		</a>
+		{#if !mobileOpen}
+			<button
+				type="button"
+				class="collapse-btn"
+				aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+				aria-expanded={!collapsed}
+				use:tooltip={collapsed ? 'Expand sidebar ([)' : 'Collapse sidebar ([)'}
+				onclick={() => (collapsed = !collapsed)}
+			>
+				<Icon name={collapsed ? 'sidebar-unfold-line' : 'sidebar-fold-line'} size={18} />
+			</button>
+		{/if}
 		{#if mobileOpen}
 			<button
 				type="button"
@@ -211,14 +224,6 @@
 
 	<div class="sidebar-foot">
 		<ThemeSwitcher collapsed={!expanded} />
-		<button
-			type="button"
-			class="collapse-btn"
-			aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-			onclick={() => (collapsed = !collapsed)}
-		>
-			<Icon name={collapsed ? 'arrow-right-double-line' : 'arrow-left-double-line'} size={15} />
-		</button>
 	</div>
 </aside>
 
@@ -249,12 +254,13 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
+		gap: 0.5rem;
 		min-height: var(--topbar-height);
-		padding: 0 0.75rem 0.75rem;
+		padding: 0 0.25rem 0.75rem 0.75rem;
 	}
 
 	.brand-name { display: flex; flex-direction: column; gap: 0.25rem; }
-	.brand-detail { font-size: 0.5rem; letter-spacing: 0.14em; font-weight: 500; color: var(--color-muted); }
+	.brand-detail { white-space: nowrap; font-size: 0.5rem; letter-spacing: 0.14em; font-weight: 500; color: var(--color-muted); }
 	.brand {
 		display: flex;
 		align-items: center;
@@ -427,25 +433,30 @@
 		justify-content: center;
 	}
 
+	/* The rail stacks the logo over the expand button. */
+	.sidebar.collapsed .sidebar-top {
+		flex-direction: column;
+		justify-content: center;
+		gap: 0.5rem;
+		padding-left: 0;
+		padding-right: 0;
+	}
+
 	.collapse-btn {
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		flex-shrink: 0;
-		width: 1.875rem;
-		min-height: 1.875rem;
-		border-radius: 0.5rem;
+		width: 2.25rem;
+		height: 2.25rem;
+		border-radius: 0.625rem;
 		color: var(--color-muted);
-		background: var(--color-surface-muted);
 		transition: background 0.15s, color 0.15s;
 	}
 
-	.sidebar.collapsed .collapse-btn {
-		height: 1.875rem;
-	}
-
-	.collapse-btn:hover {
-		background: var(--color-surface-hover);
+	.collapse-btn:hover,
+	.collapse-btn:focus-visible {
+		background: var(--color-surface-muted);
 		color: var(--color-text);
 	}
 
@@ -485,6 +496,12 @@
 		.sidebar.collapsed .sidebar-foot {
 			flex-direction: row;
 			align-items: stretch;
+		}
+
+		.sidebar.collapsed .sidebar-top {
+			flex-direction: row;
+			justify-content: space-between;
+			padding: 0 0.75rem 0.75rem;
 		}
 
 		.nav-link {
