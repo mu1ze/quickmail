@@ -397,3 +397,17 @@ describe('API key access', () => {
 		);
 	});
 });
+
+test('mail:draft keys can manage drafts but never send or read', () => {
+	const draftKey = ['mail:draft'] as const;
+	const ok = (pathname: string, method: string, scopes: readonly string[] = draftKey) =>
+		authorizeApiRequest({ pathname, method, authMethod: 'api_token', scopes: scopes as never }).ok;
+	assert.equal(ok('/api/drafts', 'POST'), true);
+	assert.equal(ok('/api/drafts/abc', 'DELETE'), true);
+	assert.equal(ok('/api/addresses', 'GET'), true);
+	assert.equal(ok('/api/mail', 'POST'), false);
+	assert.equal(ok('/api/mail/abc', 'POST'), false);
+	assert.equal(ok('/api/mail', 'GET'), false);
+	assert.equal(ok('/api/mail/actions', 'POST'), false);
+	assert.equal(ok('/api/drafts', 'POST', ['mail:read', 'mail:send']), false);
+});

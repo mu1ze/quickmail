@@ -27,8 +27,8 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 		return json(
 			{
 				error: locals.user.is_admin
-					? 'Scopes must be a subset of mail:send, mail:read, admin'
-					: 'Scopes must be a subset of mail:send, mail:read'
+					? 'Scopes must be a subset of mail:send, mail:read, mail:draft, admin'
+					: 'Scopes must be a subset of mail:send, mail:read, mail:draft'
 			},
 			{ status: 400 }
 		);

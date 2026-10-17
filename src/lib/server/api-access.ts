@@ -69,7 +69,19 @@ const BEARER_ROUTES: RouteRule[] = [
 	{
 		method: 'GET',
 		match: (pathname) => pathname === '/api/addresses',
-		scopes: ['mail:read', 'mail:send', 'admin']
+		scopes: ['mail:read', 'mail:send', 'mail:draft', 'admin']
+	},
+	// Draft-only keys can create/update and delete drafts. Drafts never touch the
+	// mail provider, so `mail:draft` cannot send anything.
+	{
+		method: 'POST',
+		match: (pathname) => pathname === '/api/drafts',
+		scopes: ['mail:draft']
+	},
+	{
+		method: 'DELETE',
+		match: (pathname) => /^\/api\/drafts\/[^/]+$/.test(pathname),
+		scopes: ['mail:draft']
 	},
 	{
 		method: 'POST',

@@ -6,7 +6,7 @@ export type User = {
 	created_at: string;
 };
 
-export type ApiScope = 'mail:send' | 'mail:read' | 'admin';
+export type ApiScope = 'mail:send' | 'mail:read' | 'mail:draft' | 'admin';
 
 export type ApiTokenSummary = {
 	id: string;
