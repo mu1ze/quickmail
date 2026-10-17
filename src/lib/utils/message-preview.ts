@@ -94,6 +94,11 @@ function previewHtmlLines(html: string): string {
 	return tidyHtmlPreviewText(decoded);
 }
 
+/** Readable text with line breaks kept, for scanning a message's content. */
+export function htmlToTextLines(html: string): string {
+	return previewHtmlLines(html);
+}
+
 export function htmlToPreviewText(html: string): string {
 	return previewHtmlLines(html).replace(/\s+/g, ' ').trim();
 }

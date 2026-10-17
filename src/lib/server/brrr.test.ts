@@ -101,6 +101,10 @@ describe('Brrr mail payload', () => {
 			}).open_url,
 			'https://mail.example.com/mail/mail%2Fid'
 		);
+		assert.equal(
+			buildBrrrNewMailPayload({ subject: 'Sign in', from: 'GitHub', emailId: 'x', code: '482913', origin: null, sound: 'default' }).message,
+			'Code 482 913 · From GitHub'
+		);
 	});
 });
 

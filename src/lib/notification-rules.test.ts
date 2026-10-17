@@ -55,6 +55,10 @@ describe('notification rules', () => {
 		assert.equal(decideNotification(prefs({ mode: 'vip', vips: ['@northwind.example'] }), person, day).notify, true);
 		assert.equal(decideNotification(prefs({ quiet }), person, night).notify, false);
 		assert.deepEqual(decideNotification(prefs({ quiet, vips: ['dana@northwind.example'] }), person, night), { notify: true, vip: true });
+		// Sign-in codes get through filters and quiet hours unless turned off.
+		const code = { address: 'no-reply@github.example', signals: {}, hasCode: true };
+		assert.equal(decideNotification(prefs({ mode: 'people', quiet }), code, night).notify, true);
+		assert.equal(decideNotification(prefs({ mode: 'people', codes: false }), code, day).notify, false);
 	});
 
 	test('stored preferences are sanitized', () => {
@@ -62,6 +66,8 @@ describe('notification rules', () => {
 		assert.equal(clean.mode, 'all');
 		assert.deepEqual(clean.vips, []);
 		assert.equal(clean.preview, false);
+		assert.equal(clean.codes, true);
+		assert.equal(sanitizeNotificationPrefs({ codes: false }).codes, false);
 		assert.equal(clean.quiet.start, 22 * 60);
 		assert.equal(clean.quiet.tz, 'UTC');
 	});

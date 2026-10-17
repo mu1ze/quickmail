@@ -9,6 +9,7 @@ import { MAX_BODY_BYTES } from './constants';
 import { buildMessagePreview } from '$lib/utils/message-preview';
 import { displaySubject, normalizeSubject, resolveThreadId } from './threads';
 import { loadThreadSummaries } from './mail-summaries';
+import { findVerificationCode, isRecentForCode, mightHaveVerificationCode } from '$lib/verification-code';
 import type {
 	DeliveryStatus,
 	EmailAttachmentMeta,
@@ -336,6 +337,7 @@ export async function listMailbox(
 		const thread = threads.find((entry) => entry.latest_id === id);
 		if (thread) thread.preview = preview;
 	}, messages);
+	await attachVerificationCodes(db, userId, threads, byThread);
 	const names = await knownSenderNames(db, userId, messages);
 	for (const thread of threads) {
 		for (const person of thread.participants) {
@@ -435,6 +437,48 @@ async function knownSenderNames(
 		if (!names.has(address)) names.set(address, row.from_name.trim());
 	}
 	return names;
+}
+
+/**
+ * Recent sign-in mail shows its code right on the row. Only rows that look
+ * like it have their bodies read, and older codes have expired anyway.
+ */
+async function attachVerificationCodes(
+	db: D1Database,
+	userId: string,
+	threads: ThreadSummary[],
+	byThread: Map<string, ThreadMessageRow[]>
+): Promise<void> {
+	const now = Date.now();
+	const ids = threads
+		.filter((thread) => {
+			const latest = byThread.get(thread.thread_id)?.at(-1);
+			return (
+				latest?.direction === 'inbound' &&
+				latest.status !== 'draft' &&
+				isRecentForCode(latest.created_at, now) &&
+				mightHaveVerificationCode(latest.subject, latest.preview ?? thread.preview)
+			);
+		})
+		.map((thread) => thread.latest_id)
+		.slice(0, 20);
+	if (ids.length === 0) return;
+	try {
+		const { results } = await db
+			.prepare(
+				`SELECT id, subject, substr(body_text, 1, 8000) AS body_text, substr(body_html, 1, 60000) AS body_html
+				 FROM emails WHERE user_id = ? AND id IN (${ids.map(() => '?').join(', ')})`
+			)
+			.bind(userId, ...ids)
+			.all<{ id: string; subject: string; body_text: string | null; body_html: string | null }>();
+		for (const row of results) {
+			const code = findVerificationCode({ subject: row.subject, text: row.body_text, html: row.body_html });
+			const thread = threads.find((entry) => entry.latest_id === row.id);
+			if (code && thread) thread.verification_code = code;
+		}
+	} catch {
+		// A missing code never breaks the mailbox.
+	}
 }
 
 /** `messages` is the whole conversation, oldest first. */

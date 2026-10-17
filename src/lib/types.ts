@@ -185,6 +185,8 @@ export type ThreadSummary = {
 	snoozed_until: string | null;
 	/** True when weekly cleanup moved this conversation to Trash. */
 	auto_trashed: boolean;
+	/** One-time code from recent sign-in mail, shown on the row. */
+	verification_code?: string;
 	created_at: string;
 };
 

@@ -1,5 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { parseEmailAddress } from './email-address';
+import { formatVerificationCode } from '$lib/verification-code';
 
 export const BRRR_SEND_URL = 'https://api.brrr.now/v1/send';
 export const BRRR_HOST = 'api.brrr.now';
@@ -196,12 +197,15 @@ export function buildBrrrNewMailPayload(input: {
 	subject: string;
 	from: string;
 	emailId: string;
+	/** Sign-in code, shown first so it reads on the lock screen. */
+	code?: string | null;
 	origin: string | null;
 	sound: BrrrSound;
 }): BrrrPayload {
+	const from = `From ${truncate(input.from || 'Unknown sender', 160) || 'Unknown sender'}`;
 	const payload: BrrrPayload = {
 		title: truncate(input.subject || '(no subject)', 120) || '(no subject)',
-		message: `From ${truncate(input.from || 'Unknown sender', 160) || 'Unknown sender'}`,
+		message: input.code ? `Code ${formatVerificationCode(input.code)} · ${from}` : from,
 		thread_id: 'quickmail-inbox',
 		sound: input.sound
 	};

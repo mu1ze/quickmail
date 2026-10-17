@@ -14,6 +14,8 @@ export type NotificationPrefs = {
 	vips: string[];
 	/** Include the first line of the message. Off by default: notifications can show on a locked screen. */
 	preview: boolean;
+	/** Put sign-in codes in the notification, and let that mail through quiet hours and filters. */
+	codes: boolean;
 	quiet: { enabled: boolean; start: number; end: number; tz: string };
 };
 
@@ -23,6 +25,7 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
 	mode: 'all',
 	vips: [],
 	preview: false,
+	codes: true,
 	quiet: { enabled: false, start: 22 * 60, end: 7 * 60, tz: 'UTC' }
 };
 
@@ -57,6 +60,7 @@ export function sanitizeNotificationPrefs(input: unknown): NotificationPrefs {
 		mode: raw.mode === 'people' || raw.mode === 'vip' ? raw.mode : 'all',
 		vips: cleanVipList(raw.vips),
 		preview: raw.preview === true,
+		codes: raw.codes !== false,
 		quiet: {
 			enabled: quiet.enabled === true,
 			start: minutes(quiet.start, base.quiet.start),
@@ -107,11 +111,13 @@ export type NotificationDecision = { notify: boolean; vip: boolean };
 
 export function decideNotification(
 	prefs: NotificationPrefs,
-	mail: { address: string; signals: BulkSignals },
+	mail: { address: string; signals: BulkSignals; hasCode?: boolean },
 	now = new Date()
 ): NotificationDecision {
 	const vip = isVipSender(prefs.vips, mail.address);
 	if (vip) return { notify: true, vip };
+	// You asked for this code moments ago; it can't wait for morning.
+	if (mail.hasCode && prefs.codes) return { notify: true, vip };
 	if (inQuietHours(prefs.quiet, now)) return { notify: false, vip };
 	if (prefs.mode === 'vip') return { notify: false, vip };
 	if (prefs.mode === 'people' && isAutomatedMail(mail.signals, mail.address)) return { notify: false, vip };

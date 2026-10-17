@@ -11,6 +11,7 @@ import {
 import { getMailboxCounts } from './mail-store';
 import { loadNotificationPrefs } from './notification-preferences';
 import { decideNotification, type BulkSignals } from '$lib/notification-rules';
+import { findVerificationCode, formatVerificationCode } from '$lib/verification-code';
 
 const MAX_ENDPOINT_LENGTH = 2048;
 const MAX_KEY_LENGTH = 512;
@@ -72,6 +73,8 @@ export type NewMailDetails = {
 	preview: string;
 	signals: BulkSignals;
 	unread: number | null;
+	/** One-time code from sign-in mail, when there is one. */
+	code: string | null;
 };
 
 type VapidConfiguration = {
@@ -310,14 +313,16 @@ function truncate(value: string, max: number): string {
 export function buildNewMailPayload(
 	input: NewMailNotificationInput,
 	details: Partial<NewMailDetails> = {},
-	options: { preview?: boolean } = {}
+	options: { preview?: boolean; codes?: boolean } = {}
 ): NewMailPushPayload {
 	const sender = truncate(details.fromName || input.from || 'Unknown sender', 80) || 'Unknown sender';
 	const subject = truncate(input.subject || '(no subject)', 120) || '(no subject)';
 	const preview = options.preview && details.preview ? truncate(details.preview, 140) : '';
+	// The code leads, so it reads on the lock screen without opening anything.
+	const code = options.codes && details.code ? `Code ${formatVerificationCode(details.code)}` : '';
 	return {
 		title: sender,
-		body: preview ? `${subject}\n${preview}` : subject,
+		body: code ? `${code}\n${subject}` : preview ? `${subject}\n${preview}` : subject,
 		tag: `quickmail-thread-${details.threadId ?? input.emailId}`,
 		url: `/mail/${encodeURIComponent(input.emailId)}`,
 		emailId: input.emailId,
@@ -326,11 +331,20 @@ export function buildNewMailPayload(
 }
 
 async function loadNewMailDetails(db: D1Database, input: NewMailNotificationInput): Promise<NewMailDetails> {
-	let row: { from_name: string | null; thread_id: string; preview: string | null; metadata_json: string | null } | null = null;
+	let row: {
+		from_name: string | null;
+		thread_id: string;
+		preview: string | null;
+		metadata_json: string | null;
+		subject: string | null;
+		body_text: string | null;
+		body_html: string | null;
+	} | null = null;
 	try {
 		row = await db
 			.prepare(
-				`SELECT e.from_name, COALESCE(e.thread_id, e.id) AS thread_id, e.preview, m.metadata_json
+				`SELECT e.from_name, COALESCE(e.thread_id, e.id) AS thread_id, e.preview, m.metadata_json, e.subject,
+				        substr(e.body_text, 1, 8000) AS body_text, substr(e.body_html, 1, 60000) AS body_html
 				 FROM emails e LEFT JOIN email_analysis_metadata m ON m.email_id = e.id AND m.user_id = e.user_id
 				 WHERE e.id = ? AND e.user_id = ?`
 			)
@@ -351,7 +365,8 @@ async function loadNewMailDetails(db: D1Database, input: NewMailNotificationInpu
 	} catch {
 		unread = null;
 	}
-	return { fromName: row?.from_name ?? null, threadId: row?.thread_id ?? input.emailId, preview: row?.preview ?? '', signals, unread };
+	const code = row ? findVerificationCode({ subject: row.subject ?? input.subject, text: row.body_text, html: row.body_html }) : null;
+	return { fromName: row?.from_name ?? null, threadId: row?.thread_id ?? input.emailId, preview: row?.preview ?? '', signals, unread, code };
 }
 
 export function pushErrorStatus(error: unknown): number | null {
@@ -396,10 +411,12 @@ async function deliverNewMailNotification(
 ): Promise<void> {
 	const [prefs, details] = await Promise.all([loadNotificationPrefs(env.DB, input.userId), loadNewMailDetails(env.DB, input)]);
 	// The user's rules apply to every channel: browser push and Brrr alike.
-	if (!decideNotification(prefs, { address: input.from, signals: details.signals }).notify) return;
+	const hasCode = Boolean(details.code);
+	if (!decideNotification(prefs, { address: input.from, signals: details.signals, hasCode }).notify) return;
+	const code = prefs.codes ? details.code : null;
 	await Promise.all([
-		deliverWebPushNotification(env, input, details, prefs.preview),
-		deliverBrrrNotification(env, input)
+		deliverWebPushNotification(env, input, details, { preview: prefs.preview, codes: prefs.codes }),
+		deliverBrrrNotification(env, input, code)
 	]);
 }
 
@@ -407,7 +424,7 @@ async function deliverWebPushNotification(
 	env: PushNotificationEnv,
 	input: NewMailNotificationInput,
 	details: NewMailDetails,
-	preview: boolean
+	options: { preview: boolean; codes: boolean }
 ): Promise<void> {
 	const vapid = readVapidConfiguration(env);
 	if (!vapid) return;
@@ -416,7 +433,7 @@ async function deliverWebPushNotification(
 	if (subscriptions.length === 0) return;
 
 	webpush.setVapidDetails(vapid.subject, vapid.publicKey, vapid.privateKey);
-	const payload = JSON.stringify(buildNewMailPayload(input, details, { preview }));
+	const payload = JSON.stringify(buildNewMailPayload(input, details, options));
 	const deadEndpoints: string[] = [];
 
 	await Promise.all(
@@ -450,7 +467,8 @@ async function deliverWebPushNotification(
 
 async function deliverBrrrNotification(
 	env: PushNotificationEnv,
-	input: NewMailNotificationInput
+	input: NewMailNotificationInput,
+	code: string | null = null
 ): Promise<void> {
 	const destination = await loadBrrrDestination(env.DB, input.userId);
 	if (!destination) return;
@@ -459,6 +477,7 @@ async function deliverBrrrNotification(
 		subject: input.subject,
 		from: input.from,
 		emailId: input.emailId,
+		code,
 		origin: readPublicAppOrigin(env.PUBLIC_APP_URL),
 		sound: resolveBrrrSound(input.from, destination.defaultSound, destination.senderSounds)
 	});

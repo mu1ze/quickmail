@@ -11,6 +11,7 @@
 	import MailCategories from './MailCategories.svelte';
 	import DomainSwitcher from './DomainSwitcher.svelte';
 	import NotificationPrompt from './NotificationPrompt.svelte';
+	import VerificationCode from './VerificationCode.svelte';
 	import { CATEGORY_LABELS } from '$lib/mail-analysis';
 	import Icon from './Icon.svelte';
 	import Check from './Check.svelte';
@@ -892,7 +893,7 @@
 									</span>
 								</span>
 
-								<span class="subject">{thread.subject || '(no subject)'}</span>
+								<span class="subject">{#if thread.verification_code}<VerificationCode code={thread.verification_code} />{/if}{thread.subject || '(no subject)'}</span>
 								<span class="preview">
 									{thread.preview || (thread.has_attachments ? 'Attached files' : 'No message text')}
 								</span>

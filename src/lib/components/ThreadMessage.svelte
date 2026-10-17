@@ -4,6 +4,8 @@
 	import DeliveryStatus from './DeliveryStatus.svelte';
 	import EmailBody from './EmailBody.svelte';
 	import PlainTextBody from './PlainTextBody.svelte';
+	import VerificationCode from './VerificationCode.svelte';
+	import { findVerificationCode } from '$lib/verification-code';
 	import { formatFullDate, formatRelativeDate } from '$lib/utils/date';
 	import { splitQuotedText } from '$lib/utils/quotes';
 	import { buildMessagePreview } from '$lib/utils/message-preview';
@@ -29,6 +31,11 @@
 
 	/** One-line teaser for the collapsed state — the reply, not its quotes. */
 	const snippet = $derived(buildMessagePreview(message.body_text?.trim() || message.body_html).slice(0, 140));
+
+	/** Sign-in mail gets its code pulled out above the body. */
+	const code = $derived(
+		outbound ? null : findVerificationCode({ subject: message.subject, text: message.body_text, html: message.body_html })
+	);
 
 	let quoteOpen = $state(false);
 	let plain = $state(false);
@@ -58,6 +65,7 @@
 				<DeliveryStatus status={message.status} detail={message.status_detail} />
 			{/if}
 		</header>
+		{#if code}<VerificationCode {code} variant="card" />{/if}
 		{#if message.body_html && message.body_text?.trim()}
 			<button type="button" class="content-mode" aria-pressed={plain} onclick={() => (plain = !plain)}><Icon name={plain ? 'layout-line' : 'text'} size={13} />{plain ? 'View formatted message' : 'View plain text'}</button>
 		{/if}

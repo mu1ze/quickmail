@@ -133,6 +133,24 @@
 		{/snippet}
 	</SettingRow>
 
+	<SettingRow
+		label="Show verification codes"
+		id="notify-codes"
+		description="Sign-in codes appear in the notification and always get through, even during quiet hours."
+	>
+		{#snippet control()}
+			<input
+				id="notify-codes"
+				class="switch"
+				type="checkbox"
+				role="switch"
+				checked={prefs.codes}
+				disabled={saving}
+				onchange={(event) => save({ ...prefs, codes: event.currentTarget.checked })}
+			/>
+		{/snippet}
+	</SettingRow>
+
 	<SettingRow label="Quiet hours" id="notify-quiet" description="Hold notifications overnight. VIPs still get through.">
 		{#snippet control()}
 			<input

@@ -146,6 +146,9 @@ describe('new-mail push payloads', () => {
 		assert.equal(JSON.stringify(payload).includes('message body'), false);
 		assert.equal(buildNewMailPayload(input, details, { preview: true }).body, 'Project update\nThe message body says hello');
 		assert.equal(buildNewMailPayload(input).title, 'ada@example.com');
+		const withCode = { ...details, code: '482913' };
+		assert.equal(buildNewMailPayload(input, withCode, { codes: true }).body, 'Code 482 913\nProject update');
+		assert.equal(buildNewMailPayload(input, withCode, { codes: false }).body, 'Project update');
 	});
 
 	test('recognizes expired subscription responses', () => {
