@@ -3,7 +3,7 @@ import { hashToken } from './crypto';
 import type { ApiTokenSummary, User } from '$lib/types';
 
 /** Scopes a token can carry. Enforced in `authorizeApiRequest`. */
-export const API_SCOPES = ['mail:send', 'mail:read', 'admin'] as const;
+export const API_SCOPES = ['mail:send', 'mail:read', 'mail:draft', 'admin'] as const;
 export type ApiScope = (typeof API_SCOPES)[number];
 
 type TokenRow = {

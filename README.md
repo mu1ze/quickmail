@@ -280,8 +280,12 @@ curl https://your-worker/api/mail \
 ```
 
 `GET /api/mail?view=inbox` lists conversations. Keys are scoped (`mail:read`,
-`mail:send`, admin) and only the SHA-256 hash is stored — the raw value is
+`mail:send`, `mail:draft`, admin) and only the SHA-256 hash is stored — the raw value is
 shown once. Revoking a key takes effect immediately.
+
+`mail:draft` is for agents that prepare mail for a human to review: it can
+create, update and delete drafts (`POST /api/drafts`, `DELETE /api/drafts/:id`)
+and nothing else — it cannot send, read the mailbox or manage keys.
 
 ## CLI and MCP
 

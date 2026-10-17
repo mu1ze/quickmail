@@ -12,6 +12,7 @@
 	let keyName = $state('');
 	let sendScope = $state(true);
 	let readScope = $state(true);
+	let draftScope = $state(false);
 	let adminScope = $state(false);
 	let tokens = $state<ApiTokenSummary[]>([]);
 	let hydrated = $state(false);
@@ -30,13 +31,14 @@
 		'curl -fsSL https://raw.githubusercontent.com/DivinPrince/quickmail/main/scripts/install.sh | sh';
 
 	const canCreateKey = $derived(
-		Boolean(keyName.trim()) && (sendScope || readScope || (data.isAdmin && adminScope))
+		Boolean(keyName.trim()) && (sendScope || readScope || draftScope || (data.isAdmin && adminScope))
 	);
 
 	function openCreate() {
 		keyName = '';
 		sendScope = true;
 		readScope = true;
+		draftScope = false;
 		adminScope = false;
 		keyError = '';
 		revealed = null;
@@ -61,6 +63,7 @@
 			const scopes = [];
 			if (sendScope) scopes.push('mail:send');
 			if (readScope) scopes.push('mail:read');
+			if (draftScope) scopes.push('mail:draft');
 			if (data.isAdmin && adminScope) scopes.push('admin');
 
 			const res = await fetch('/api/apikeys', {
@@ -211,6 +214,7 @@
 					<div class="scope-row">
 						<Check label="Send mail" caption="send" checked={sendScope} onchange={(next) => (sendScope = next)} />
 						<Check label="Read mail" caption="read" checked={readScope} onchange={(next) => (readScope = next)} />
+						<Check label="Drafts only" caption="draft" checked={draftScope} onchange={(next) => (draftScope = next)} />
 						{#if data.isAdmin}
 							<Check
 								label="Admin"
