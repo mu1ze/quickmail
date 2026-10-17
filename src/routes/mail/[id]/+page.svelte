@@ -92,6 +92,9 @@
 		opened = new Set(messages.map((message) => message.id));
 	}
 
+	/** Newest on top, so new mail is the first thing you see. */
+	const newestFirst = $derived([...messages].reverse());
+
 	const collapsedCount = $derived(messages.filter((message) => !opened.has(message.id)).length);
 
 	/** Keep the reader in place when a server action fails. */
@@ -452,29 +455,6 @@
 			{/if}
 		</div>
 
-		{#if collapsedCount > 0}
-			<button type="button" class="expand-all" onclick={expandAll}>
-				Expand all {messages.length} messages
-			</button>
-		{/if}
-
-		<div class="thread">
-			{#each messages as message (message.id)}
-				{#if message.analysis}
-					<div class="message-analysis">
-						<AnalysisBadges analysis={message.analysis} />
-						{#if message.analysis.phishing}<p>Possible phishing: verify the sender and link destination through a trusted channel before sharing credentials or sending money.</p>{/if}
-						<details><summary>Review analysis</summary><AnalysisControls analysis={message.analysis} categoryId={message.id} /></details>
-					</div>
-				{/if}
-				<ThreadMessage
-					{message}
-					expanded={opened.has(message.id)}
-					onToggle={() => toggleMessage(message.id)}
-				/>
-			{/each}
-		</div>
-
 		{#if replyOpen}
 			<form class="reply-section" onsubmit={sendReply}>
 				<div class="reply-fields">
@@ -535,6 +515,29 @@
 			<button type="button" class="reply-prompt" onclick={() => seedReply('reply')}>
 				<Icon name="reply-line" size={15} />
 				Reply
+			</button>
+		{/if}
+
+		<div class="thread">
+			{#each newestFirst as message (message.id)}
+				{#if message.analysis}
+					<div class="message-analysis">
+						<AnalysisBadges analysis={message.analysis} />
+						{#if message.analysis.phishing}<p>Possible phishing: verify the sender and link destination through a trusted channel before sharing credentials or sending money.</p>{/if}
+						<details><summary>Review analysis</summary><AnalysisControls analysis={message.analysis} categoryId={message.id} /></details>
+					</div>
+				{/if}
+				<ThreadMessage
+					{message}
+					expanded={opened.has(message.id)}
+					onToggle={() => toggleMessage(message.id)}
+				/>
+			{/each}
+		</div>
+
+		{#if collapsedCount > 0}
+			<button type="button" class="expand-all" onclick={expandAll}>
+				Expand all {messages.length} messages
 			</button>
 		{/if}
 	</div>
@@ -637,9 +640,7 @@
 	}
 
 	.reply-section {
-		margin-top: 1.5rem;
-		padding-top: 1.25rem;
-		box-shadow: inset 0 1px 0 var(--color-line);
+		margin: 1.25rem 0 0.5rem;
 	}
 
 	.reply-fields {
@@ -686,13 +687,13 @@
 		color: var(--color-danger);
 	}
 
-	/* Dormant reply box at the foot of the thread; opens the composer. */
+	/* Dormant reply box above the newest message; opens the composer. */
 	.reply-prompt {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
 		width: 100%;
-		margin-top: 1.5rem;
+		margin: 1.25rem 0 0.5rem;
 		padding: 0.75rem 1rem;
 		border-radius: 6px;
 		font-size: 0.875rem;
