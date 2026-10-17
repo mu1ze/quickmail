@@ -1260,6 +1260,9 @@
 		.card { position: relative; overflow: hidden; touch-action: pan-y; }
 		.card-link, .cards.layout-list .card-link, .card-actions { position: relative; z-index: 1; transform: translateX(var(--swipe-x, 0px)); transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1); }
 		.card:global(.swiping) .card-link, .card:global(.swiping) .card-actions { transition: none; }
+		/* The swipe transform and clipping would trap the fixed options popup inside the row. */
+		.card.menu-open { overflow: visible; }
+		.card.menu-open .card-actions { transform: none; }
 		.swipe-under { position: absolute; top: 0; bottom: 0; z-index: 2; align-items: center; gap: 0.45rem; padding: 0 1.1rem; overflow: hidden; white-space: nowrap; font-size: 0.8rem; font-weight: 600; color: #fff; }
 		.card:not(:global([data-swipe='right'])) .swipe-under-right, .card:not(:global([data-swipe='left'])) .swipe-under-left { display: none; }
 		.card:global([data-swipe='right']) .swipe-under-right { display: flex; left: 0; width: max(0px, var(--swipe-x, 0px)); background: #2f7de1; }
@@ -1298,7 +1301,8 @@
 		.cards.layout-list .date { text-align: right; font-size: 0.6875rem; }
 		.card-actions, .cards.layout-list .card-actions { position: relative; top: auto; right: auto; margin-top: 0; grid-column: 2; }
 		.card-actions > .tool-btn { background: transparent !important; width: 2rem; height: 2.75rem; }
-		.card-actions .menu { position: fixed; top: auto; bottom: calc(var(--mobile-dock-height) + env(safe-area-inset-bottom) + 1rem); left: 1rem; right: 1rem; max-height: 60dvh; overflow-y: auto; }
+		/* A sheet above the dock, in thumb reach; overrides the desktop popover's inline position. */
+		.row-options { top: auto !important; left: 1rem !important; right: 1rem; bottom: calc(var(--mobile-dock-height) + env(safe-area-inset-bottom) + 0.75rem); width: auto; max-width: none; max-height: min(60dvh, calc(100dvh - var(--mobile-dock-height) - env(safe-area-inset-bottom) - 2rem)); border-radius: 16px; }
 		.ios-unread-dot { display: block; position: absolute; left: 0.3rem; top: 1.8rem; width: 0.35rem; height: 0.35rem; border-radius: 50%; }
 		.ios-unread-dot.visible { background: var(--color-accent); }
 		.ios-select-toggle { display: flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; }
