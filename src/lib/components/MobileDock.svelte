@@ -18,7 +18,7 @@
 </script>
 
 {#if !composing}
-	<nav class="dock" aria-label="Primary">
+	<nav class="dock" aria-label="Primary" inert={menuOpen} aria-hidden={menuOpen ? 'true' : undefined}>
 		<div class="dock-pill">
 			<button
 				type="button"

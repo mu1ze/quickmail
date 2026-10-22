@@ -245,7 +245,8 @@
 
 	setShellContext({
 		openNav: () => (mobileOpen = true),
-		focusSearch: handleDockSearch
+		focusSearch: handleDockSearch,
+		logout
 	});
 
 	async function logout(all = false) {
@@ -296,10 +297,11 @@
 			isAdmin={data.user!.is_admin}
 			bind:collapsed
 			bind:mobileOpen
+			{mobileViewport}
 			onLogout={logout}
 		/>
 
-		<div class="app-content">
+		<div class="app-content" inert={mobileViewport && mobileOpen}>
 			<Topbar
 				user={data.user!}
 				accounts={data.accounts}

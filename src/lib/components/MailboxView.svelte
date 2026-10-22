@@ -12,6 +12,7 @@
 	import DomainSwitcher from './DomainSwitcher.svelte';
 	import NotificationPrompt from './NotificationPrompt.svelte';
 	import VerificationCode from './VerificationCode.svelte';
+	import AccountSwitcher from './AccountSwitcher.svelte';
 	import { CATEGORY_LABELS } from '$lib/mail-analysis';
 	import Icon from './Icon.svelte';
 	import Check from './Check.svelte';
@@ -585,7 +586,7 @@
 	{/if}
 	<header class="ios-header">
 		<button type="button" class="ios-back" aria-label="Open menu" onclick={() => shell?.openNav()}>
-			<Icon name="arrow-left-s-line" size={22} />
+			<Icon name="menu-line" size={22} />
 		</button>
 
 		<div class="ios-title-block">
@@ -594,6 +595,9 @@
 		</div>
 
 		<div class="ios-actions">
+			{#if $currentPage.data.user && shell}
+				<AccountSwitcher user={$currentPage.data.user} accounts={$currentPage.data.accounts} onLogout={shell.logout} compact />
+			{/if}
 			{#if selectMode}
 				<button type="button" class="ios-select" onclick={toggleSelectMode}>Cancel</button>
 			{/if}
@@ -1280,7 +1284,7 @@
 		.ios-subtitle { font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 0.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 		.ios-title-block { min-width: 0; }
 		.ios-actions, .ios-bulk-actions { display: flex; align-items: center; gap: 0.15rem; }
-		.ios-select { font-size: 0.8125rem; color: var(--color-accent-text); }
+		.ios-select { min-height: 2.75rem; font-size: 0.8125rem; color: var(--color-accent-text); }
 		.ios-bulk-bar { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 1rem; background: var(--color-accent-soft); }
 		.ios-bulk-count { font-size: 0.8125rem; color: var(--color-accent-text); }
 		.ios-search { display: flex; align-items: center; gap: 0.5rem; margin: 0.75rem 1rem; padding: 0.4rem 0.75rem; min-height: 2.75rem; border-radius: 12px; background: var(--color-well); color: var(--color-text-secondary); }
@@ -1300,7 +1304,10 @@
 		.card-meta { font-size: 0.75rem; }
 		.cards.layout-list .date { text-align: right; font-size: 0.6875rem; }
 		.card-actions, .cards.layout-list .card-actions { position: relative; top: auto; right: auto; margin-top: 0; grid-column: 2; }
-		.card-actions > .tool-btn { background: transparent !important; width: 2rem; height: 2.75rem; }
+		.card-actions > .tool-btn { background: transparent !important; width: 2.75rem; height: 2.75rem; }
+		.cards.layout-list.compact .card { min-height: 5.25rem; padding-block: 0.75rem; }
+		.cards.layout-list.compact .avatar { width: 2rem; height: 2rem; font-size: 0.875rem; }
+		.cards.layout-list.compact .card-body { gap: 0.2rem; }
 		/* A sheet above the dock, in thumb reach; overrides the desktop popover's inline position. */
 		.row-options { top: auto !important; left: 1rem !important; right: 1rem; bottom: calc(var(--mobile-dock-height) + env(safe-area-inset-bottom) + 0.75rem); width: auto; max-width: none; max-height: min(60dvh, calc(100dvh - var(--mobile-dock-height) - env(safe-area-inset-bottom) - 2rem)); border-radius: 16px; }
 		.ios-unread-dot { display: block; position: absolute; left: 0.3rem; top: 1.8rem; width: 0.35rem; height: 0.35rem; border-radius: 50%; }

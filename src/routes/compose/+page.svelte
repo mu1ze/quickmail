@@ -443,7 +443,7 @@
 
 	.compose-circle.send.ready {
 		color: var(--color-on-accent);
-		background: #007aff;
+		background: var(--color-accent);
 	}
 
 	.compose-circle:disabled {
@@ -597,6 +597,7 @@
 	}
 
 	@media (max-width: 900px) {
+		.compose-circle { width: 2.75rem; height: 2.75rem; }
 		.compose-grab {
 			display: block;
 			width: 2.25rem;

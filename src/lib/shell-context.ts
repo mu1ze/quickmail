@@ -3,6 +3,7 @@ import { getContext, setContext } from 'svelte';
 export type ShellContext = {
 	openNav: () => void;
 	focusSearch: () => void;
+	logout: (all?: boolean) => Promise<void>;
 };
 
 const KEY = Symbol('shell');

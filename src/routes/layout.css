@@ -440,12 +440,6 @@ button:disabled { cursor: default; }
 		background: var(--color-well);
 	}
 
-	@media (max-width: 900px) {
-		.app-shell.hub-mobile > :global(.sidebar) {
-			display: none;
-		}
-	}
-
 	.app-shell.compose-mobile .app-main {
 		padding: 0;
 		max-width: none;
@@ -472,10 +466,6 @@ button:disabled { cursor: default; }
 		box-shadow: none;
 	}
 
-	.app-shell.compose-mobile > :global(.sidebar) {
-		display: none;
-	}
-
 	.app-shell.mail-mobile {
 		height: 100dvh;
 	}
@@ -497,10 +487,6 @@ button:disabled { cursor: default; }
 		border-radius: 0;
 		box-shadow: none;
 		background: var(--color-surface);
-	}
-
-	.app-shell.mail-mobile > :global(.sidebar) {
-		display: none;
 	}
 
 	.icon-btn {

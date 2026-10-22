@@ -82,6 +82,8 @@ themes. Intercept send requests or use a test provider to avoid real delivery.
 | Navigation | Open mail from a searched/filtered inbox and use Back. The same mailbox, filters, and page are restored. |
 | Replies | Type a reply, attach a file, and use Ctrl/Cmd+Enter while the editor is focused. Failed delivery retains text and files. |
 | Mobile | Sidebar stays outside the reading area, content has no page overflow, and attachment actions remain usable. |
+| Mobile accounts | Open the account picker from the inbox header and navigation drawer. At 320px and in short landscape viewports, account rows scroll while Add account and sign-out actions remain visible. Switching replaces the inbox with the selected account's mail. |
+| Mobile navigation | Closed navigation is inert. Opening the drawer focuses Close navigation, keeps Tab/Shift+Tab within the drawer, and makes covered content inert. Escape closes it and restores focus. Repeat from Settings. |
 
 The inbox redesign was checked in Chromium at widths of 1440, 1024, 900, 390 and
 320 pixels, with light/dark themes, a full 35-conversation test inbox, and the
@@ -97,3 +99,12 @@ covered category and attention filtering, sender names, both layouts, collapsed
 navigation, and HTML text staying visible while a remote-image response was held
 open. The downloaded WebKit runtime stalled during page creation, so the exact
 Safari repaint symptom remains unverified in that engine.
+
+The October 22 mobile account/layout pass was checked locally in Chromium at
+320 × 568, 390 × 844, 844 × 390, and 1440 × 900 with two synthetic accounts.
+Checks covered the header account switch, a landscape picker with a scrolling
+account list and visible actions, navigation focus trapping/restoration,
+Settings navigation, compact list spacing, the selection header, and a saved
+composer draft. Header controls use 44px touch targets and the ready Send button
+uses the shared accent. No mail was sent. These viewport checks do not establish
+native iOS/Safari behavior.

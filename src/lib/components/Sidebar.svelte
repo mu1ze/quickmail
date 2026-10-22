@@ -22,6 +22,7 @@
 		isAdmin,
 		collapsed = $bindable(false),
 		mobileOpen = $bindable(false),
+		mobileViewport = false,
 		onLogout
 	}: {
 		user: BrowserAccount;
@@ -33,6 +34,7 @@
 		isAdmin: boolean;
 		collapsed?: boolean;
 		mobileOpen?: boolean;
+		mobileViewport?: boolean;
 		onLogout: (all?: boolean) => Promise<void>;
 	} = $props();
 
@@ -72,6 +74,22 @@
 	// Settings and admin take over the sidebar with their own grouped sections.
 	const settingsMode = $derived(isHubRoute($page.url.pathname));
 	const groups = $derived(settingsGroups(isAdmin));
+	let closeButton = $state<HTMLButtonElement>();
+	$effect(() => {
+		if (!mobileViewport || !mobileOpen) return;
+		const previous = document.activeElement;
+		queueMicrotask(() => closeButton?.focus());
+		return () => {
+			if (previous instanceof HTMLElement && previous.isConnected && !previous.closest('[inert]')) previous.focus();
+		};
+	});
+	function trapNavigationFocus(event: KeyboardEvent) {
+		if (event.key !== 'Tab' || !mobileViewport || !mobileOpen || document.querySelector('dialog[open]')) return;
+		const elements = [...(event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('a[href], button:not(:disabled), input, select, [tabindex="0"]')].filter((element) => element.getClientRects().length > 0);
+		const first = elements[0], last = elements[elements.length - 1];
+		if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+		else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+	}
 </script>
 
 {#if mobileOpen}
@@ -83,7 +101,7 @@
 	></button>
 {/if}
 
-<aside class="sidebar" class:collapsed class:mobile-open={mobileOpen}>
+<aside class="sidebar" class:collapsed class:mobile-open={mobileOpen} role={mobileViewport ? 'dialog' : undefined} aria-modal={mobileViewport && mobileOpen ? 'true' : undefined} aria-label="Main navigation" inert={mobileViewport && !mobileOpen} aria-hidden={mobileViewport && !mobileOpen ? 'true' : undefined} onkeydown={trapNavigationFocus}>
 	<div class="sidebar-top">
 		<a href="/inbox" class="brand" title="Mail" onclick={() => (mobileOpen = false)}>
 			<Logo size={30} />
@@ -105,6 +123,7 @@
 			<button
 				type="button"
 				class="drawer-close"
+				bind:this={closeButton}
 				aria-label="Close navigation"
 				onclick={() => (mobileOpen = false)}
 			>

@@ -57,8 +57,8 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 2.25rem;
-		height: 2.25rem;
+		width: 2.75rem;
+		height: 2.75rem;
 		border: none;
 		border-radius: 999px;
 		color: var(--color-text);
@@ -77,7 +77,7 @@
 	}
 
 	.hub-header-spacer {
-		width: 2.25rem;
+		width: 2.75rem;
 	}
 
 	.hub-content {
