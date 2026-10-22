@@ -2,7 +2,10 @@
 	import Logo from '$lib/components/Logo.svelte';
 	import FloatingField from '$lib/interior/FloatingField.svelte';
 	import LoadingButton from '$lib/interior/LoadingButton.svelte';
-	import { discardPushSubscriptionFromAnotherAccount } from '$lib/push-client';
+	import { finishAccountChange, switchAccount } from '$lib/account-client';
+	import type { PageData } from './$types';
+	let { data }: { data: PageData } = $props();
+	const adding = $derived(data.user !== null);
 
 	let email = $state('');
 	let password = $state('');
@@ -20,17 +23,12 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ email, password })
 			});
-			const data = await res.json();
+			const result = await res.json();
 			if (!res.ok) {
-				error = data.error ?? 'Login failed';
+				error = result.error ?? 'Login failed';
 				return;
 			}
-			try {
-				await discardPushSubscriptionFromAnotherAccount();
-			} catch (pushError) {
-				console.warn('Could not reconcile the existing push subscription after login', pushError);
-			}
-			window.location.href = '/inbox';
+			await finishAccountChange(result.user.id);
 		} catch {
 			error = 'Network error';
 		} finally {
@@ -47,7 +45,8 @@
 	<div class="auth-card">
 		<div class="auth-brand">
 			<div class="brand-icon"><Logo size={48} /></div>
-			<h1>Sign in</h1>
+			<h1>{adding ? 'Add another account' : 'Sign in'}</h1>
+			{#if adding}<p class="auth-note">Your other accounts will stay signed in.</p>{/if}
 		</div>
 
 		<form class="login-form" onsubmit={submit}>
@@ -76,11 +75,20 @@
 			</div>
 		</form>
 
-		<p class="auth-alt"><a href="/recover">Forgot password</a></p>
+		{#if adding}<p class="auth-alt"><a href="/inbox">Back to {data.user?.name || 'your inbox'}</a> · <a href="/recover?add=1">Forgot password</a></p>{:else}<p class="auth-alt"><a href="/recover">Forgot password</a></p>{/if}
+		{#if data.accounts.length > 0}
+			<div class="saved-accounts"><p>Already signed in</p>{#each data.accounts as account (account.id)}<button type="button" disabled={loading} onclick={async () => { loading = true; error = ''; try { await switchAccount(account.id); } catch (cause) { error = cause instanceof Error ? cause.message : 'Could not switch accounts'; loading = false; } }}>{account.name}<span>{account.email}</span></button>{/each}</div>
+		{/if}
 	</div>
 </div>
 
 <style>
+	.auth-note { margin: 0.75rem 0 0; font-size: 0.8125rem; color: var(--color-text-secondary); }
+	.saved-accounts { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--color-line); }
+	.saved-accounts p { font-size: 0.75rem; color: var(--color-text-secondary); margin-bottom: 0.5rem; }
+	.saved-accounts button { display: flex; flex-direction: column; width: 100%; gap: 0.25rem; padding: 0.75rem; border-radius: 10px; font-size: 0.875rem; text-align: left; }
+	.saved-accounts button:hover { background: var(--color-well); }
+	.saved-accounts span { font-size: 0.75rem; color: var(--color-text-secondary); }
 	.auth-brand {
 		display: flex;
 		flex-direction: column;

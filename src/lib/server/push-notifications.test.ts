@@ -136,6 +136,7 @@ describe('new-mail push payloads', () => {
 		const payload = buildNewMailPayload(input, details);
 
 		assert.deepEqual(payload, {
+			userId: 'user-1',
 			title: 'Ada Lovelace',
 			body: 'Project update',
 			tag: 'quickmail-thread-thread-9',

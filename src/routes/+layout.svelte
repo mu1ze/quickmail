@@ -5,12 +5,16 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import Topbar from '$lib/components/Topbar.svelte';
+	import AccountSwitcher from '$lib/components/AccountSwitcher.svelte';
 	import MobileDock from '$lib/components/MobileDock.svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import ShortcutSheet from '$lib/components/ShortcutSheet.svelte';
 	import UndoToast from '$lib/components/UndoToast.svelte';
 	import { disablePushForCurrentAccount } from '$lib/push-client';
 	import { bindPendingSendFlush } from '$lib/pending-send';
+	import { finishAccountChange, prepareAccountChange, watchAccountSession } from '$lib/account-client';
+	import { requireOk } from '$lib/utils/request';
+	import { untrack } from 'svelte';
 	import { armGoChord, consumeGoChord, isMod, isTypingTarget } from '$lib/shortcuts';
 	import { watchSystemTheme } from '$lib/theme';
 	import { runUndo, showUndo } from '$lib/undo';
@@ -44,7 +48,11 @@
 	let { children, data }: { children: import('svelte').Snippet; data: LayoutData } = $props();
 
 	// Onboarding runs before the user has an address, so the shell would be empty.
-	const showShell = $derived(Boolean(data.user) && $page.url.pathname !== '/onboarding');
+	const showShell = $derived(Boolean(data.user) && !['/onboarding', '/login', '/recover'].includes($page.url.pathname));
+	let accountChanged = $state(false);
+	let accountChangeDialog = $state<HTMLDialogElement>();
+	$effect(() => watchAccountSession(untrack(() => data.user?.id ?? null), () => { accountChanged = true; }));
+	$effect(() => { if (accountChanged) accountChangeDialog?.showModal(); });
 
 	let collapsed = $state(false);
 	let mobileOpen = $state(false);
@@ -240,15 +248,17 @@
 		focusSearch: handleDockSearch
 	});
 
-	async function logout() {
+	async function logout(all = false) {
+		await prepareAccountChange();
 		try {
 			await disablePushForCurrentAccount();
 		} catch (error) {
 			console.warn('Could not fully remove the push subscription during logout', error);
-		} finally {
-			await fetch('/api/auth/login', { method: 'DELETE' });
-			window.location.href = '/login';
 		}
+		const response = await fetch(`/api/auth/login${all ? '?all=1' : ''}`, { method: 'DELETE' });
+		await requireOk(response);
+		const body = await response.json();
+		await finishAccountChange(body.user?.id ?? null);
 	}
 </script>
 
@@ -277,6 +287,8 @@
 		data-collapsed={collapsed}
 	>
 		<Sidebar
+			user={data.user!}
+			accounts={data.accounts}
 			counts={data.counts}
 			labels={data.labels}
 			domains={data.domains}
@@ -289,9 +301,8 @@
 
 		<div class="app-content">
 			<Topbar
-				userName={data.user!.name}
-				userEmail={data.user!.email}
-				addresses={data.addresses}
+				user={data.user!}
+				accounts={data.accounts}
 				bind:searchInput
 				onToggleNav={() => { if (mobileViewport) mobileOpen = !mobileOpen; else collapsed = !collapsed; }}
 				onLogout={logout}
@@ -316,5 +327,20 @@
 		<UndoToast />
 	</div>
 {:else}
+	{#if data.user && $page.url.pathname === '/onboarding'}
+		<div class="onboarding-account"><AccountSwitcher user={data.user} accounts={data.accounts} onLogout={logout} /></div>
+	{/if}
 	{@render children()}
 {/if}
+
+<dialog bind:this={accountChangeDialog} class="account-changed" aria-label="Account changed" oncancel={(event) => event.preventDefault()}>
+	<h2>Your active account changed</h2><p>Reload to continue with the account selected in another tab. Unsaved edits stay here until you reload.</p><button type="button" class="btn-primary" onclick={() => { window.location.href = '/inbox'; }}>Reload account</button>
+</dialog>
+
+<style>
+	.onboarding-account { max-width: 22rem; margin: 1rem auto 0; padding: 0 1rem; }
+	.account-changed { width: min(25rem, calc(100vw - 2rem)); margin: auto; padding: 1.5rem; border: 1px solid var(--color-line); border-radius: 18px; background: var(--color-surface); color: var(--color-text); box-shadow: var(--mat-float); }
+	.account-changed::backdrop { background: rgb(0 0 0 / 40%); backdrop-filter: blur(4px); }
+	.account-changed h2 { font-size: 1.125rem; font-weight: 600; }
+	.account-changed p { margin: 0.75rem 0 1.25rem; font-size: 0.875rem; color: var(--color-text-secondary); line-height: 1.6; }
+</style>

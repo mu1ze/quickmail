@@ -51,6 +51,10 @@ const CONTENT_SECURITY_POLICY = [
 ].join('; ');
 
 function secureResponse(response: Response): Response {
+	const contentType = response.headers.get('Content-Type') ?? '';
+	if (!response.headers.has('Cache-Control') && /text\/html|application\/json/.test(contentType)) {
+		response.headers.set('Cache-Control', 'private, no-store');
+	}
 	if (!response.headers.has('Content-Security-Policy')) {
 		response.headers.set('Content-Security-Policy', CONTENT_SECURITY_POLICY);
 	}
@@ -90,6 +94,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 				}
 			}
 		}
+	}
+
+	// A stale tab must not read or mutate another account after a cookie switch.
+	const expectedAccount = event.request.headers.get('X-QuickMail-Account');
+	if (expectedAccount && event.locals.authMethod !== 'api_token' && expectedAccount !== event.locals.user?.id) {
+		const response = jsonError('Your active account changed. Reload to continue.', 409);
+		response.headers.set('X-QuickMail-Account-Changed', '1');
+		return response;
 	}
 
 	// Webhooks authenticate with a signature, not a session.
@@ -173,7 +185,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	if (pathname === '/login' || pathname === '/recover') {
-		if (event.locals.user) {
+		if (event.locals.user && event.url.searchParams.get('add') !== '1') {
 			throw redirect(303, pathname === '/recover' ? '/settings' : '/inbox');
 		}
 		return secureResponse(await resolve(event));

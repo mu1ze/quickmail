@@ -1,15 +1,18 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { login, logout, readSessionToken, sessionCookieOptions, SESSION_COOKIE } from '$lib/server/auth';
-import { SESSION_DAYS } from '$lib/server/constants';
+import { login } from '$lib/server/auth';
+import { MAX_BROWSER_ACCOUNTS, rememberBrowserAccount, signOutBrowserAccount } from '$lib/server/browser-accounts';
 import {
 	checkLoginRateLimit,
 	clearSuccessfulLogin,
 	recordFailedLogin
 } from '$lib/server/login-rate-limit';
 
-export const POST: RequestHandler = async ({ request, cookies, platform, getClientAddress }) => {
+export const POST: RequestHandler = async ({ request, cookies, platform, getClientAddress, url }) => {
 	const db = platform?.env.DB;
 	if (!db) return json({ error: 'Database unavailable' }, { status: 503 });
+	if (request.headers.get('origin') && request.headers.get('origin') !== url.origin) {
+		return json({ error: 'Cross-origin request rejected' }, { status: 403 });
+	}
 
 	const body = (await request.json().catch(() => null)) as {
 		email?: unknown;
@@ -35,19 +38,19 @@ export const POST: RequestHandler = async ({ request, cookies, platform, getClie
 	}
 	await clearSuccessfulLogin(db, email);
 
-	cookies.set(SESSION_COOKIE, result.token, sessionCookieOptions(SESSION_DAYS * 24 * 60 * 60));
+	if (!(await rememberBrowserAccount(db, cookies, result))) {
+		return json({ error: `You can keep ${MAX_BROWSER_ACCOUNTS} accounts signed in. Sign out of one before adding another.` }, { status: 409 });
+	}
 
 	return json({ user: result.user });
 };
 
-export const DELETE: RequestHandler = async ({ cookies, platform }) => {
+export const DELETE: RequestHandler = async ({ cookies, platform, request, url, locals }) => {
 	const db = platform?.env.DB;
-	const token = readSessionToken(cookies);
-
-	if (db && token) {
-		await logout(db, token);
+	if (!db || locals.authMethod === 'api_token') return json({ error: 'Unauthorized' }, { status: 401 });
+	if (request.headers.get('origin') && request.headers.get('origin') !== url.origin) {
+		return json({ error: 'Cross-origin request rejected' }, { status: 403 });
 	}
-
-	cookies.delete(SESSION_COOKIE, { path: '/' });
-	return json({ ok: true });
+	const user = await signOutBrowserAccount(db, cookies, url.searchParams.get('all') === '1');
+	return json({ ok: true, user });
 };

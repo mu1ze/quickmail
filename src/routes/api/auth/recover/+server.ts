@@ -1,6 +1,6 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { MIN_PASSWORD_LENGTH, recoverUserPassword, SESSION_COOKIE, sessionCookieOptions } from '$lib/server/auth';
-import { SESSION_DAYS } from '$lib/server/constants';
+import { MIN_PASSWORD_LENGTH, recoverUserPassword } from '$lib/server/auth';
+import { rememberBrowserAccount } from '$lib/server/browser-accounts';
 import { checkLoginRateLimit, recordFailedLogin } from '$lib/server/login-rate-limit';
 
 export const POST: RequestHandler = async ({ request, cookies, platform, getClientAddress }) => {
@@ -56,7 +56,9 @@ export const POST: RequestHandler = async ({ request, cookies, platform, getClie
 			recoveryKey: body.recoveryKey,
 			expectedKey
 		});
-		cookies.set(SESSION_COOKIE, result.token, sessionCookieOptions(SESSION_DAYS * 24 * 60 * 60));
+		if (!(await rememberBrowserAccount(db, cookies, result))) {
+			return json({ error: 'Password updated. Sign out of a saved account before signing in here.' }, { status: 409 });
+		}
 		return json({ user: result.user });
 	} catch (error) {
 		await recordFailedLogin(db, { email, ip });

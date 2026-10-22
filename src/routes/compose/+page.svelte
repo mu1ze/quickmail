@@ -8,6 +8,7 @@
 	import SignaturePreview from '$lib/components/SignaturePreview.svelte';
 	import SignaturePicker from '$lib/components/SignaturePicker.svelte';
 	import { queueMailSend } from '$lib/pending-send';
+	import { guardAccountChange } from '$lib/account-client';
 	import { isMod } from '$lib/shortcuts';
 	import {
 		compileSignature,
@@ -158,6 +159,11 @@
 		if (window.history.length > 1) window.history.back();
 		else window.location.href = '/inbox';
 	}
+
+	$effect(() => guardAccountChange(async () => {
+		if (attachmentBusy || savingDraft || sending) throw new Error('Wait for your draft or message to finish before switching accounts.');
+		if (dirty && !(await saveDraft())) throw new Error('Your draft could not be saved. Please save it before switching accounts.');
+	}));
 
 	async function discardDraft() {
 		if (!draftId) {

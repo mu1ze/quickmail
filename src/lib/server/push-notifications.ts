@@ -55,6 +55,7 @@ export type NewMailNotificationInput = {
 };
 
 export type NewMailPushPayload = {
+	userId: string;
 	title: string;
 	body: string;
 	/** One notification per conversation: a new message replaces the last. */
@@ -321,6 +322,7 @@ export function buildNewMailPayload(
 	// The code leads, so it reads on the lock screen without opening anything.
 	const code = options.codes && details.code ? `Code ${formatVerificationCode(details.code)}` : '';
 	return {
+		userId: input.userId,
 		title: sender,
 		body: code ? `${code}\n${subject}` : preview ? `${subject}\n${preview}` : subject,
 		tag: `quickmail-thread-${details.threadId ?? input.emailId}`,

@@ -2,6 +2,7 @@
 	import Logo from '$lib/components/Logo.svelte';
 	import FloatingField from '$lib/interior/FloatingField.svelte';
 	import LoadingButton from '$lib/interior/LoadingButton.svelte';
+	import { finishAccountChange } from '$lib/account-client';
 
 	let email = $state('');
 	let password = $state('');
@@ -31,7 +32,7 @@
 				error = data.error ?? 'Could not update password';
 				return;
 			}
-			window.location.href = '/inbox';
+			await finishAccountChange(data.user.id);
 		} catch {
 			error = 'Network error';
 		} finally {

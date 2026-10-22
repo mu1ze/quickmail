@@ -5,6 +5,7 @@
 import { version } from '$service-worker';
 
 type PushPayload = {
+	userId?: unknown;
 	title?: unknown;
 	body?: unknown;
 	tag?: unknown;
@@ -106,12 +107,14 @@ function readPushPayload(event: PushEvent): PushPayload {
 	}
 }
 
-async function currentAccountOwnsSubscription(): Promise<boolean> {
+async function currentAccountOwnsSubscription(userId: unknown): Promise<boolean> {
+	if (typeof userId !== 'string' || !userId) return false;
 	try {
 		const subscription = await worker.registration.pushManager.getSubscription();
 		if (!subscription) return false;
 		const endpoint = encodeURIComponent(subscription.endpoint);
 		const response = await fetch(`/api/push/subscriptions?endpoint=${endpoint}`, {
+			headers: { 'X-QuickMail-Account': userId },
 			cache: 'no-store',
 			credentials: 'same-origin'
 		});
@@ -133,7 +136,7 @@ worker.addEventListener('push', (event: PushEvent) => {
 
 	event.waitUntil(
 		(async () => {
-			if (!(await currentAccountOwnsSubscription())) return;
+			if (!(await currentAccountOwnsSubscription(payload.userId))) return;
 			const options: NotificationOptions & { renotify?: boolean; timestamp?: number; actions?: { action: string; title: string }[] } = {
 				body: stringValue(payload.body, 'You received a new email.'),
 				icon: '/icon-192.png',
@@ -142,7 +145,7 @@ worker.addEventListener('push', (event: PushEvent) => {
 				tag: stringValue(payload.tag, 'quickmail-new-message'),
 				renotify: true,
 				timestamp: Date.now(),
-				data: { url, emailId, unread: payload.unread }
+				data: { url, emailId, unread: payload.unread, userId: payload.userId }
 			};
 			// Shown on desktop and Android; iOS has no notification buttons and ignores them.
 			if (emailId) {
@@ -161,17 +164,18 @@ worker.addEventListener('push', (event: PushEvent) => {
 
 worker.addEventListener('notificationclick', (event: NotificationEvent) => {
 	event.notification.close();
-	const data = (event.notification.data ?? {}) as { emailId?: unknown; unread?: unknown };
+	const data = (event.notification.data ?? {}) as { emailId?: unknown; unread?: unknown; userId?: unknown };
 
 	// Archive / Mark as read act in place without opening the app.
-	if ((event.action === 'archive' || event.action === 'read') && typeof data.emailId === 'string') {
+	if ((event.action === 'archive' || event.action === 'read') && typeof data.emailId === 'string' && typeof data.userId === 'string') {
 		const emailId = data.emailId;
+		const userId = data.userId;
 		event.waitUntil(
 			(async () => {
 				const response = await fetch('/api/mail/actions', {
 					method: 'POST',
 					credentials: 'same-origin',
-					headers: { 'Content-Type': 'application/json' },
+					headers: { 'Content-Type': 'application/json', 'X-QuickMail-Account': userId },
 					body: JSON.stringify({ action: event.action, ids: [emailId] })
 				}).catch(() => null);
 				if (response?.ok && typeof data.unread === 'number') await setBadge(Math.max(0, data.unread - 1));

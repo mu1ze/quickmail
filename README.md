@@ -287,6 +287,14 @@ shown once. Revoking a key takes effect immediately.
 create, update and delete drafts (`POST /api/drafts`, `DELETE /api/drafts/:id`)
 and nothing else — it cannot send, read the mailbox or manage keys.
 
+## Multiple signed-in accounts
+
+Open your account name/avatar near the top of the sidebar or mobile navigation menu, then choose **Add another account**. Sign in once with that QuickMail account's credentials. You can keep up to eight accounts signed in on this browser and select any of them from **Your accounts** without signing out first.
+
+**Sign out of this account** removes only its session on this browser and returns to another saved account when available. **Sign out of all accounts** removes every saved session on this browser. Other devices stay signed in. Sessions retain the existing seven-day expiry, and revoked or expired accounts need to sign in again. Saved sessions use secure HttpOnly cookies; passwords and session tokens are never stored in browser local storage.
+
+Switching applies to the browser's shared session. Other open tabs ask you to reload and block requests from their old account view. The composer saves its draft before a switch; unfinished replies and pending sends must be finished or cleared first. Browser notifications remain tied to the account that enabled them and are shown only while that account is active; enable notifications in the other account's settings if needed.
+
 ## CLI and MCP
 
 ```bash

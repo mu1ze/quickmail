@@ -1,4 +1,6 @@
 <script lang="ts">
+	import AccountSwitcher from './AccountSwitcher.svelte';
+	import type { BrowserAccount } from '$lib/account-client';
 	import { page } from '$app/stores';
 	import Icon from './Icon.svelte';
 	import Logo from './Logo.svelte';
@@ -11,6 +13,8 @@
 	import type { Domain, MailboxCounts, MailLabel } from '$lib/types';
 
 	let {
+		user,
+		accounts,
 		counts,
 		labels = [],
 		domains,
@@ -20,6 +24,8 @@
 		mobileOpen = $bindable(false),
 		onLogout
 	}: {
+		user: BrowserAccount;
+		accounts: BrowserAccount[];
 		counts: MailboxCounts;
 		labels?: MailLabel[];
 		domains: Domain[];
@@ -27,7 +33,7 @@
 		isAdmin: boolean;
 		collapsed?: boolean;
 		mobileOpen?: boolean;
-		onLogout: () => void;
+		onLogout: (all?: boolean) => Promise<void>;
 	} = $props();
 
 	type NavItem = {
@@ -107,6 +113,8 @@
 		{/if}
 	</div>
 
+	<div class="sidebar-account"><AccountSwitcher {user} {accounts} compact={!expanded} {onLogout} /></div>
+
 	{#if settingsMode}
 		<a href="/inbox" class="nav-link back-link" title={expanded ? undefined : 'Back to mail'}>
 			<Icon name="arrow-left-s-line" size={18} />
@@ -130,18 +138,6 @@
 				{/each}
 			</nav>
 		{/each}
-		<nav class="nav nav-tools">
-			<button
-				type="button"
-				class="nav-link"
-				title={expanded ? undefined : 'Log out'}
-				aria-label="Log out"
-				onclick={onLogout}
-			>
-				<Icon name="logout-box-r-line" size={17} />
-				{#if expanded}<span class="nav-label">Log out</span>{/if}
-			</button>
-		</nav>
 	{:else}
 		<a href="/compose" class="new-message" title="New message" onclick={() => (mobileOpen = false)}>
 			<Icon name="pencil-line" size={expanded ? 16 : 18} />
@@ -206,19 +202,7 @@
 					{#if expanded}<span class="nav-label">{item.label}</span>{/if}
 				</a>
 			{/each}
-			<button
-				type="button"
-				class="nav-link"
-				title={expanded ? undefined : 'Log out'}
-				aria-label="Log out"
-				onclick={() => {
-					mobileOpen = false;
-					onLogout();
-				}}
-			>
-				<Icon name="logout-box-r-line" size={17} />
-				{#if expanded}<span class="nav-label">Log out</span>{/if}
-			</button>
+
 		</nav>
 	{/if}
 
@@ -228,6 +212,7 @@
 </aside>
 
 <style>
+	.sidebar-account { margin-bottom: 0.5rem; }
 	.sidebar {
 		overflow-y: auto;
 		scrollbar-width: none;
@@ -358,15 +343,6 @@
 		color: var(--color-accent-text);
 		font-weight: 600;
 		box-shadow: none;
-	}
-
-	button.nav-link {
-		width: 100%;
-		border: none;
-		background: transparent;
-		cursor: pointer;
-		font: inherit;
-		text-align: left;
 	}
 
 	.nav-label {

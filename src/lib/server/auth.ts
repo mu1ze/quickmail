@@ -299,7 +299,7 @@ export async function getUserFromSession(db: D1Database, token: string | undefin
 			`SELECT u.id, u.email, u.name, u.is_admin, u.created_at
 			 FROM sessions s
 			 JOIN users u ON u.id = s.user_id
-			 WHERE s.token_hash = ? AND s.expires_at > datetime('now')`
+			 WHERE s.token_hash = ? AND datetime(s.expires_at) > datetime('now')`
 		)
 		.bind(token_hash)
 		.first<UserRow>();

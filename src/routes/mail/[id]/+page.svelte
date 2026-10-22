@@ -15,6 +15,7 @@
 	import SignaturePreview from '$lib/components/SignaturePreview.svelte';
 	import SignaturePicker from '$lib/components/SignaturePicker.svelte';
 	import { queueMailSend } from '$lib/pending-send';
+	import { guardAccountChange } from '$lib/account-client';
 	import { isMod, isTypingTarget } from '$lib/shortcuts';
 	import { showUndo } from '$lib/undo';
 	import { compileSignature, parseSignatureConfig, resolveSignatureBody } from '$lib/email-signature';
@@ -38,6 +39,11 @@
 	let attachmentBusy = $state(false);
 	let picker = $state<{ addFiles: (files: File[]) => Promise<void> } | null>(null);
 	let error = $state('');
+	$effect(() => guardAccountChange(async () => {
+		if (sending || attachmentBusy || !isHtmlEmpty(replyHtml) || replyAttachments.length) {
+			throw new Error('Send or clear your unfinished reply before switching accounts.');
+		}
+	}));
 	let snoozeOpen = $state(false);
 	let selectedSignatureId = $state('');
 
