@@ -9,7 +9,13 @@ export const POST: RequestHandler = async ({ request, cookies, platform, getClie
 
 	const expectedKey = platform.env.PASSWORD_RESET_KEY?.trim() ?? '';
 	if (!expectedKey) {
-		return json({ error: 'Password recovery is not enabled' }, { status: 403 });
+		return json(
+			{
+				error:
+					'Password recovery is not enabled. Run `bunx wrangler secret put PASSWORD_RESET_KEY`, then try again. No database migration is required.'
+			},
+			{ status: 403 }
+		);
 	}
 
 	const body = (await request.json().catch(() => null)) as {
