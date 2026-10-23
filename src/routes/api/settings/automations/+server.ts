@@ -40,6 +40,7 @@ export const PUT: RequestHandler = async ({ request, locals, platform }) => {
 	}
 
 	let body: {
+		codeCleanup?: unknown;
 		weeklyCleanup?: unknown;
 		aiClassify?: unknown;
 		aiSummaries?: unknown;

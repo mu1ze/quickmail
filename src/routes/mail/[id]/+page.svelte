@@ -48,7 +48,7 @@
 	let selectedSignatureId = $state('');
 
 	const messages = $derived(data.messages);
-	const latest = $derived(messages[messages.length - 1]);
+	const latest = $derived(messages[0]);
 	const replyAddress = $derived(
 		data.addresses.find((address) => address.address === data.replyFrom) ?? null
 	);
@@ -75,31 +75,22 @@
 	 * Which messages are open: the newest one, whichever message was linked to,
 	 * and anything the reader clicks.
 	 */
-	let opened = $state(new Set<string>());
-
-	let previousThread = '';
-	$effect(() => {
-		const initial = data.threadId === previousThread ? untrack(() => new Set(opened)) : new Set<string>();
-		previousThread = data.threadId;
-		if (data.focusId) initial.add(data.focusId);
-		const last = data.messages[data.messages.length - 1];
-		if (last) initial.add(last.id);
-		opened = initial;
-	});
+	let expansion = $state<{ threadId: string; values: Map<string, boolean> }>({ threadId: '', values: new Map() });
+	const opened = $derived(new Set(messages.filter((message) =>
+		expansion.threadId === data.threadId && expansion.values.has(message.id)
+			? expansion.values.get(message.id)
+			: message.id === latest?.id || message.id === data.focusId
+	).map((message) => message.id)));
 
 	function toggleMessage(id: string) {
-		const next = new Set(opened);
-		if (next.has(id)) next.delete(id);
-		else next.add(id);
-		opened = next;
+		const values = expansion.threadId === data.threadId ? new Map(expansion.values) : new Map<string, boolean>();
+		values.set(id, !opened.has(id));
+		expansion = { threadId: data.threadId, values };
 	}
 
 	function expandAll() {
-		opened = new Set(messages.map((message) => message.id));
+		expansion = { threadId: data.threadId, values: new Map(messages.map((message) => [message.id, true])) };
 	}
-
-	/** Newest on top, so new mail is the first thing you see. */
-	const newestFirst = $derived([...messages].reverse());
 
 	const collapsedCount = $derived(messages.filter((message) => !opened.has(message.id)).length);
 
@@ -153,6 +144,21 @@
 			await patch(id, { trashed: true });
 			showUndo('Moved to trash', async () => { await patch(id, { trashed: false }); await invalidateAll(); });
 			await goto(dest);
+		});
+	}
+	function trashCodeEmail(id: string) {
+		return act(async () => {
+			if (sending || attachmentBusy || !isHtmlEmpty(replyHtml) || replyAttachments.length) {
+				throw new Error('Send or clear your unfinished reply before trashing this code email.');
+			}
+			await patch(id, { trashed: true, messageOnly: true });
+			showUndo('Code email moved to trash', async () => {
+				await patch(id, { trashed: false, messageOnly: true });
+				await invalidateAll();
+			});
+			const remaining = messages.find((message) => message.id !== id && !message.deleted_at);
+			const destination = remaining ? `/mail/${remaining.id}?return=${encodeURIComponent(backHref)}` : backHref;
+			await goto(destination, { invalidateAll: true });
 		});
 	}
 	function archive() {
@@ -460,6 +466,7 @@
 				<span class="thread-count">{messages.length} messages</span>
 			{/if}
 		</div>
+		{#if messages.length > 1}<p class="thread-order"><Icon name="sort-desc" size={14} />Newest first · older messages below</p>{/if}
 
 		{#if replyOpen}
 			<form class="reply-section" onsubmit={sendReply}>
@@ -517,15 +524,10 @@
 				</div>
 
 			</form>
-		{:else}
-			<button type="button" class="reply-prompt" onclick={() => seedReply('reply')}>
-				<Icon name="reply-line" size={15} />
-				Reply
-			</button>
 		{/if}
 
 		<div class="thread">
-			{#each newestFirst as message (message.id)}
+			{#each messages as message (message.id)}
 				{#if message.analysis}
 					<div class="message-analysis">
 						<AnalysisBadges analysis={message.analysis} />
@@ -535,11 +537,20 @@
 				{/if}
 				<ThreadMessage
 					{message}
+					newest={message.id === latest?.id && messages.length > 1}
 					expanded={opened.has(message.id)}
 					onToggle={() => toggleMessage(message.id)}
+					onTrashCode={!message.deleted_at ? () => trashCodeEmail(message.id) : undefined}
+					{actionBusy}
 				/>
 			{/each}
 		</div>
+
+		{#if !replyOpen}
+			<button type="button" class="reply-prompt" onclick={() => seedReply('reply')}>
+				<Icon name="reply-line" size={15} />Reply
+			</button>
+		{/if}
 
 		{#if collapsedCount > 0}
 			<button type="button" class="expand-all" onclick={expandAll}>
@@ -550,6 +561,7 @@
 </div>
 
 <style>
+	.thread-order { display: flex; align-items: center; gap: 0.4rem; margin: 0.5rem 0; color: var(--color-text-secondary); font-size: 0.75rem; }
 	.message-analysis { margin:0.7rem 0; padding:0.7rem; border:1px solid var(--color-line); border-radius:8px; }
 	.message-analysis p { font-size:0.875rem; line-height:1.6; }
 	.message-analysis summary { padding:0.5rem 0; font-size:0.8125rem; cursor:pointer; }
@@ -693,7 +705,7 @@
 		color: var(--color-danger);
 	}
 
-	/* Dormant reply box above the newest message; opens the composer. */
+	/* The closed reply prompt follows the messages, keeping new mail in view. */
 	.reply-prompt {
 		display: flex;
 		align-items: center;

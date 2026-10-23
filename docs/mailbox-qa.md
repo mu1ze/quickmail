@@ -4,6 +4,12 @@ Incoming SubQ analysis requires migration `0023_mail_analysis.sql` before
 deploying this revision. See [the analysis guide](subq-analysis.md) for queue
 provisioning, secret configuration, account opt-in, and the synthetic evaluator.
 
+One-time code cleanup requires `0030_verification_code_cleanup.sql` before
+deployment and the updated one-minute Worker cron. Keep this opt-in setting off
+until checking the behavior with disposable local mail. The five-minute deadline
+starts at arrival, including unread messages; the next scheduled pass moves it
+to recoverable Trash. Existing messages are not backfilled.
+
 Analysis QA: check Primary/Updates and specific category filters, Review and
 reply/deadline filters, pagination totals, category corrections, warning
 dismissal, task completion, and opt-out during in-flight analysis. A newer
@@ -81,6 +87,9 @@ themes. Intercept send requests or use a test provider to avoid real delivery.
 | Empty trash | Hold with a pointer or Enter/Space. The control shows progress while awaiting the server, reports success only after completion, and remains retryable when the request fails. |
 | Navigation | Open mail from a searched/filtered inbox and use Back. The same mailbox, filters, and page are restored. |
 | Replies | Type a reply, attach a file, and use Ctrl/Cmd+Enter while the editor is focused. Failed delivery retains text and files. |
+| Thread order | Open a thread through its oldest and newest message links. The latest message is first and expanded in the initial server render; equal timestamps use insertion order. Older messages expand individually or with Expand all. Replies and forwards still target the latest message. |
+| Code trash | Trash one code from a mixed conversation using its code card. Other messages stay live. Undo restores only that email, and restored mail is not scheduled again. Fail the PATCH request and verify the reader and error stay visible. |
+| Code timer | Enable One-time codes in Automations for one test account. New inbound code mail gets an arrival + five-minute deadline; outbound mail, old mail, receipts, alerts and recovery codes do not. Run the scheduled pass just before and at that deadline. Verify account isolation, unread cleanup, protected flags/keep rules, disabling before expiry, and repeat passes. |
 | Mobile | Sidebar stays outside the reading area, content has no page overflow, and attachment actions remain usable. |
 | Mobile accounts | Open the account picker from the inbox header and navigation drawer. At 320px and in short landscape viewports, account rows scroll while Add account and sign-out actions remain visible. Switching replaces the inbox with the selected account's mail. |
 | Mobile navigation | Closed navigation is inert. Opening the drawer focuses Close navigation, keeps Tab/Shift+Tab within the drawer, and makes covered content inert. Escape closes it and restores focus. Repeat from Settings. |
@@ -108,3 +117,11 @@ Settings navigation, compact list spacing, the selection header, and a saved
 composer draft. Header controls use 44px touch targets and the ready Send button
 uses the shared accent. No mail was sent. These viewport checks do not establish
 native iOS/Safari behavior.
+
+The thread/code cleanup pass verifies reader load order (including same-second
+arrivals) and the cleanup SQL against SQLite with all migrations. A standalone
+Svelte server-render smoke with a fixture navigation store also checks that the
+newest body is expanded before hydration, older linked messages are available,
+code actions render, and the closed reply prompt follows the messages. Browser
+tools were unavailable for this pass, so interactive/visual behavior and the
+deployed cron still require verification.

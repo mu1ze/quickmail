@@ -4,6 +4,7 @@
 	import GroupedPanel from '$lib/components/hub/GroupedPanel.svelte';
 	import SettingRow from '$lib/components/settings/SettingRow.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import { untrack } from 'svelte';
 	import type { PageData } from './$types';
 
 	type RuleField = 'from' | 'domain' | 'subject';
@@ -12,6 +13,8 @@
 
 	let { data }: { data: PageData } = $props();
 
+	let codeCleanup = $state(untrack(() => data.automations.codeCleanup));
+	let savedCodeCleanup = $state(untrack(() => data.automations.codeCleanup));
 	let weeklyCleanup = $state(data.automations.weeklyCleanup);
 	let aiClassify = $state(data.automations.aiClassify);
 	let aiSummaries = $state(data.automations.aiSummaries);
@@ -70,6 +73,7 @@
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
+					codeCleanup,
 					weeklyCleanup,
 					aiClassify,
 					aiSummaries,
@@ -78,10 +82,13 @@
 			});
 			if (!res.ok) {
 				error = await readError(res);
+				codeCleanup = savedCodeCleanup;
 				return;
 			}
 			const saved = (await res.json()) as typeof data.automations;
 			weeklyCleanup = saved.weeklyCleanup;
+			codeCleanup = saved.codeCleanup;
+			savedCodeCleanup = saved.codeCleanup;
 			aiClassify = saved.aiClassify;
 			aiSummaries = saved.aiSummaries;
 			savedRules = saved.rules.map((rule) => ({ ...rule }));
@@ -91,6 +98,7 @@
 			notice = 'Saved';
 		} catch {
 			error = 'Network error';
+			codeCleanup = savedCodeCleanup;
 		} finally {
 			busy = false;
 		}
@@ -105,6 +113,7 @@
 				method: 'PUT',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
+					codeCleanup,
 					weeklyCleanup,
 					aiClassify,
 					aiSummaries,
@@ -158,6 +167,15 @@
 	description="Let QuickMail sort, flag and tidy incoming mail. Nothing is deleted without passing through Trash."
 >
 	<AnalysisSettings />
+
+	<GroupedPanel title="One-time codes" hint="Keep the inbox clear after signing in. Only the code email moves to Trash; other messages in the conversation stay put." flush>
+		<SettingRow label="Auto-trash after 5 minutes" id="code-cleanup" description="New code emails, including unread mail, move to Trash five minutes after arrival. Checked every minute. Turning this off cancels pending cleanup.">
+			{#snippet control()}
+				<input id="code-cleanup" class="switch" type="checkbox" role="switch" bind:checked={codeCleanup} disabled={busy || runBusy} onchange={() => save()} />
+			{/snippet}
+		</SettingRow>
+		<p class="empty code-cleanup-note">Existing mail stays unchanged. Starred, pinned, archived and snoozed mail, restored emails and Never auto-trash rules are kept.</p>
+	</GroupedPanel>
 
 	<GroupedPanel
 		title="Weekly cleanup"
@@ -251,6 +269,7 @@
 </HubShell>
 
 <style>
+	.code-cleanup-note { padding: 0.875rem 1rem; line-height: 1.5; border-top: 1px solid var(--color-line); }
 
 
 

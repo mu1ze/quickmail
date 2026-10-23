@@ -110,6 +110,18 @@ export function findVerificationCode(input: {
 	return top.score >= 40 ? top.code : null;
 }
 
+/** More conservative than displaying a code: cleanup must not take receipts,
+ * backup/recovery codes, security alerts, or replies quoting an old code. */
+export function isDisposableCodeEmail(input: Parameters<typeof findVerificationCode>[0]): boolean {
+	const subject = input.subject ?? '';
+	if (/^\s*(?:re|fw|fwd)\s*:/i.test(subject)) return false;
+	if (/\b(?:invoice|receipt|order|shipping|security alert|unusual activity|backup codes?|recovery codes?)\b/i.test(subject)) return false;
+	const authContext = /\b(?:verif(?:y|ication)|sign[- ]?in|log[- ]?in|one[- ]time|single[- ]use|otp|passcode|2fa|two[- ](?:factor|step)|mfa|authentication|security code|access code|password reset|reset your password|confirm (?:your )?(?:email|account))\b/i;
+	const body = messageText(input.text, input.html).slice(0, 2000);
+	if (!authContext.test(subject) && !(/\b(?:code|pin)\b/i.test(subject) && authContext.test(body))) return false;
+	return findVerificationCode(input) !== null;
+}
+
 /** "482913" → "482 913", easier to read and type; letter codes stay as sent. */
 export function formatVerificationCode(code: string): string {
 	return /^\d{6}$/.test(code) ? `${code.slice(0, 3)} ${code.slice(3)}` : code;

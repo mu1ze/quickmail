@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { findVerificationCode, formatVerificationCode } from './verification-code';
+import { findVerificationCode, formatVerificationCode, isDisposableCodeEmail } from './verification-code';
 
 const find = (subject: string, text: string, html?: string) => findVerificationCode({ subject, text, html });
 
@@ -35,5 +35,16 @@ describe('verification codes', () => {
 		assert.equal(formatVerificationCode('482913'), '482 913');
 		assert.equal(formatVerificationCode('7391'), '7391');
 		assert.equal(formatVerificationCode('K7Q9XZ'), 'K7Q9XZ');
+	});
+
+	test('automatic cleanup uses stricter signals than the copy-code display', () => {
+		const text = 'Your verification code is 482913. Use it to sign in.';
+		for (const subject of ['Your verification code', 'Sign in to Notion', '482913 is your Instagram code', 'Slack confirmation code: 123-456']) {
+			assert.equal(isDisposableCodeEmail({ subject, text }), true, subject);
+		}
+		for (const subject of ['Re: Your verification code', 'Your receipt and verification code', 'Your recovery codes', 'Backup codes', 'Security alert', 'Order confirmation code', 'Dinner on Friday']) {
+			assert.equal(isDisposableCodeEmail({ subject, text }), false, subject);
+		}
+		assert.equal(isDisposableCodeEmail({ subject: 'Verify your email', text: 'Click this link to confirm your account.' }), false);
 	});
 });

@@ -215,6 +215,25 @@ handler has no request URL to guess from.
 bun run db:migrate:remote
 ```
 
+### Thread reading and one-time code cleanup
+
+The reader opens the newest message first, with older messages below it.
+Recognized code emails have a **Trash this email** action that affects only that
+message, with Undo. Other messages in the conversation stay in place.
+
+In **Settings → Automations → One-time codes**, enable **Auto-trash after 5 minutes**
+to schedule newly received code emails for Trash five minutes after arrival,
+including unread mail. The server checks deadlines every minute, even with the
+app closed. It does not scan existing mail when enabled. Starred, pinned,
+archived, snoozed mail and Never auto-trash rules are protected. Turning it off
+cancels pending deadlines; restoring a message keeps it from being auto-trashed
+again. Detection is conservative and runs locally without AI.
+
+Existing deployments must apply `0030_verification_code_cleanup.sql` before
+deploying this revision and deploy the updated one-minute cron trigger in
+`wrangler.jsonc`. No production database or cron configuration is changed by
+local validation.
+
 ### Long-thread summaries (optional)
 
 AI summaries (**Settings → Automations**) use Workers AI. Threads too long for

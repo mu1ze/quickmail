@@ -24,6 +24,7 @@ export class MailAutomationsError extends Error {
 }
 
 export type MailAutomationsSettings = {
+	codeCleanup: boolean;
 	weeklyCleanup: boolean;
 	aiClassify: boolean;
 	aiSummaries: boolean;
@@ -37,6 +38,7 @@ export type MailAutomationsView = MailAutomationsSettings & {
 };
 
 type StoredRow = {
+	code_cleanup: number;
 	weekly_cleanup: number;
 	ai_classify: number;
 	ai_summaries: number;
@@ -46,6 +48,7 @@ type StoredRow = {
 };
 
 const EMPTY_SETTINGS: MailAutomationsSettings = {
+	codeCleanup: false,
 	weeklyCleanup: false,
 	aiClassify: false,
 	aiSummaries: false,
@@ -57,6 +60,7 @@ const EMPTY_SETTINGS: MailAutomationsSettings = {
 function mapRow(row: StoredRow | null): MailAutomationsSettings {
 	if (!row) return { ...EMPTY_SETTINGS };
 	return {
+		codeCleanup: row.code_cleanup === 1,
 		weeklyCleanup: row.weekly_cleanup === 1,
 		aiClassify: row.ai_classify === 1,
 		aiSummaries: row.ai_summaries === 1,
@@ -83,7 +87,7 @@ function asBoolean(value: unknown, fallback: boolean): boolean {
 export async function loadMailAutomations(db: D1Database, userId: string): Promise<MailAutomationsSettings> {
 	const row = await db
 		.prepare(
-			`SELECT weekly_cleanup, ai_classify, ai_summaries, rules, last_cleanup_at, last_cleanup_trashed
+			`SELECT code_cleanup, weekly_cleanup, ai_classify, ai_summaries, rules, last_cleanup_at, last_cleanup_trashed
 			 FROM mail_automations WHERE user_id = ?`
 		)
 		.bind(userId)
@@ -103,6 +107,7 @@ export async function saveMailAutomations(
 	db: D1Database,
 	userId: string,
 	input: {
+		codeCleanup?: unknown;
 		weeklyCleanup?: unknown;
 		aiClassify?: unknown;
 		aiSummaries?: unknown;
@@ -110,6 +115,10 @@ export async function saveMailAutomations(
 	}
 ): Promise<MailAutomationsSettings> {
 	const current = await loadMailAutomations(db, userId);
+	if (input.codeCleanup !== undefined && typeof input.codeCleanup !== 'boolean') {
+		throw new MailAutomationsError('Code cleanup must be true or false.');
+	}
+	const codeCleanup = asBoolean(input.codeCleanup, current.codeCleanup);
 	const weeklyCleanup = asBoolean(input.weeklyCleanup, current.weeklyCleanup);
 	const aiClassify = asBoolean(input.aiClassify, current.aiClassify);
 	const aiSummaries = asBoolean(input.aiSummaries, current.aiSummaries);
@@ -125,12 +134,13 @@ export async function saveMailAutomations(
 		rules = parsed;
 	}
 
-	await db
+	const save = db
 		.prepare(
 			`INSERT INTO mail_automations (
-				user_id, weekly_cleanup, ai_classify, ai_summaries, rules, last_cleanup_at, last_cleanup_trashed, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+				user_id, weekly_cleanup, ai_classify, ai_summaries, rules, last_cleanup_at, last_cleanup_trashed, code_cleanup, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
 			 ON CONFLICT(user_id) DO UPDATE SET
+				code_cleanup = excluded.code_cleanup,
 				weekly_cleanup = excluded.weekly_cleanup,
 				ai_classify = excluded.ai_classify,
 				ai_summaries = excluded.ai_summaries,
@@ -144,11 +154,16 @@ export async function saveMailAutomations(
 			aiSummaries ? 1 : 0,
 			JSON.stringify(rules),
 			current.lastCleanupAt,
-			current.lastCleanupTrashed
-		)
-		.run();
+			current.lastCleanupTrashed,
+			codeCleanup ? 1 : 0
+		);
+	if (codeCleanup) await save.run();
+	else await db.batch([
+		save,
+		db.prepare('UPDATE emails SET code_cleanup_at = NULL WHERE user_id = ? AND code_cleanup_at IS NOT NULL').bind(userId)
+	]);
 
-	return { ...current, weeklyCleanup, aiClassify, aiSummaries, rules };
+	return { ...current, codeCleanup, weeklyCleanup, aiClassify, aiSummaries, rules };
 }
 
 type CleanupCandidate = {

@@ -27,6 +27,7 @@ type EmailRow = {
 };
 
 type AutomationRow = {
+	code_cleanup: number;
 	user_id: string;
 	weekly_cleanup: number;
 	ai_classify: number;
@@ -86,6 +87,7 @@ function createMailboxDb(emails: EmailRow[], automations: AutomationRow | null =
 					const userId = String(bound[0]);
 					if (sql.includes('weekly_cleanup') && bound.length >= 5 && typeof bound[4] === 'string') {
 						settings = {
+							code_cleanup: Number(bound[7] ?? 0),
 							user_id: userId,
 							weekly_cleanup: Number(bound[1]),
 							ai_classify: Number(bound[2]),
@@ -96,6 +98,7 @@ function createMailboxDb(emails: EmailRow[], automations: AutomationRow | null =
 						};
 					} else {
 						settings = {
+							code_cleanup: settings?.code_cleanup ?? 0,
 							user_id: userId,
 							weekly_cleanup: settings?.weekly_cleanup ?? 1,
 							ai_classify: settings?.ai_classify ?? 0,
@@ -134,7 +137,7 @@ function createMailboxDb(emails: EmailRow[], automations: AutomationRow | null =
 	}
 
 	return {
-		db: { prepare, async batch() {} } as unknown as D1Database,
+		db: { prepare, async batch(statements: { run: () => Promise<unknown> }[]) { return Promise.all(statements.map((statement) => statement.run())); } } as unknown as D1Database,
 		mail,
 		getSettings: () => settings
 	};
@@ -162,6 +165,7 @@ describe('mail automation settings', () => {
 	test('defaults are off so inbound mail is never cleaned until opted in', async () => {
 		const { db } = createMailboxDb([]);
 		assert.deepEqual(await loadMailAutomations(db, 'user-ada'), {
+			codeCleanup: false,
 			weeklyCleanup: false,
 			aiClassify: false,
 			aiSummaries: false,
@@ -184,6 +188,7 @@ describe('mail automation settings', () => {
 
 describe('weekly cleanup of opened mail', () => {
 	const settings: MailAutomationsSettings = {
+		codeCleanup: false,
 		weeklyCleanup: true,
 		aiClassify: false,
 		aiSummaries: false,

@@ -2,7 +2,9 @@
 	import Icon from './Icon.svelte';
 	import { formatVerificationCode } from '$lib/verification-code';
 
-	let { code, variant = 'chip' }: { code: string; variant?: 'chip' | 'card' } = $props();
+	let { code, variant = 'chip', onTrash, busy = false, cleanupAt }: {
+		code: string; variant?: 'chip' | 'card'; onTrash?: () => void; busy?: boolean; cleanupAt?: string | null;
+	} = $props();
 
 	let copied = $state(false);
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -69,10 +71,21 @@
 				{copied ? 'Copied' : 'Copy'}
 			</button>
 		</div>
+		<div class="cleanup-actions">
+			{#if onTrash}<button type="button" class="trash-code" disabled={busy} onclick={onTrash}><Icon name="delete-bin-line" size={15} />Trash this email</button>{/if}
+			<a href="/settings/automations#code-cleanup">Code cleanup settings<Icon name="arrow-right-line" size={13} /></a>
+		</div>
+		{#if cleanupAt}<p class="cleanup-note">Scheduled for Trash five minutes after arrival. Star or pin this email to keep it.</p>{/if}
 	</div>
 {/if}
 
 <style>
+	.cleanup-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem 1rem; margin-top: 0.5rem; }
+	.cleanup-actions button, .cleanup-actions a { display: inline-flex; align-items: center; gap: 0.35rem; min-height: 2.75rem; font-size: 0.75rem; }
+	.cleanup-actions button { color: var(--color-text); }
+	.cleanup-actions a { color: var(--color-accent-text); }
+	.cleanup-actions button:hover, .cleanup-actions a:hover { text-decoration: underline; }
+	.cleanup-note { margin-top: 0.25rem; color: var(--color-text-secondary); font-size: 0.75rem; line-height: 1.5; }
 	.chip {
 		display: inline-flex;
 		align-items: center;
@@ -148,7 +161,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.35rem;
-		min-height: 2.25rem;
+		min-height: 2.75rem;
 		padding: 0 0.85rem;
 		border-radius: 8px;
 		background: var(--color-surface);

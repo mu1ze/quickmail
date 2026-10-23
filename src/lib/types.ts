@@ -212,6 +212,8 @@ export type MailboxPage = {
 
 /** A single message inside an open conversation. */
 export type ThreadMessage = {
+	/** Arrival deadline, only set for opted-in one-time code cleanup. */
+	code_cleanup_at?: string | null;
 	analysis?: import('./mail-analysis').MailAnalysis;
 	id: string;
 	direction: 'inbound' | 'outbound';

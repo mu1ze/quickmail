@@ -7,6 +7,7 @@ export const load: PageServerLoad = async ({ locals, platform }) => {
 		return {
 			automations: viewMailAutomations(
 				{
+					codeCleanup: false,
 					weeklyCleanup: false,
 					aiClassify: false,
 					aiSummaries: false,

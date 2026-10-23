@@ -9,7 +9,7 @@ import { MAX_BODY_BYTES } from './constants';
 import { buildMessagePreview } from '$lib/utils/message-preview';
 import { displaySubject, normalizeSubject, resolveThreadId } from './threads';
 import { loadThreadSummaries } from './mail-summaries';
-import { findVerificationCode, isRecentForCode, mightHaveVerificationCode } from '$lib/verification-code';
+import { findVerificationCode, isDisposableCodeEmail, isRecentForCode, mightHaveVerificationCode } from '$lib/verification-code';
 import type {
 	DeliveryStatus,
 	EmailAttachmentMeta,
@@ -81,8 +81,10 @@ export async function insertEmail(
 				id, user_id, direction, from_addr, from_name, to_addr, cc_addr, bcc_addr, subject,
 				body_text, body_html, preview, message_id, in_reply_to, references_header,
 				reply_to_email_id, thread_id, thread_key,
-				domain_id, provider_id, status, status_at, is_read
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)`
+				domain_id, provider_id, status, status_at, is_read, code_cleanup_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?,
+			 CASE WHEN ? = 1 AND EXISTS (SELECT 1 FROM mail_automations WHERE user_id = ? AND code_cleanup = 1)
+			 THEN datetime('now', '+5 minutes') ELSE NULL END)`
 		)
 		.bind(
 			id,
@@ -106,7 +108,9 @@ export async function insertEmail(
 			input.domainId ?? null,
 			input.providerId ?? null,
 			input.status ?? null,
-			input.isRead ? 1 : 0
+			input.isRead ? 1 : 0,
+			input.direction === 'inbound' && isDisposableCodeEmail({ subject: input.subject, text: bodyText, html: bodyHtml }) ? 1 : 0,
+			input.userId
 		);
 
 	if (input.direction === 'inbound') {
@@ -735,6 +739,11 @@ export async function setEmailFlags(
 			assignments.push('snoozed_until = NULL');
 		}
 	}
+	// Keeping, moving, or restoring a message cancels its one-time deadline.
+	// A restored code must not disappear again on the next scheduled pass.
+	if (update.trashed !== undefined || update.isStarred || update.isPinned || update.isArchived || update.isSpam || update.snoozedUntil) {
+		assignments.push('code_cleanup_at = NULL');
+	}
 
 	if (assignments.length === 0) return 0;
 
@@ -955,7 +964,7 @@ export async function listThreadMessages(
 		.prepare(
 			`SELECT e.id, e.direction, e.from_addr, e.from_name, e.to_addr, e.cc_addr, e.bcc_addr, e.subject,
 			        e.body_text, e.body_html, e.message_id, e.references_header,
-			        e.status, e.status_detail, e.is_read, e.is_starred, e.is_pinned, e.deleted_at, e.created_at
+			        e.status, e.status_detail, e.is_read, e.is_starred, e.is_pinned, e.deleted_at, e.created_at, e.code_cleanup_at
 			 FROM emails e
 			 WHERE e.user_id = ?
 			 AND COALESCE(e.thread_id, e.id) = ?

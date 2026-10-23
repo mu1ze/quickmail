@@ -6,6 +6,7 @@ import {
 	type CloudflareInboundMessage
 } from './lib/server/cloudflare-inbound';
 import { runWeeklyMailAutomations } from './lib/server/mail-automations';
+import { trashExpiredVerificationEmails } from './lib/server/verification-cleanup';
 // Renamed from `_worker.js` by `scripts/wrap-cloudflare-worker.mjs` after `vite build`.
 // @ts-ignore file and its declaration are created at build time
 import sveltekit from '../.svelte-kit/cloudflare/_sveltekit.js';
@@ -19,7 +20,7 @@ const svelteApp = sveltekit as SvelteKitWorker;
 /**
  * SvelteKit's generated Worker is fetch-only. This wrapper keeps HTTP on
  * SvelteKit and adds Cloudflare Email Service's `email()` handler plus the
- * weekly `scheduled()` cleanup of opened mail.
+ * scheduled code cleanup, analysis reconciliation, and weekly opened-mail cleanup.
  */
 export default {
 	fetch(request: Request, env: Env, ctx: ExecutionContext) {
@@ -55,6 +56,12 @@ export default {
 	},
 
 	async scheduled(controller: ScheduledController, env: Env) {
+		if (controller.cron === '* * * * *' || controller.cron === '*/5 * * * *') {
+			try { await trashExpiredVerificationEmails(env.DB); }
+			catch { console.error('verification code cleanup failed'); }
+			// Analysis reconciliation keeps its existing five-minute cadence.
+			if (controller.cron === '* * * * *' && new Date(controller.scheduledTime).getUTCMinutes() % 5 !== 0) return;
+		}
 		try { await reconcileAnalysisJobs(env); }
 		catch { console.error('mail analysis reconciliation failed'); }
 		if (!['0 8 * * SUN', '0 8 * * 1'].includes(controller.cron)) return;

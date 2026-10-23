@@ -42,7 +42,7 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
 	return {
 		threadLabels: (await loadThreadLabels(platform.env.DB, locals.user.id, [email.thread_id ?? email.id])).get(email.thread_id ?? email.id) ?? [],
 		threadId: email.thread_id ?? email.id,
-		/** The message that was linked to — expanded first when the page opens. */
+		/** The linked message may also be expanded below the newest message. */
 		focusId: email.id,
 		trashed: Boolean(email.deleted_at),
 		archived: Boolean(email.is_archived),
@@ -55,6 +55,7 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
 		addresses: locals.addresses,
 		/** Anything still unread — the page marks the conversation read on open. */
 		unread: messages.some((message) => !message.is_read),
-		messages: messages.map((message) => ({ ...message, is_read: true }))
+		// Reader order is explicit in the server response, including first render.
+		messages: messages.toReversed().map((message) => ({ ...message, is_read: true }))
 	};
 };

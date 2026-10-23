@@ -10,6 +10,11 @@ import { handleCloudflareInbound } from './cloudflare-inbound';
 import { handleResendWebhook } from './inbound';
 import { authorizeMailAction } from './api-access';
 import { applyMailLabels, listMailLabels } from './mail-labels';
+import { loadMailAutomations, saveMailAutomations } from './mail-automations';
+import { trashExpiredVerificationEmails } from './verification-cleanup';
+import { load as loadReader } from '../../routes/mail/[id]/+page.server';
+import { PATCH as patchMail } from '../../routes/api/mail/[id]/+server';
+import type { ThreadMessage } from '../types';
 
 let sqlite: Database;
 let db: D1Database;
@@ -45,6 +50,143 @@ beforeEach(() => {
 });
 
 afterEach(() => sqlite.close());
+
+const deadline = '2026-10-22 12:05:00';
+const deadlineDate = new Date('2026-10-22T12:05:00Z');
+async function receiveCode(userId = 'owner', direction: 'inbound' | 'outbound' = 'inbound') {
+	return insertEmail(db, { userId, direction, from: 'login@example.net', to: `${userId}@example.com`,
+		subject: 'Your verification code', bodyText: 'Your sign-in code is 482913. It expires in ten minutes.' });
+}
+function codeState(id: string) {
+	return sqlite.query<{ deleted_at: string | null; code_cleanup_at: string | null; auto_trash_reason: string | null }, [string]>(
+		'SELECT deleted_at, code_cleanup_at, auto_trash_reason FROM emails WHERE id = ?').get(id)!;
+}
+function makeDue(id: string) {
+	sqlite.query('UPDATE emails SET code_cleanup_at = ? WHERE id = ?').run(deadline, id);
+}
+
+describe('reader message ordering', () => {
+	test('reader returns newest first with stable same-second ordering while the shared mail API remains chronological', async () => {
+		sqlite.exec(`UPDATE emails SET created_at='2026-10-22 12:00:00' WHERE id IN ('received','reply');
+			INSERT INTO emails(id,user_id,direction,from_addr,to_addr,subject,body_text,thread_id,created_at)
+			VALUES('latest','owner','inbound','alex@example.com','owner@example.com','Re: Project','Latest update','thread','2026-10-22 12:00:00');`);
+		const original = (await getEmailForUser(db, 'owner', 'received'))!;
+		assert.deepEqual((await listThreadMessages(db, 'owner', original)).map((message) => message.id), ['received', 'reply', 'latest']);
+		const result = await loadReader({ params: { id: 'received' }, locals: { user: { id: 'owner' }, addresses: [] }, platform: { env: { DB: db } } } as unknown as Parameters<typeof loadReader>[0]) as { messages: ThreadMessage[]; focusId: string; subject: string };
+		assert.deepEqual(result.messages.map((message) => message.id), ['latest', 'reply', 'received']);
+		assert.equal(result.messages[0].body_text, 'Latest update');
+		assert.equal(result.subject, 'Project');
+		assert.equal(result.focusId, 'received');
+	});
+});
+
+describe('one-time code cleanup', () => {
+	test('is opt-in per account, schedules only new inbound codes and leaves existing mail alone', async () => {
+		const old = await receiveCode();
+		assert.equal(codeState(old).code_cleanup_at, null);
+		await saveMailAutomations(db, 'owner', { codeCleanup: true });
+		const incoming = await receiveCode();
+		assert.equal(codeState(old).code_cleanup_at, null);
+		const timing = sqlite.query<{ expected: string }, [string]>("SELECT datetime(created_at, '+5 minutes') AS expected FROM emails WHERE id=?").get(incoming)!;
+		assert.equal(codeState(incoming).code_cleanup_at, timing.expected);
+		assert.equal(codeState(await receiveCode('other')).code_cleanup_at, null);
+		assert.equal(codeState(await receiveCode('owner', 'outbound')).code_cleanup_at, null);
+		for (const [subject, bodyText] of [
+			['Your order #482913 has shipped', 'Track your delivery.'],
+			['Security alert', 'A new login from 192.168.1.1. If this was not you, reset your password.'],
+			['Flash sale', 'Use promo code SAVE20 for 20% off.'],
+			['Verify your email', 'Click the link to confirm your account.']
+		]) {
+			const id = await insertEmail(db, { userId: 'owner', direction: 'inbound', from: 'notices@example.net', to: 'owner@example.com', subject, bodyText });
+			assert.equal(codeState(id).code_cleanup_at, null, subject);
+		}
+	});
+
+	test('trashes an unread code at the deadline, never before it, and preserves the rest of the thread', async () => {
+		await saveMailAutomations(db, 'owner', { codeCleanup: true });
+		const id = await receiveCode(); makeDue(id);
+		sqlite.query("UPDATE emails SET thread_id='thread' WHERE id=?").run(id);
+		assert.equal(await trashExpiredVerificationEmails(db, new Date('2026-10-22T12:04:59Z')), 0);
+		assert.equal(codeState(id).deleted_at, null);
+		assert.equal(await trashExpiredVerificationEmails(db, deadlineDate), 1);
+		assert.equal(codeState(id).deleted_at, deadline);
+		assert.match(codeState(id).auto_trash_reason!, /One-time code/);
+		assert.equal(codeState('received').deleted_at, null);
+		assert.equal(codeState('reply').deleted_at, null);
+		assert.equal(await trashExpiredVerificationEmails(db, deadlineDate), 0, 'repeat passes are idempotent');
+	});
+
+	test('manual code trash and undo apply to one message; restoring cancels cleanup', async () => {
+		await saveMailAutomations(db, 'owner', { codeCleanup: true });
+		const id = await receiveCode(); makeDue(id);
+		sqlite.query("UPDATE emails SET thread_id='thread' WHERE id=?").run(id);
+		const patch = (trashed: boolean, userId = 'owner') => patchMail({ params: { id }, request: new Request(`http://localhost/api/mail/${id}`, {
+			method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed, messageOnly: true })
+		}), locals: { user: { id: userId } }, platform: { env: { DB: db } } } as unknown as Parameters<typeof patchMail>[0]);
+		assert.equal((await patch(true, 'other')).status, 404);
+		assert.equal(codeState(id).deleted_at, null);
+		assert.equal((await patch(true)).status, 200);
+		assert.ok(codeState(id).deleted_at);
+		assert.equal(codeState('received').deleted_at, null);
+		assert.equal(codeState('reply').deleted_at, null);
+		assert.equal((await patch(false)).status, 200);
+		assert.equal(codeState(id).code_cleanup_at, null);
+		assert.equal(await trashExpiredVerificationEmails(db, deadlineDate), 0);
+		assert.equal(codeState(id).deleted_at, null);
+	});
+
+	test('disabling clears only this account deadlines and re-enabling does not reschedule them', async () => {
+		await saveMailAutomations(db, 'owner', { codeCleanup: true });
+		await saveMailAutomations(db, 'other', { codeCleanup: true });
+		const owner = await receiveCode(); makeDue(owner);
+		const other = await receiveCode('other'); makeDue(other);
+		await saveMailAutomations(db, 'owner', { codeCleanup: false });
+		assert.equal(codeState(owner).code_cleanup_at, null);
+		assert.equal(codeState(other).code_cleanup_at, deadline);
+		await saveMailAutomations(db, 'owner', { codeCleanup: true });
+		assert.equal(await trashExpiredVerificationEmails(db, deadlineDate), 1);
+		assert.equal(codeState(owner).deleted_at, null);
+		assert.ok(codeState(other).deleted_at);
+	});
+
+	test('protects kept senders, stars, pins, archives, snoozes and spam even if changed after scheduling', async () => {
+		await saveMailAutomations(db, 'owner', { codeCleanup: true });
+		for (const update of [{ isStarred: true }, { isPinned: true }, { isArchived: true }, { isSpam: true }, { snoozedUntil: '2026-10-23 12:00:00' }]) {
+			const id = await receiveCode(); makeDue(id);
+			await setEmailFlags(db, 'owner', [id], update);
+			assert.equal(codeState(id).code_cleanup_at, null);
+			makeDue(id); // The scheduled writer must also recheck flags itself.
+			assert.equal(await trashExpiredVerificationEmails(db, deadlineDate), 0);
+			assert.equal(codeState(id).deleted_at, null);
+		}
+		const kept = await receiveCode(); makeDue(kept);
+		await saveMailAutomations(db, 'owner', { rules: [{ field: 'domain', value: 'example.net', action: 'keep' }] });
+		assert.equal(await trashExpiredVerificationEmails(db, deadlineDate), 0);
+		assert.equal(codeState(kept).deleted_at, null);
+		assert.equal(codeState(kept).code_cleanup_at, null);
+	});
+
+	test('persists code settings through unrelated updates and rejects invalid opt-in values', async () => {
+		assert.equal((await loadMailAutomations(db, 'owner')).codeCleanup, false);
+		await assert.rejects(() => saveMailAutomations(db, 'owner', { codeCleanup: 'yes' }), /true or false/);
+		await saveMailAutomations(db, 'owner', { codeCleanup: true });
+		await saveMailAutomations(db, 'owner', { weeklyCleanup: true });
+		assert.equal((await loadMailAutomations(db, 'owner')).codeCleanup, true);
+		assert.equal((await loadMailAutomations(db, 'other')).codeCleanup, false);
+	});
+
+	test('keeps new codes in an already starred or pinned conversation', async () => {
+		await saveMailAutomations(db, 'owner', { codeCleanup: true });
+		for (const update of [{ isStarred: true }, { isPinned: true }]) {
+			await setEmailFlags(db, 'owner', ['received'], update);
+			const id = await receiveCode(); makeDue(id);
+			sqlite.query("UPDATE emails SET thread_id='thread' WHERE id=?").run(id);
+			assert.equal(await trashExpiredVerificationEmails(db, deadlineDate), 0);
+			assert.equal(codeState(id).deleted_at, null);
+			await setEmailFlags(db, 'owner', ['received'], { isStarred: false, isPinned: false });
+		}
+	});
+});
 
 describe('mail folders', () => {
 	test('older mail reuses the most recent sender name from the same account in list and reader', async () => {
