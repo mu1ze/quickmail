@@ -1,3 +1,5 @@
+import { readBoundedBody } from '$lib/server/request-limits';
+import { reserveRequestQuota } from '$lib/server/request-quota';
 import { redirect, type Handle } from '@sveltejs/kit';
 import { authorizeApiRequest } from '$lib/server/api-access';
 import { getUserByApiToken, readBearerToken } from '$lib/server/api-tokens';
@@ -60,7 +62,10 @@ function secureResponse(response: Response): Response {
 	}
 	response.headers.set('X-Content-Type-Options', 'nosniff');
 	response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-	response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+	response.headers.set(
+		'Permissions-Policy',
+		'camera=(), microphone=(), geolocation=(), payment=()'
+	);
 	return response;
 }
 
@@ -76,6 +81,20 @@ export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.activeDomainId = null;
 
 	const { pathname } = event.url;
+	// Session mutations must originate in this app, including requests with no Content-Type.
+	if (
+		pathname.startsWith('/api/') &&
+		!pathname.startsWith('/api/webhooks/') &&
+		!['GET', 'HEAD', 'OPTIONS'].includes(event.request.method)
+	) {
+		const bearer = readBearerToken(event.request);
+		if (
+			(!bearer || readSessionToken(event.cookies)) &&
+			event.request.headers.get('origin') !== event.url.origin
+		) {
+			return jsonError('Cross-origin request rejected', 403);
+		}
+	}
 
 	if (db) {
 		const session = readSessionToken(event.cookies);
@@ -98,10 +117,109 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	// A stale tab must not read or mutate another account after a cookie switch.
 	const expectedAccount = event.request.headers.get('X-QuickMail-Account');
-	if (expectedAccount && event.locals.authMethod !== 'api_token' && expectedAccount !== event.locals.user?.id) {
+	if (
+		expectedAccount &&
+		event.locals.authMethod !== 'api_token' &&
+		expectedAccount !== event.locals.user?.id
+	) {
 		const response = jsonError('Your active account changed. Reload to continue.', 409);
 		response.headers.set('X-QuickMail-Account-Changed', '1');
 		return response;
+	}
+
+	if (
+		pathname.startsWith('/api/') &&
+		!pathname.startsWith('/api/webhooks/') &&
+		!['GET', 'HEAD', 'OPTIONS'].includes(event.request.method)
+	) {
+		const contentType = event.request.headers
+			.get('content-type')
+			?.split(';')[0]
+			.trim()
+			.toLowerCase();
+		const upload = pathname === '/api/signature-assets';
+		if (event.request.body && contentType !== (upload ? 'multipart/form-data' : 'application/json'))
+			return jsonError('Unsupported request content type', 415);
+		const large =
+			pathname === '/api/mail' ||
+			pathname === '/api/drafts' ||
+			/^\/api\/mail\/[^/]+$/.test(pathname);
+		const limit = upload ? 1100000 : large ? 12000000 : 65536;
+		const declared = Number(event.request.headers.get('content-length') ?? 0);
+		if (!Number.isSafeInteger(declared) || declared < 0 || declared > limit)
+			return jsonError('Request body too large', 413);
+		if (db && event.locals.user && (large || upload)) {
+			if (
+				!(await reserveRequestQuota(
+					db,
+					event.locals.user.id,
+					pathname === '/api/drafts'
+						? 'draft'
+						: large
+							? event.request.method === 'POST'
+								? 'mail'
+								: 'mutation'
+							: 'upload'
+				))
+			)
+				return jsonError('Hourly request limit reached. Try again later.', 429);
+		}
+		try {
+			if (event.request.body) {
+				const bytes = await readBoundedBody(event.request.body, limit);
+				if (!upload && bytes.length) {
+					let data: Record<string, unknown>;
+					try {
+						data = JSON.parse(new TextDecoder().decode(bytes));
+					} catch {
+						return jsonError('Invalid JSON', 400);
+					}
+					if (!data || typeof data !== 'object' || Array.isArray(data))
+						return jsonError('Expected a JSON object', 400);
+					if (large) {
+						for (const key of [
+							'to',
+							'cc',
+							'bcc',
+							'subject',
+							'text',
+							'html',
+							'fromAddressId',
+							'id',
+							'draftId'
+						]) {
+							if (data[key] !== undefined && typeof data[key] !== 'string')
+								return jsonError('Invalid message field', 400);
+							if (typeof data[key] === 'string' && data[key].length > 256000)
+								return jsonError('Message field too large', 413);
+						}
+						for (const key of [
+							'isRead',
+							'isStarred',
+							'isPinned',
+							'isArchived',
+							'isSpam',
+							'trashed',
+							'messageOnly'
+						])
+							if (data[key] !== undefined && typeof data[key] !== 'boolean')
+								return jsonError('Invalid message flag', 400);
+						if (
+							['to', 'cc', 'bcc'].reduce(
+								(n, key) =>
+									n +
+									(typeof data[key] === 'string' ? data[key].split(',').filter(Boolean).length : 0),
+								0
+							) > 100
+						)
+							return jsonError('Too many recipients', 400);
+					}
+				}
+				event.request = new Request(event.request, { body: bytes });
+			}
+		} catch {
+			return jsonError('Request body too large', 413);
+		}
 	}
 
 	// Webhooks authenticate with a signature, not a session.
@@ -109,7 +227,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 		return secureResponse(await resolve(event));
 	}
 
-	if (db && event.locals.user) {
+	if (
+		db &&
+		event.locals.user &&
+		(!pathname.startsWith('/api/') ||
+			/^\/api\/(mail|drafts|addresses|domains)(?:\/|$)/.test(pathname))
+	) {
 		const [allDomains, addresses, permissionRows] = await Promise.all([
 			listDomains(db),
 			listAddressesForUser(db, event.locals.user.id),
@@ -118,11 +241,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 				: listDomainPermissionRows(db, event.locals.user.id)
 		]);
 
-		const domainPermissions = permissionMapForUser(
-			event.locals.user,
-			allDomains,
-			permissionRows
-		);
+		const domainPermissions = permissionMapForUser(event.locals.user, allDomains, permissionRows);
 		const ownedDomainIds = new Set(addresses.map((address) => address.domain_id));
 
 		event.locals.domainPermissions = domainPermissions;
@@ -166,11 +285,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	const needsSetup = db ? (await countUsers(db)) === 0 : false;
 
-	if (
-		needsSetup &&
-		pathname !== '/setup' &&
-		pathname !== '/install.sh'
-	) {
+	if (needsSetup && pathname !== '/setup' && pathname !== '/install.sh') {
 		throw redirect(303, '/setup');
 	}
 

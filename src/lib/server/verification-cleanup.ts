@@ -35,7 +35,7 @@ export async function trashExpiredVerificationEmails(db: D1Database, now = new D
 						AND COALESCE(kept.thread_id, kept.id) = COALESCE(emails.thread_id, emails.id)
 						AND kept.deleted_at IS NULL AND (kept.is_starred = 1 OR kept.is_pinned = 1))
 					AND EXISTS (SELECT 1 FROM mail_automations a WHERE a.user_id = emails.user_id
-						AND a.code_cleanup = 1 AND a.rules = ?)
+						AND a.code_cleanup = 1 AND a.rules = ?) RETURNING id
 			`).bind(cutoff, cutoff, email.id, email.user_id, cutoff, email.rules));
 		}
 		// Consume protected/disabled deadlines too; restoring never reschedules.
@@ -43,5 +43,5 @@ export async function trashExpiredVerificationEmails(db: D1Database, now = new D
 			.bind(email.id, email.user_id, cutoff));
 	}
 	const results = await db.batch(statements);
-	return trashIndexes.reduce((count, index) => count + (results[index].meta.changes ?? 0), 0);
+	return trashIndexes.reduce((count, index) => count + (results[index].results?.length ?? 0), 0);
 }

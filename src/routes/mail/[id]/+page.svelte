@@ -47,7 +47,19 @@
 	let snoozeOpen = $state(false);
 	let selectedSignatureId = $state('');
 
-	const messages = $derived(data.messages);
+	let older = $state<{threadId:string;messages:PageData['messages'];hasOlder:boolean}|null>(null);
+	let loadingOlder=$state(false);
+	const messages = $derived([...new Map([...data.messages,...(older?.threadId===data.threadId?older.messages:[])].map(message=>[message.id,message])).values()]);
+	const hasOlder=$derived(older?.threadId===data.threadId?older.hasOlder:data.hasOlder);
+	async function loadOlder() {
+		loadingOlder=true;
+		try {
+			const response=await fetch(`/api/mail/${data.focusId}?before=${encodeURIComponent(messages.at(-1)!.id)}`);
+			await requireOk(response);
+			const page=await response.json();
+			older={threadId:data.threadId,messages:[...(older?.threadId===data.threadId?older.messages:[]),...page.messages.toReversed()],hasOlder:page.hasOlder};
+		} catch(cause) {error=requestError(cause);} finally {loadingOlder=false;}
+	}
 	const latest = $derived(messages[0]);
 	const replyAddress = $derived(
 		data.addresses.find((address) => address.address === data.replyFrom) ?? null
@@ -463,7 +475,7 @@
 		<div class="subject-row">
 			<h1>{data.subject}</h1>
 			{#if messages.length > 1}
-				<span class="thread-count">{messages.length} messages</span>
+				<span class="thread-count">{messages.length}{hasOlder ? '+' : ''} messages</span>
 			{/if}
 		</div>
 		{#if messages.length > 1}<p class="thread-order"><Icon name="sort-desc" size={14} />Newest first · older messages below</p>{/if}
@@ -546,6 +558,8 @@
 			{/each}
 		</div>
 
+		{#if hasOlder}<button type="button" class="expand-all" disabled={loadingOlder} onclick={loadOlder}>{loadingOlder ? 'Loading…' : 'Load older messages'}</button>{/if}
+
 		{#if !replyOpen}
 			<button type="button" class="reply-prompt" onclick={() => seedReply('reply')}>
 				<Icon name="reply-line" size={15} />Reply
@@ -554,7 +568,7 @@
 
 		{#if collapsedCount > 0}
 			<button type="button" class="expand-all" onclick={expandAll}>
-				Expand all {messages.length} messages
+				Expand all {messages.length}{hasOlder ? '+' : ''} messages
 			</button>
 		{/if}
 	</div>

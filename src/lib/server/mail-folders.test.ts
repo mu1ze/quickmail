@@ -35,10 +35,10 @@ beforeEach(() => {
 		prepare(sql: string) {
 			let values: any[] = [];
 			return {
-				bind(...args: any[]) { values = args; return this; },
+				bind(...args: any[]) { assert.ok(args.length <= 100, 'D1 parameter limit'); values = args; return this; },
 				async all() { return { results: sqlite.query(sql).all(...values) }; },
 				async first() { return sqlite.query(sql).get(...values); },
-				async run() { return { meta: { changes: sqlite.query(sql).run(...values).changes } }; }
+				async run() { if (/RETURNING id/.test(sql)) { const results=sqlite.query(sql).all(...values); return {results,meta:{changes:results.length}}; } return { meta: { changes: sqlite.query(sql).run(...values).changes } }; }
 			};
 		}
 	} as unknown as D1Database;
@@ -326,3 +326,73 @@ describe('mail folders', () => {
 		assert.deepEqual(sqlite.query('SELECT * FROM email_labels').all(), []);
 	});
 });
+
+
+describe('audit security and delivery regressions',()=>{
+ test('sending-only keys cannot trash or permanently delete a known message',async()=>{
+  const event={params:{id:'received'},locals:{user:{id:'owner'},authMethod:'api_token',apiScopes:['mail:send']},platform:{env:{DB:db}},request:new Request('https://mail.test/api/mail/received',{method:'PATCH',body:JSON.stringify({trashed:true})})};
+  assert.equal((await patchMail(event as any)).status,403);
+  const {DELETE}=await import('../../routes/api/mail/[id]/+server');
+  assert.equal((await DELETE(event as any)).status,403);
+  assert.ok(await getEmailForUser(db,'owner','received'));
+ });
+ test('unrelated senders with a common subject remain separate',async()=>{
+  const a=await insertEmail(db,{userId:'owner',direction:'inbound',from:'alice@outside.test',to:'owner@example.com',subject:'Invoice'});
+  const b=await insertEmail(db,{userId:'owner',direction:'inbound',from:'malice@outside.test',to:'owner@example.com',subject:'Invoice'});
+  assert.notEqual((await getEmailForUser(db,'owner',a))!.thread_id,(await getEmailForUser(db,'owner',b))!.thread_id);
+ });
+ test('two envelope recipients receive separate copies of the same Message-ID',async()=>{
+  sqlite.exec("INSERT INTO domains(id,name,status,sending_enabled,receiving_enabled) VALUES('d','example.com','verified',1,1); INSERT INTO addresses(id,user_id,domain_id,address) VALUES('a','owner','d','owner@example.com'),('b','other','d','other@example.com')");
+  for(const to of ['owner@example.com','other@example.com','owner@example.com']) {
+   const raw='From: sender@outside.test\r\nTo: owner@example.com, other@example.com\r\nMessage-ID: <same-id@outside.test>\r\nSubject: Both\r\n\r\nSynthetic';
+   await handleCloudflareInbound({from:'sender@outside.test',to,headers:new Headers(),raw:new Response(raw).body!,setReject(){}},{DB:db,ATTACHMENTS:{}} as any);
+  }
+  assert.equal(sqlite.query<{n:number},[]>("SELECT COUNT(DISTINCT user_id) AS n FROM emails WHERE subject='Both'").get()!.n,2);
+  assert.equal(sqlite.query<{n:number},[]>("SELECT COUNT(*) AS n FROM emails WHERE subject='Both'").get()!.n,2);
+ });
+ test('long threads and expanded bulk mutations respect D1 limits',async()=>{
+  for(let i=0;i<125;i++) sqlite.query("INSERT INTO emails(id,user_id,direction,from_addr,from_name,to_addr,subject,body_text,thread_id) VALUES(?,'owner','inbound','alice@outside.test','Alice','owner@example.com','Long','Body','long')").run('long-'+i);
+  const email=(await getEmailForUser(db,'owner','long-0'))!;
+  assert.equal((await listThreadMessages(db,'owner',email)).length,125);
+  const page=await listThreadMessages(db,'owner',email,{limit:21});
+  const older=await listThreadMessages(db,'owner',email,{limit:21,before:page[0].id});
+  assert.equal(page.length,21);assert.equal(older.length,21);
+  assert.ok(older.every(m=>!page.some(n=>n.id===m.id)));
+  const reader=await loadReader({params:{id:email.id},locals:{user:{id:'owner'},addresses:[]},platform:{env:{DB:db}}} as any) as any;
+  assert.equal(reader.messages.length,20);assert.equal(reader.hasOlder,true);
+  const ids=await expandToThreads(db,'owner',['long-0']);
+  assert.ok(await setEmailFlags(db,'owner',ids,{trashed:true}));
+  assert.equal((await getMailboxCounts(db,'owner')).trash,1);
+ });
+});
+
+ test('attachment range streams only the requested R2 bytes and disallows caching',async()=>{
+  sqlite.exec("INSERT INTO email_attachments(id,email_id,filename,content_type,size_bytes,content_base64,storage_key) VALUES('file','received','test.pdf','application/pdf',5242880,'','key')");
+  const {GET}=await import('../../routes/api/mail/[id]/attachments/[attachmentId]/+server');
+  let options:unknown;
+  const bucket={head:async()=>({size:5242880}),get:async(_key:string,o:unknown)=>{options=o;return {body:new Response(new Uint8Array([42])).body};}};
+  const result=await GET({params:{id:'received',attachmentId:'file'},locals:{user:{id:'owner'}},platform:{env:{DB:db,ATTACHMENTS:bucket}},url:new URL('https://mail.test/a'),request:new Request('https://mail.test/a',{headers:{Range:'bytes=0-0'}})} as any);
+  assert.equal(result.status,206); assert.equal((await result.arrayBuffer()).byteLength,1);
+  assert.deepEqual(options,{range:{offset:0,length:1}});assert.match(result.headers.get('cache-control')!,/no-store/);
+ });
+ test('hourly request quota is isolated, bounded and resets at the next window',async()=>{
+  const {reserveRequestQuota}=await import('./request-quota');
+  for(let i=0;i<100;i++) assert.equal(await reserveRequestQuota(db,'owner','upload',0),true);
+  assert.equal(await reserveRequestQuota(db,'owner','upload',0),false);
+  assert.equal(await reserveRequestQuota(db,'other','upload',0),true);
+  assert.equal(await reserveRequestQuota(db,'owner','upload',3600000),true);
+ });
+
+ test('indexed mailbox projection agrees with filtered reads after pin, trash, restore and domain changes',async()=>{
+  const newer=await insertEmail(db,{userId:'owner',direction:'inbound',from:'b@outside.test',to:'owner@example.com',subject:'Separate',bodyText:'New'});
+  sqlite.query("UPDATE emails SET created_at='2099-01-01' WHERE id=?").run(newer);
+  const fast=await listMailbox(db,'owner',{view:'inbox'});
+  const fallback=await listMailbox(db,'owner',{view:'inbox',q:'in:inbox'});
+  assert.deepEqual(fast.threads.map(t=>t.thread_id),fallback.threads.map(t=>t.thread_id));
+  await setEmailFlags(db,'owner',['received'],{isPinned:true});
+  assert.equal((await listMailbox(db,'owner',{view:'inbox'})).threads[0].thread_id,'thread');
+  await setEmailFlags(db,'owner',[newer],{trashed:true});
+  assert.equal((await getMailboxCounts(db,'owner')).inbox,1);
+  await setEmailFlags(db,'owner',[newer],{trashed:false});
+  assert.equal((await getMailboxCounts(db,'owner')).inbox,2);
+ });

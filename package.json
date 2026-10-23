@@ -24,33 +24,33 @@
 		"test": "bun test src/lib/server/mail-analysis-jobs.test.ts src/lib/server/subq.test.ts src/lib/mail-analysis.test.ts src/lib/email-signature.test.ts src/lib/signature-template.test.ts src/lib/signature-live.test.ts src/lib/utils/email-html.test.ts src/lib/utils/attachments.test.ts src/lib/utils/attachment-input.test.ts src/lib/utils/date.test.ts src/lib/utils/html.test.ts src/lib/utils/text-links.test.ts src/lib/utils/request.test.ts src/lib/utils/message-preview.test.ts src/lib/utils/recipients.test.ts src/lib/utils/forward.test.ts src/lib/mail-search.test.ts src/lib/mailbox-layout.test.ts src/lib/mailbox-people.test.ts src/lib/mailbox-select.test.ts src/lib/editor-seed.test.ts src/lib/search-focus.test.ts src/lib/shell-chrome.test.ts src/lib/mailbox-groups.test.ts src/lib/settings-nav.test.ts src/lib/notification-rules.test.ts src/lib/verification-code.test.ts src/lib/push-client.test.ts src/lib/remote-content.test.ts src/lib/server/api-access.test.ts src/lib/server/api-tokens.test.ts src/lib/server/auth.test.ts src/lib/server/browser-accounts.test.ts src/lib/account-client.test.ts src/lib/server/mail-folders.test.ts src/lib/server/brrr.test.ts src/lib/server/crypto.test.ts src/lib/server/domain-permissions.test.ts src/lib/server/email-address.test.ts src/lib/server/email-provider.test.ts src/lib/server/mail-automations.test.ts src/lib/server/mail-classify.test.ts src/lib/server/mail-summaries.test.ts src/lib/server/mail-preview.test.ts src/lib/server/mail-reliability.test.ts src/lib/server/outbox.test.ts src/lib/server/providers/cloudflare-provider.test.ts src/lib/server/providers/resend-provider.test.ts src/lib/server/push-notifications.test.ts src/lib/server/request-limits.test.ts src/lib/server/signature-assets.test.ts src/lib/theme.test.ts src/lib/interior/motion.test.ts src/lib/snooze.test.ts src/lib/shortcuts.test.ts cli/client.test.ts"
 	},
 	"devDependencies": {
-		"@cloudflare/workers-types": "^4.20260601.1",
+		"@cloudflare/workers-types": "^4.20260702.1",
 		"@sveltejs/adapter-auto": "^7.0.1",
-		"@sveltejs/adapter-cloudflare": "^7.2.8",
-		"@sveltejs/kit": "^2.57.0",
-		"@sveltejs/vite-plugin-svelte": "^7.0.0",
-		"@tailwindcss/vite": "^4.2.2",
-		"@types/bun": "^1.4.3",
-		"@types/node": "^24.10.1",
+		"@sveltejs/adapter-cloudflare": "^7.2.9",
+		"@sveltejs/kit": "^2.70.3",
+		"@sveltejs/vite-plugin-svelte": "^7.3.1",
+		"@tailwindcss/vite": "^4.3.3",
+		"@types/bun": "^1.4.4",
+		"@types/node": "^24.19.2",
 		"@types/web-push": "^3.6.4",
-		"svelte": "^5.55.2",
-		"svelte-check": "^4.4.6",
-		"tailwindcss": "^4.2.2",
-		"typescript": "^6.0.2",
-		"vite": "^8.0.7",
-		"wrangler": "^4.124.0"
+		"svelte": "^5.57.2",
+		"svelte-check": "^4.7.7",
+		"tailwindcss": "^4.3.3",
+		"typescript": "^6.0.3",
+		"vite": "^8.3.5",
+		"wrangler": "^4.152.0"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "^0.134.0",
-		"@modelcontextprotocol/sdk": "^1.29.0",
+		"@modelcontextprotocol/sdk": "^1.32.1",
 		"dompurify": "^3.4.17",
 		"gifenc": "1.0.3",
-		"motion": "^13.1.1",
+		"motion": "^13.5.1",
 		"pdfjs-dist": "^6.4.299",
-		"postal-mime": "^3.0.0",
+		"postal-mime": "^3.0.1",
 		"remixicon": "^4.9.1",
 		"web-push": "^3.6.7",
-		"zod": "^3.25.0"
+		"zod": "^3.25.76"
 	},
 	"cloudflare": {
 		"bindings": {
@@ -88,5 +88,15 @@
 				"description": "Workers AI binding used by optional weekly cleanup classification and inbox summaries. Safe to omit; automations then use rules and heuristics only."
 			}
 		}
+	},
+	"overrides": {
+		"cookie": "^0.7.2",
+		"devalue": "^5.9.3",
+		"fast-uri": "^3.1.8",
+		"hono": "^4.13.11",
+		"ip-address": "^10.7.4",
+		"proxy-addr": "^2.0.8",
+		"qs": "^6.16.0",
+		"source-map-js": "^1.2.2"
 	}
 }

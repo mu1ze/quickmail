@@ -1,0 +1,1 @@
+CREATE TABLE request_quotas(user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,kind TEXT NOT NULL,window INTEGER NOT NULL,attempts INTEGER NOT NULL,PRIMARY KEY(user_id,kind));

@@ -74,7 +74,10 @@ export function buildReferences(
 ): string | null {
 	const ids = parseMessageIds(parentReferences, parentMessageId);
 	if (ids.length === 0) return null;
-	return ids.slice(-MAX_REFERENCE_IDS).map((id) => `<${id}>`).join(' ');
+	return ids
+		.slice(-MAX_REFERENCE_IDS)
+		.map((id) => `<${id}>`)
+		.join(' ');
 }
 
 function addressesIn(value: string | null | undefined): string[] {
@@ -140,41 +143,22 @@ export async function resolveThreadId(
 		if (match) return match.thread_id ?? match.id;
 	}
 
-	if (input.subjectMatch !== false) {
-		const threadKey = normalizeSubject(input.subject);
-		const participants = [
-			...new Set([
-				...addressesIn(input.from),
-				...addressesIn(input.to),
-				...addressesIn(input.cc)
-			])
-		].slice(0, MAX_PARTICIPANTS);
-
-		if (threadKey && threadKey !== '(no subject)' && participants.length > 0) {
-			const overlap = participants
-				.map(
-					() =>
-						`instr(lower(from_addr || ' ' || to_addr || ' ' || COALESCE(cc_addr, '')), ?) > 0`
-				)
-				.join(' OR ');
-
+	if (input.subjectMatch !== false && /^\s*re(?:\[\d+\])?\s*:/i.test(input.subject)) {
+		const from = addressesIn(input.from)[0];
+		const to = addressesIn(input.to)[0];
+		if (from && to) {
 			const match = await db
 				.prepare(
-					`SELECT thread_id, id FROM emails
-					 WHERE user_id = ?
-					 AND thread_key = ?
-					 AND (status IS NULL OR status <> 'draft')
-					 AND datetime(created_at) > datetime('now', ?)
-					 AND (${overlap})
-					 ORDER BY datetime(created_at) DESC LIMIT 1`
+					`SELECT thread_id,id FROM emails WHERE user_id=? AND thread_key=?
+				AND (status IS NULL OR status <> 'draft') AND created_at > datetime('now','-30 day')
+				AND ((lower(from_addr)=? AND lower(to_addr)=?) OR (lower(from_addr)=? AND lower(to_addr)=?))
+				ORDER BY created_at DESC,rowid DESC LIMIT 1`
 				)
-				.bind(userId, threadKey, `-${SUBJECT_MATCH_DAYS} day`, ...participants)
+				.bind(userId, normalizeSubject(input.subject), from, to, to, from)
 				.first<{ thread_id: string | null; id: string }>();
-
 			if (match) return match.thread_id ?? match.id;
 		}
 	}
 
 	return input.emailId;
 }
-

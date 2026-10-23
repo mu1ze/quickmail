@@ -1,3 +1,4 @@
+import { readBoundedBody } from './request-limits';
 import { inboundAnalysisMetadata } from './subq';
 import { dispatchAnalysis, type AnalysisEnv } from './mail-analysis-jobs';
 import type { R2Bucket } from '@cloudflare/workers-types';
@@ -31,7 +32,9 @@ export async function handleCloudflareInbound(
 	message: CloudflareInboundMessage,
 	env: CloudflareInboundEnv
 ): Promise<void> {
-	const raw = await new Response(message.raw).arrayBuffer();
+	let raw: ArrayBuffer;
+	try { const bytes=await readBoundedBody(message.raw, 15*1024*1024); raw=bytes.buffer as ArrayBuffer; }
+	catch { message.setReject('Message exceeds the 15 MiB limit'); return; }
 	const parsed = await parseInbound(raw, message.headers);
 
 	const envelopeTo = parseEmailAddress(message.to);
@@ -56,7 +59,8 @@ export async function handleCloudflareInbound(
 		messageId,
 		from,
 		to: envelopeTo || recipients.join(','),
-		date: parsed.date ?? message.headers.get('date')
+		date: parsed.date ?? message.headers.get('date'),
+		raw
 	});
 
 	if (await emailExistsByProviderId(env.DB, providerId)) {
@@ -77,6 +81,7 @@ export async function handleCloudflareInbound(
 	}
 
 	const emailId = await insertEmail(env.DB, {
+		deduplicationId: `inbound-${providerId}`,
 		userId: route.userId,
 		direction: 'inbound',
 		from,
@@ -188,10 +193,10 @@ async function inboundProviderId(input: {
 	from: string;
 	to: string;
 	date: string | null | undefined;
+	raw: ArrayBuffer;
 }): Promise<string> {
-	if (input.messageId) return input.messageId;
-
-	const material = `${input.from}\n${input.to}\n${input.date ?? ''}`;
+	const contentHash = await crypto.subtle.digest('SHA-256', input.raw);
+	const material = `${input.to.toLowerCase()}\n${input.messageId ?? ''}\n${[...new Uint8Array(contentHash)].join(',')}`;
 	const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(material));
 	const hex = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 	return `cf-${hex.slice(0, 32)}`;

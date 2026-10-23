@@ -9,7 +9,12 @@ import { MAX_BODY_BYTES } from './constants';
 import { buildMessagePreview } from '$lib/utils/message-preview';
 import { displaySubject, normalizeSubject, resolveThreadId } from './threads';
 import { loadThreadSummaries } from './mail-summaries';
-import { findVerificationCode, isDisposableCodeEmail, isRecentForCode, mightHaveVerificationCode } from '$lib/verification-code';
+import {
+	findVerificationCode,
+	isDisposableCodeEmail,
+	isRecentForCode,
+	mightHaveVerificationCode
+} from '$lib/verification-code';
 import type {
 	DeliveryStatus,
 	EmailAttachmentMeta,
@@ -36,6 +41,7 @@ export async function getUserIdByEmail(db: D1Database, email: string): Promise<s
 export async function insertEmail(
 	db: D1Database,
 	input: {
+		deduplicationId?: string;
 		userId: string;
 		direction: 'inbound' | 'outbound';
 		from: string;
@@ -57,7 +63,7 @@ export async function insertEmail(
 		isRead?: boolean;
 	}
 ): Promise<string> {
-	const id = crypto.randomUUID();
+	const id = input.deduplicationId ?? crypto.randomUUID();
 	const bodyText = truncate(input.bodyText ?? null);
 	const bodyHtml = truncate(input.bodyHtml ?? null);
 
@@ -109,13 +115,25 @@ export async function insertEmail(
 			input.providerId ?? null,
 			input.status ?? null,
 			input.isRead ? 1 : 0,
-			input.direction === 'inbound' && isDisposableCodeEmail({ subject: input.subject, text: bodyText, html: bodyHtml }) ? 1 : 0,
+			input.direction === 'inbound' &&
+				isDisposableCodeEmail({
+					subject: input.subject,
+					text: bodyText,
+					html: bodyHtml
+				})
+				? 1
+				: 0,
 			input.userId
 		);
 
 	if (input.direction === 'inbound') {
-		await db.batch([insert, ...analysisInsertStatements(db, id, input.userId, input.analysisMetadata)]);
-	} else { await insert.run(); }
+		await db.batch([
+			insert,
+			...analysisInsertStatements(db, id, input.userId, input.analysisMetadata)
+		]);
+	} else {
+		await insert.run();
+	}
 
 	return id;
 }
@@ -155,7 +173,8 @@ export async function updateEmailStatusByProviderId(
  */
 function viewFilter(view: MailboxView | 'anywhere'): string {
 	switch (view) {
-		case 'anywhere': return '1 = 1';
+		case 'anywhere':
+			return '1 = 1';
 		case 'inbox':
 			return "e.deleted_at IS NULL AND e.is_archived = 0 AND e.is_spam = 0 AND e.direction = 'inbound' AND (e.snoozed_until IS NULL OR e.snoozed_until <= datetime('now'))";
 		case 'sent':
@@ -182,7 +201,8 @@ function viewFilter(view: MailboxView | 'anywhere'): string {
  */
 function displayFilter(view: MailboxView | 'anywhere', alias: string): string {
 	switch (view) {
-		case 'anywhere': return '1 = 1';
+		case 'anywhere':
+			return '1 = 1';
 		case 'trash':
 			return `${alias}.deleted_at IS NOT NULL`;
 		case 'drafts':
@@ -246,9 +266,15 @@ function buildScope(userId: string, query: MailboxQuery): { where: string; bindi
 		bindings.push(query.labelId);
 	}
 
-	for (const [operator, value] of [['category', query.category], ['needs', query.needs]]) {
+	for (const [operator, value] of [
+		['category', query.category],
+		['needs', query.needs]
+	]) {
 		const analysis = value ? analysisSearch(operator!, value) : null;
-		if (analysis) { filters.push(analysis.condition); bindings.push(...analysis.bindings); }
+		if (analysis) {
+			filters.push(analysis.condition);
+			bindings.push(...analysis.bindings);
+		}
 	}
 	filters.push(...search.conditions);
 	bindings.push(...search.bindings);
@@ -275,14 +301,37 @@ export async function listMailbox(
 	const pageSize = query.pageSize ?? MAILBOX_PAGE_SIZE;
 	const display = displayFilter(parseMailSearch(query.q ?? '').view ?? query.view, 'm');
 
-	const totalRow = await db
-		.prepare(
-			`SELECT COUNT(*) AS count FROM (
+	const simple =
+		!query.q?.trim() &&
+		!query.labelId &&
+		!query.category &&
+		!query.needs &&
+		!query.unreadOnly &&
+		!query.starredOnly &&
+		!query.attachmentsOnly &&
+		query.view !== 'later';
+	const fast =
+		simple &&
+		!(await db
+			.prepare("SELECT 1 FROM emails WHERE user_id=? AND snoozed_until IS NOT NULL AND snoozed_until>datetime('now') LIMIT 1")
+			.bind(userId)
+			.first());
+	const domainScope = query.domainId ?? '';
+	const totalRow = fast
+		? await db
+				.prepare(
+					`SELECT COUNT(*) AS count FROM mailbox_threads WHERE user_id=? AND domain_scope=? AND v_${query.view}=1`
+				)
+				.bind(userId, domainScope)
+				.first<{ count: number }>()
+		: await db
+				.prepare(
+					`SELECT COUNT(*) AS count FROM (
 				SELECT DISTINCT COALESCE(e.thread_id, e.id) AS thread_id FROM emails e WHERE ${where}
 			)`
-		)
-		.bind(...bindings)
-		.first<{ count: number }>();
+				)
+				.bind(...bindings)
+				.first<{ count: number }>();
 
 	const total = totalRow?.count ?? 0;
 	const pageCount = Math.max(1, Math.ceil(total / pageSize));
@@ -292,9 +341,17 @@ export async function listMailbox(
 		return { threads: [], total, page, pageCount, pageSize };
 	}
 
-	const { results: rows } = await db
-		.prepare(
-			`SELECT t.thread_id, MAX(datetime(m.created_at)) AS last_at, MAX(m.is_pinned) AS pinned
+	const orderKind = query.view === 'trash' ? 'trash' : query.view === 'drafts' ? 'draft' : 'live';
+	const { results: rows } = fast
+		? await db
+				.prepare(
+					`SELECT thread_id,${orderKind}_at AS last_at FROM mailbox_threads WHERE user_id=? AND domain_scope=? AND v_${query.view}=1 ORDER BY ${orderKind}_pin DESC,${orderKind}_at DESC,thread_id LIMIT ? OFFSET ?`
+				)
+				.bind(userId, domainScope, pageSize, (page - 1) * pageSize)
+				.all<{ thread_id: string; last_at: string }>()
+		: await db
+				.prepare(
+					`SELECT t.thread_id, MAX(datetime(m.created_at)) AS last_at, MAX(m.is_pinned) AS pinned
 			 FROM (
 				SELECT DISTINCT COALESCE(e.thread_id, e.id) AS thread_id FROM emails e WHERE ${where}
 			 ) t
@@ -303,9 +360,9 @@ export async function listMailbox(
 			 GROUP BY t.thread_id
 			 ORDER BY pinned DESC, last_at DESC
 			 LIMIT ? OFFSET ?`
-		)
-		.bind(...bindings, userId, pageSize, (page - 1) * pageSize)
-		.all<{ thread_id: string; last_at: string }>();
+				)
+				.bind(...bindings, userId, pageSize, (page - 1) * pageSize)
+				.all<{ thread_id: string; last_at: string }>();
 
 	const threadIds = rows.map((row) => row.thread_id);
 	if (threadIds.length === 0) {
@@ -337,34 +394,71 @@ export async function listMailbox(
 		.map((threadId) => byThread.get(threadId))
 		.filter((group): group is ThreadMessageRow[] => Boolean(group?.length))
 		.map(toThreadSummary);
-	await fillMissingPreviews(db, userId, threads.map((thread) => thread.latest_id), (id, preview) => {
-		const thread = threads.find((entry) => entry.latest_id === id);
-		if (thread) thread.preview = preview;
-	}, messages);
+	await fillMissingPreviews(
+		db,
+		userId,
+		threads.map((thread) => thread.latest_id),
+		(id, preview) => {
+			const thread = threads.find((entry) => entry.latest_id === id);
+			if (thread) thread.preview = preview;
+		},
+		messages
+	);
 	await attachVerificationCodes(db, userId, threads, byThread);
 	const names = await knownSenderNames(db, userId, messages);
 	for (const thread of threads) {
 		for (const person of thread.participants) {
-			if (!person.self && !person.name?.trim()) person.name = names.get(person.address.toLowerCase()) ?? null;
+			if (!person.self && !person.name?.trim())
+				person.name = names.get(person.address.toLowerCase()) ?? null;
 		}
 	}
 
-	const { results: inbound } = await db.prepare(`SELECT id,COALESCE(thread_id,id) AS thread_id FROM emails WHERE user_id=? AND direction='inbound' AND deleted_at IS NULL AND COALESCE(thread_id,id) IN (${placeholders}) ORDER BY datetime(created_at),rowid`)
-		.bind(userId,...threadIds).all<{id:string;thread_id:string}>();
-	const analyses = await loadMailAnalyses(db,userId,inbound.map(m=>m.id));
+	const { results: inbound } = await db
+		.prepare(
+			`SELECT id,COALESCE(thread_id,id) AS thread_id FROM emails WHERE user_id=? AND direction='inbound' AND deleted_at IS NULL AND COALESCE(thread_id,id) IN (${placeholders}) ORDER BY datetime(created_at),rowid`
+		)
+		.bind(userId, ...threadIds)
+		.all<{ id: string; thread_id: string }>();
+	const analyses = await loadMailAnalyses(
+		db,
+		userId,
+		inbound.map((m) => m.id)
+	);
 	for (const thread of threads) {
-		const group = inbound.filter(m=>m.thread_id===thread.thread_id);
+		const group = inbound.filter((m) => m.thread_id === thread.thread_id);
 		const latest = group.at(-1);
 		if (!latest) continue;
 		const base = analyses.get(latest.id);
-		const flagged = (key: 'phishing'|'spam'|'needsReply'|'deadline'|'review') => group.findLast(m=>analyses.get(m.id)?.[key]);
-		const phishing = flagged('phishing'), spam = flagged('spam'), reply = base?.needsReply ? latest : undefined, deadline = base?.deadline ? latest : undefined;
-		const review = group.some(m=>analyses.get(m.id)?.status==='failed') || Boolean(base?.review);
+		const flagged = (key: 'phishing' | 'spam' | 'needsReply' | 'deadline' | 'review') =>
+			group.findLast((m) => analyses.get(m.id)?.[key]);
+		const phishing = flagged('phishing'),
+			spam = flagged('spam'),
+			reply = base?.needsReply ? latest : undefined,
+			deadline = base?.deadline ? latest : undefined;
+		const review =
+			group.some((m) => analyses.get(m.id)?.status === 'failed') || Boolean(base?.review);
 		if (base || phishing || spam || reply || deadline || review) {
-			thread.analysis = { ...(base ?? {emailId:latest.id,status:'pending',category:null,suggested:false,confidence:null,corrected:false,urgency:null}), review:review || Boolean(phishing || spam), phishing:Boolean(phishing), spam:Boolean(spam),needsReply:Boolean(reply),deadline:Boolean(deadline) };
-			thread.analysisMessageId=latest.id;
-			thread.analysisPhishingId=phishing?.id;thread.analysisSpamId=spam?.id;
-			thread.analysisReplyId=reply?.id;thread.analysisDeadlineId=deadline?.id;
+			thread.analysis = {
+				...(base ?? {
+					emailId: latest.id,
+					status: 'pending',
+					category: null,
+					suggested: false,
+					confidence: null,
+					corrected: false,
+					urgency: null
+				}),
+				review: review || Boolean(phishing || spam),
+				phishing: Boolean(phishing),
+				spam: Boolean(spam),
+				needsReply: Boolean(reply),
+				deadline: Boolean(deadline)
+			};
+			thread.analysisMessageId = latest.id;
+			thread.analysisPhishingId = phishing?.id;
+			thread.analysisSpamId = spam?.id;
+			thread.analysisReplyId = reply?.id;
+			thread.analysisDeadlineId = deadline?.id;
 		}
 	}
 
@@ -410,31 +504,61 @@ async function fillMissingPreviews(
 		.bind(userId, ...missing)
 		.all<{ id: string; body_text: string | null; body_html: string | null }>();
 	if (!results.length) return;
-	const computed = results.map((row) => ({ id: row.id, preview: buildMessagePreview(row.body_text, row.body_html) }));
+	const computed = results.map((row) => ({
+		id: row.id,
+		preview: buildMessagePreview(row.body_text, row.body_html)
+	}));
 	for (const { id, preview } of computed) apply(id, preview);
 	await db.batch(
 		computed.map(({ id, preview }) =>
-			db.prepare('UPDATE emails SET preview = ? WHERE id = ? AND user_id = ? AND preview IS NULL').bind(preview, id, userId)
+			db
+				.prepare('UPDATE emails SET preview = ? WHERE id = ? AND user_id = ? AND preview IS NULL')
+				.bind(preview, id, userId)
 		)
 	);
 }
 
 /** Recover missing names from this account's other mail, never another user. */
 async function knownSenderNames(
-	db: D1Database, userId: string,
-	messages: { direction: string; from_addr: string; from_name?: string | null }[]
+	db: D1Database,
+	userId: string,
+	messages: {
+		direction: string;
+		from_addr: string;
+		from_name?: string | null;
+	}[]
 ): Promise<Map<string, string>> {
-	const addresses = [...new Set(messages.filter((m) => m.direction === 'inbound' && !m.from_name?.trim())
-		.map((m) => m.from_addr.toLowerCase()))];
+	const addresses = [
+		...new Set(
+			messages
+				.filter((m) => m.direction === 'inbound' && !m.from_name?.trim())
+				.map((m) => m.from_addr.toLowerCase())
+		)
+	];
 	if (!addresses.length) return new Map();
-	const { results } = await db.prepare(`SELECT from_addr, from_name FROM (
+	if (addresses.length > 80) {
+		const names = new Map<string, string>();
+		for (let i = 0; i < addresses.length; i += 80)
+			for (const [key, value] of await knownSenderNames(
+				db,
+				userId,
+				messages.filter((m) => addresses.slice(i, i + 80).includes(m.from_addr.toLowerCase()))
+			))
+				names.set(key, value);
+		return names;
+	}
+	const { results } = await db
+		.prepare(
+			`SELECT from_addr, from_name FROM (
 		SELECT from_addr, from_name, ROW_NUMBER() OVER (
 			PARTITION BY LOWER(from_addr) ORDER BY datetime(created_at) DESC, rowid DESC
 		) AS name_rank FROM emails
 		WHERE user_id = ? AND direction = 'inbound' AND LOWER(from_addr) IN (${addresses.map(() => '?').join(',')})
 		AND TRIM(COALESCE(from_name, '')) <> ''
-	) WHERE name_rank = 1`)
-		.bind(userId, ...addresses).all<{ from_addr: string; from_name: string }>();
+	) WHERE name_rank = 1`
+		)
+		.bind(userId, ...addresses)
+		.all<{ from_addr: string; from_name: string }>();
 	const names = new Map<string, string>();
 	for (const row of results) {
 		const address = row.from_addr.toLowerCase();
@@ -474,9 +598,18 @@ async function attachVerificationCodes(
 				 FROM emails WHERE user_id = ? AND id IN (${ids.map(() => '?').join(', ')})`
 			)
 			.bind(userId, ...ids)
-			.all<{ id: string; subject: string; body_text: string | null; body_html: string | null }>();
+			.all<{
+				id: string;
+				subject: string;
+				body_text: string | null;
+				body_html: string | null;
+			}>();
 		for (const row of results) {
-			const code = findVerificationCode({ subject: row.subject, text: row.body_text, html: row.body_html });
+			const code = findVerificationCode({
+				subject: row.subject,
+				text: row.body_text,
+				html: row.body_html
+			});
 			const thread = threads.find((entry) => entry.latest_id === row.id);
 			if (code && thread) thread.verification_code = code;
 		}
@@ -496,7 +629,11 @@ function toThreadSummary(messages: ThreadMessageRow[]): ThreadSummary {
 	for (const message of messages) {
 		if (message.direction === 'outbound') {
 			if (!participants.some((entry) => entry.self)) {
-				participants.push({ label: 'me', address: message.from_addr, self: true });
+				participants.push({
+					label: 'me',
+					address: message.from_addr,
+					self: true
+				});
 			}
 			continue;
 		}
@@ -510,7 +647,12 @@ function toThreadSummary(messages: ThreadMessageRow[]): ThreadSummary {
 			continue;
 		}
 
-		participants.push({ label: displayNameFor(address), name: message.from_name, address, self: false });
+		participants.push({
+			label: displayNameFor(address),
+			name: message.from_name,
+			address,
+			self: false
+		});
 	}
 
 	return {
@@ -558,7 +700,10 @@ export async function listEmails(
 	} = {}
 ): Promise<EmailSummary[]> {
 	const view: MailboxView = options.direction === 'outbound' ? 'sent' : 'inbox';
-	const { where, bindings } = buildScope(userId, { view, domainId: options.domainId });
+	const { where, bindings } = buildScope(userId, {
+		view,
+		domainId: options.domainId
+	});
 
 	const { results } = await db
 		.prepare(
@@ -574,10 +719,15 @@ export async function listEmails(
 		.bind(...bindings, options.limit ?? 100)
 		.all<ThreadMessageRow>();
 
-	await fillMissingPreviews(db, userId, results.map((row) => row.id), (id, preview) => {
-		const row = results.find((entry) => entry.id === id);
-		if (row) row.preview = preview;
-	});
+	await fillMissingPreviews(
+		db,
+		userId,
+		results.map((row) => row.id),
+		(id, preview) => {
+			const row = results.find((entry) => entry.id === id);
+			if (row) row.preview = preview;
+		}
+	);
 
 	return results.map((row) => ({
 		id: row.id,
@@ -614,6 +764,28 @@ export async function getMailboxCounts(
 
 	const thread = 'COALESCE(thread_id, id)';
 
+	if (
+		!(await db
+			.prepare("SELECT 1 FROM emails WHERE user_id=? AND snoozed_until IS NOT NULL AND snoozed_until>datetime('now') LIMIT 1")
+			.bind(userId)
+			.first())
+	) {
+		const row = await db
+			.prepare(
+				`SELECT SUM(v_inbox) AS inbox,SUM(v_inbox_unread) AS inbox_unread,SUM(v_starred) AS starred,SUM(v_drafts) AS drafts,SUM(v_sent) AS sent,0 AS later,SUM(v_trash) AS trash FROM mailbox_threads WHERE user_id=? AND domain_scope=?`
+			)
+			.bind(userId, domainId ?? '')
+			.first<Record<keyof MailboxCounts, number>>();
+		return {
+			inbox: row?.inbox ?? 0,
+			inbox_unread: row?.inbox_unread ?? 0,
+			starred: row?.starred ?? 0,
+			drafts: row?.drafts ?? 0,
+			sent: row?.sent ?? 0,
+			later: 0,
+			trash: row?.trash ?? 0
+		};
+	}
 	const row = await db
 		.prepare(
 			`SELECT
@@ -659,6 +831,12 @@ export async function expandToThreads(
 	userId: string,
 	ids: string[]
 ): Promise<string[]> {
+	if (ids.length > 80) {
+		const parts = [];
+		for (let i = 0; i < ids.length; i += 80)
+			parts.push(await expandToThreads(db, userId, ids.slice(i, i + 80)));
+		return parts.flat();
+	}
 	if (ids.length === 0) return [];
 
 	const placeholders = ids.map(() => '?').join(', ');
@@ -694,6 +872,12 @@ export async function setEmailFlags(
 	ids: string[],
 	update: MailFlagUpdate
 ): Promise<number> {
+	if (ids.length > 80) {
+		const parts = [];
+		for (let i = 0; i < ids.length; i += 80)
+			parts.push(await setEmailFlags(db, userId, ids.slice(i, i + 80), update));
+		return parts.reduce((sum, n) => sum + n, 0);
+	}
 	if (ids.length === 0) return 0;
 
 	const assignments: string[] = [];
@@ -741,7 +925,14 @@ export async function setEmailFlags(
 	}
 	// Keeping, moving, or restoring a message cancels its one-time deadline.
 	// A restored code must not disappear again on the next scheduled pass.
-	if (update.trashed !== undefined || update.isStarred || update.isPinned || update.isArchived || update.isSpam || update.snoozedUntil) {
+	if (
+		update.trashed !== undefined ||
+		update.isStarred ||
+		update.isPinned ||
+		update.isArchived ||
+		update.isSpam ||
+		update.snoozedUntil
+	) {
 		assignments.push('code_cleanup_at = NULL');
 	}
 
@@ -751,12 +942,12 @@ export async function setEmailFlags(
 	const result = await db
 		.prepare(
 			`UPDATE emails SET ${assignments.join(', ')}
-			 WHERE user_id = ? AND id IN (${placeholders})`
+			 WHERE user_id = ? AND id IN (${placeholders}) RETURNING id`
 		)
 		.bind(...bindings, userId, ...ids)
-		.run();
+		.all<{ id: string }>();
 
-	return result.meta?.changes ?? 0;
+	return result.results.length;
 }
 
 /** Irreversible: drops the rows and the R2 objects their attachments point at. */
@@ -766,6 +957,12 @@ export async function deleteEmailsPermanently(
 	userId: string,
 	ids: string[]
 ): Promise<number> {
+	if (ids.length > 80) {
+		const parts = [];
+		for (let i = 0; i < ids.length; i += 80)
+			parts.push(await deleteEmailsPermanently(db, bucket, userId, ids.slice(i, i + 80)));
+		return parts.reduce((sum, n) => sum + n, 0);
+	}
 	if (ids.length === 0) return 0;
 
 	const placeholders = ids.map(() => '?').join(', ');
@@ -820,11 +1017,11 @@ export async function markAllRead(
 	}
 
 	const result = await db
-		.prepare(`UPDATE emails SET is_read = 1 WHERE ${scope}`)
+		.prepare(`UPDATE emails SET is_read = 1 WHERE ${scope} RETURNING id`)
 		.bind(...bindings)
-		.run();
+		.all<{ id: string }>();
 
-	return result.meta?.changes ?? 0;
+	return result.results.length;
 }
 
 export async function emptyTrash(
@@ -926,7 +1123,12 @@ export async function getDraft(
 	return row ?? null;
 }
 
-export async function deleteDraft(db: D1Database, userId: string, draftId: string, bucket?: R2Bucket): Promise<void> {
+export async function deleteDraft(
+	db: D1Database,
+	userId: string,
+	draftId: string,
+	bucket?: R2Bucket
+): Promise<void> {
 	const draft = await getDraft(db, userId, draftId);
 	if (draft) await deleteEmailsPermanently(db, bucket, userId, [draft.id]);
 }
@@ -952,7 +1154,8 @@ export async function getEmailForUser(
 export async function listThreadMessages(
 	db: D1Database,
 	userId: string,
-	email: EmailRow
+	email: EmailRow,
+	options?: { limit: number; before?: string }
 ): Promise<ThreadMessage[]> {
 	const threadId = email.thread_id ?? email.id;
 
@@ -960,6 +1163,14 @@ export async function listThreadMessages(
 	// live one. Drafts are edited in the composer, never inline.
 	const scope = email.deleted_at ? '' : 'AND e.deleted_at IS NULL';
 
+	const pageBindings: unknown[] = [userId, threadId];
+	let older = '';
+	if (options?.before) {
+		older =
+			'AND (datetime(e.created_at),e.rowid)<(SELECT datetime(created_at),rowid FROM emails WHERE id=? AND user_id=?)';
+		pageBindings.push(options.before, userId);
+	}
+	if (options) pageBindings.push(Math.min(50, Math.max(1, options.limit)));
 	const { results } = await db
 		.prepare(
 			`SELECT e.id, e.direction, e.from_addr, e.from_name, e.to_addr, e.cc_addr, e.bcc_addr, e.subject,
@@ -970,9 +1181,10 @@ export async function listThreadMessages(
 			 AND COALESCE(e.thread_id, e.id) = ?
 			 AND (e.status IS NULL OR e.status <> 'draft')
 			 ${scope}
-			 ORDER BY datetime(e.created_at) ASC,e.rowid ASC`
+			 ${older}
+			 ORDER BY datetime(e.created_at) ${options ? 'DESC' : 'ASC'},e.rowid ${options ? 'DESC' : 'ASC'} ${options ? 'LIMIT ?' : ''}`
 		)
-		.bind(userId, threadId)
+		.bind(...pageBindings)
 		.all<
 			Omit<ThreadMessage, 'attachments' | 'is_read' | 'is_starred' | 'is_pinned'> & {
 				is_read: number;
@@ -982,20 +1194,25 @@ export async function listThreadMessages(
 		>();
 
 	if (results.length === 0) return [];
+	if (options) results.reverse();
 
 	// Every message in the thread can carry attachments — one round trip for all.
 	const placeholders = results.map(() => '?').join(', ');
 	const { results: files } = await db
 		.prepare(
-			`SELECT id, email_id, filename, content_type, size_bytes, created_at, content_id, disposition
-			 FROM email_attachments
-			 WHERE email_id IN (${placeholders})
-			 ORDER BY created_at ASC`
+			`SELECT a.id, a.email_id, a.filename, a.content_type, a.size_bytes, a.created_at, a.content_id, a.disposition
+			 FROM email_attachments a JOIN emails e ON e.id=a.email_id
+			 WHERE e.user_id=? AND COALESCE(e.thread_id,e.id)=? AND (e.status IS NULL OR e.status <> 'draft') ${scope} ${options ? `AND e.id IN (${placeholders})` : ''}
+			 ORDER BY a.created_at ASC`
 		)
-		.bind(...results.map((message) => message.id))
+		.bind(userId, threadId, ...(options ? results.map((m) => m.id) : []))
 		.all<EmailAttachmentMeta>();
 
-	const analyses = await loadMailAnalyses(db,userId,results.map(m=>m.id));
+	const analyses = await loadMailAnalyses(
+		db,
+		userId,
+		results.map((m) => m.id)
+	);
 	const names = await knownSenderNames(db, userId, results);
 
 	// The query already filters drafts out, so `status` is a delivery state or null
@@ -1076,9 +1293,7 @@ export async function listRecentContacts(
 		}
 	}
 
-	return [...best.values()]
-		.sort((a, b) => (a.last_at < b.last_at ? 1 : -1))
-		.slice(0, 8);
+	return [...best.values()].sort((a, b) => (a.last_at < b.last_at ? 1 : -1)).slice(0, 8);
 }
 
 function truncate(value: string | null): string | null {

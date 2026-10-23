@@ -46,7 +46,8 @@ beforeEach(() => {
 afterEach(() => sqlite.close());
 
 async function receive(userId = 'owner') {
- return insertEmail(db, { userId, direction: 'inbound', from:'alex@example.com', to:'owner@example.com', subject:'Project', bodyText:'Can you review by Friday?', analysisMetadata: { replyTo:'alex@example.com' } });
+ const parent=sqlite.query<{id:string},[string]>('SELECT id FROM emails WHERE user_id=? ORDER BY rowid DESC LIMIT 1').get(userId);
+ return insertEmail(db, { replyToEmailId:parent?.id,userId, direction: 'inbound', from:'alex@example.com', to:'owner@example.com', subject:'Project', bodyText:'Can you review by Friday?', analysisMetadata: { replyTo:'alex@example.com' } });
 }
 const response = () => Response.json({ model: SUBQ_MODEL, answers: answers(), usage: { input_tokens:500, output_tokens:0 } });
 const message = (id: string, userId = 'owner') => ({emailId:id,userId,version:ANALYSIS_VERSION});

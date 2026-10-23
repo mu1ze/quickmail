@@ -1,3 +1,4 @@
+import { authorizeMailAction, type MailAction } from '$lib/server/api-access';
 import { json, type RequestHandler } from '@sveltejs/kit';
 import {
 	describeProviderError,
@@ -29,7 +30,7 @@ type ReplyBody = {
 	signatureId?: string | null;
 };
 
-export const GET: RequestHandler = async ({ params, locals, platform }) => {
+export const GET: RequestHandler = async ({ params, locals, platform, url }) => {
 	const db = platform?.env.DB;
 	if (!db || !locals.user) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
@@ -41,9 +42,18 @@ export const GET: RequestHandler = async ({ params, locals, platform }) => {
 	}
 
 	await markThreadRead(db, locals.user.id, email);
-	const messages = await listThreadMessages(db, locals.user.id, email);
+	const paged = url.searchParams.has('before');
+	const loaded = await listThreadMessages(
+		db,
+		locals.user.id,
+		email,
+		paged ? { limit: 21, before: url.searchParams.get('before')! } : undefined
+	);
+	const hasOlder = paged && loaded.length > 20;
+	const messages = hasOlder ? loaded.slice(1) : loaded;
 
 	return json({
+		hasOlder,
 		threadId: email.thread_id ?? email.id,
 		subject: displaySubject(messages[0]?.subject ?? email.subject),
 		messages
@@ -68,6 +78,29 @@ export const PATCH: RequestHandler = async ({ params, request, locals, platform 
 		/** Set to limit the change to this one message instead of the thread. */
 		messageOnly?: boolean;
 	};
+
+	if (locals.authMethod === 'api_token') {
+		const actions: MailAction[] = [];
+		for (const [field, action] of [
+			['isRead', 'read'],
+			['isStarred', 'star'],
+			['isPinned', 'pin'],
+			['isArchived', 'archive'],
+			['isSpam', 'spam'],
+			['snoozedUntil', 'snooze'],
+			['trashed', 'trash']
+		] as const) {
+			if (body[field] !== undefined) actions.push(action);
+		}
+		for (const action of actions) {
+			const access = authorizeMailAction({
+				action,
+				authMethod: 'api_token',
+				scopes: locals.apiScopes
+			});
+			if (!access.ok) return json({ error: access.error }, { status: access.status });
+		}
+	}
 
 	const ids = body.messageOnly
 		? [params.id!]
@@ -96,6 +129,14 @@ export const DELETE: RequestHandler = async ({ params, locals, platform }) => {
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}
 
+	if (locals.authMethod === 'api_token') {
+		const access = authorizeMailAction({
+			action: 'delete',
+			authMethod: 'api_token',
+			scopes: locals.apiScopes
+		});
+		if (!access.ok) return json({ error: access.error }, { status: access.status });
+	}
 	const ids = await expandToThreads(db, locals.user.id, [params.id!]);
 	const removed = await deleteEmailsPermanently(db, platform?.env.ATTACHMENTS, locals.user.id, ids);
 
@@ -126,8 +167,7 @@ export const POST: RequestHandler = async ({ params, request, locals, platform, 
 	const subject = /^re:/i.test(original.subject) ? original.subject : `Re: ${original.subject}`;
 	// Default reply goes to the other party; the composer can add Cc/Bcc or switch to reply-all.
 	const to =
-		body.to?.trim() ||
-		(original.direction === 'inbound' ? original.from_addr : original.to_addr);
+		body.to?.trim() || (original.direction === 'inbound' ? original.from_addr : original.to_addr);
 
 	// Reply from the mailbox that received the original. Catch-all mail uses
 	// that exact recipient when the user can send on the domain.
@@ -162,7 +202,11 @@ export const POST: RequestHandler = async ({ params, request, locals, platform, 
 			}
 		);
 
-		return json({ ok: true, id: emailId, ...(warnings.length ? { warning: warnings.join(' ') } : {}) });
+		return json({
+			ok: true,
+			id: emailId,
+			...(warnings.length ? { warning: warnings.join(' ') } : {})
+		});
 	} catch (error) {
 		return json(
 			{ error: describeProviderError(error, 'Failed to send reply') },

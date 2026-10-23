@@ -23,6 +23,7 @@ export async function loadThreadLabels(db: D1Database, userId: string, threadIds
 
 /** Check ownership before constructing an atomic batch. Labels apply to conversations. */
 export async function applyMailLabels(db: D1Database, userId: string, selected: string[], changes: { labelId: string; apply: boolean }[]): Promise<boolean> {
+	if (selected.length>80) { for(let i=0;i<selected.length;i+=80) if(!await applyMailLabels(db,userId,selected.slice(i,i+80),changes)) return false; return true; }
 	const owned = new Set((await listMailLabels(db, userId)).map((label) => label.id));
 	if (changes.some((change) => !owned.has(change.labelId))) return false;
 	const ids = await expandToThreads(db, userId, selected);

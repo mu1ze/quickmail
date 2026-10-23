@@ -4,6 +4,7 @@ import { claimWebhookEvent, handleResendWebhook, type ResendWebhookEvent } from 
 import { verifyWebhookSignature } from '$lib/server/webhook';
 import {
 	MAX_WEBHOOK_BODY_BYTES,
+	readBoundedBody,
 	utf8ByteLength,
 	webhookBodyTooLarge
 } from '$lib/server/request-limits';
@@ -31,7 +32,9 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 	}
 
 	// Must be the raw body — parsing first would invalidate the signature.
-	const rawBody = await request.text();
+	let rawBody: string;
+	try {rawBody=new TextDecoder().decode(await readBoundedBody(request.body,MAX_WEBHOOK_BODY_BYTES));}
+	catch {return json({error:'Webhook payload too large'},{status:413});}
 	if (utf8ByteLength(rawBody) > MAX_WEBHOOK_BODY_BYTES) {
 		return json({ error: 'Webhook payload too large' }, { status: 413 });
 	}

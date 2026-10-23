@@ -19,7 +19,9 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
 
 	// No marking read here: hover preloading runs this load before the reader
 	// opens anything. The page marks the conversation read once it mounts.
-	const messages = await listThreadMessages(platform.env.DB, locals.user.id, email);
+	const pageMessages = await listThreadMessages(platform.env.DB, locals.user.id, email,{limit:21});
+	const hasOlder=pageMessages.length>20;
+	const messages=hasOlder?pageMessages.slice(1):pageMessages;
 
 	const latest = messages[messages.length - 1] ?? email;
 	const replyIdentity = await resolveReplyFromAddress(platform.env.DB, locals.user, latest);
@@ -40,6 +42,7 @@ export const load: PageServerLoad = async ({ params, locals, platform }) => {
 	}
 
 	return {
+		hasOlder,
 		threadLabels: (await loadThreadLabels(platform.env.DB, locals.user.id, [email.thread_id ?? email.id])).get(email.thread_id ?? email.id) ?? [],
 		threadId: email.thread_id ?? email.id,
 		/** The linked message may also be expanded below the newest message. */

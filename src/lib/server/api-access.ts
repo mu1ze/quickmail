@@ -54,7 +54,7 @@ const BEARER_ROUTES: RouteRule[] = [
 	{
 		method: 'PATCH',
 		match: (pathname) => /^\/api\/mail\/[^/]+$/.test(pathname),
-		scopes: ['mail:send']
+		scopes: ['mail:read', 'mail:send']
 	},
 	{
 		method: 'DELETE',

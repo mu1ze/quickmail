@@ -20,7 +20,7 @@ beforeEach(() => {
 		CREATE TABLE sessions (id TEXT PRIMARY KEY, user_id TEXT, token_hash TEXT, expires_at TEXT);`);
 	db = { prepare(sql: string) {
 		let args: any[] = [];
-		return { bind(...v: any[]) { args = v; return this; }, async first() { return sqlite.query(sql).get(...args); }, async run() { return sqlite.query(sql).run(...args); } };
+		return { bind(...v: any[]) { args = v; return this; }, async all() {return {results:sqlite.query(sql).all(...args)};}, async first() { return sqlite.query(sql).get(...args); }, async run() { return sqlite.query(sql).run(...args); } };
 	} } as unknown as D1Database;
 	values = new Map(); writes = [];
 	cookies = { get: (name) => values.get(name), set: (name, value, options) => { values.set(name, value); writes.push({ name, options }); }, delete: (name) => { values.delete(name); } };
@@ -93,7 +93,7 @@ test('a stale tab cannot mutate or read under another active account', async () 
 	for (const method of ['GET', 'POST']) {
 		let resolved = false;
 		const response = await handle({ event: {
-			request: new Request('https://mail.test/api/drafts', { method, headers: { 'X-QuickMail-Account': 'a' } }),
+			request: new Request('https://mail.test/api/drafts', { method, headers: { 'X-QuickMail-Account': 'a', Origin:'https://mail.test' } }),
 			url: new URL('https://mail.test/api/drafts'), cookies, locals: {}, platform: { env: { DB: db } }
 		} as any, resolve: async () => { resolved = true; return new Response('wrong account'); } });
 		assert.equal(response.status, 409); assert.equal(response.headers.get('X-QuickMail-Account-Changed'), '1');
@@ -113,3 +113,11 @@ test('account endpoints expose identities only and refuse unsaved identities, cr
 		assert.equal(selected.status, expected); assert.equal(values.get('mail_session'), a.token);
 	}
 });
+
+ test('foreign and missing Origin cannot mutate session routes without a Content-Type',async()=>{
+  for(const origin of [null,'https://sibling.test']) {
+   const headers=new Headers(); if(origin) headers.set('Origin',origin);
+   const response=await handle({event:{request:new Request('https://mail.test/api/mail/actions',{method:'POST',headers,body:new TextEncoder().encode('{"action":"empty-trash"}')}),url:new URL('https://mail.test/api/mail/actions'),cookies,locals:{}} as any,resolve:async()=>{throw new Error('must not reach mutation');}});
+   assert.equal(response.status,403);
+  }
+ });
