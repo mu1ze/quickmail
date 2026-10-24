@@ -3,38 +3,17 @@
 Audited checkout: `d2c5b10`. This is a source and local synthetic audit. No real
 mail was sent to SubQ, no provider credentials were inspected, and production
 settings, migrations, queues, accuracy, billing, and retention were not verified.
-Runtime code was not changed.
+Runtime code was not changed by the original audit.
+
+Follow-up: findings 2–4 are addressed by excluding existing jobs before the backfill
+limit, recovering jobs without saved results, and reporting result-based progress.
 
 ## Findings, in recommended repair order
 
-### 1. High: enabling analysis has no retention acknowledgement or operator policy gate
+### 1. Closed: operator confirmed ZDR
 
-Locations: `src/routes/api/settings/analysis/+server.ts:18`,
-`src/lib/components/AnalysisSettings.svelte:34`,
-`src/lib/server/mail-analysis-jobs.ts:80`.
-
-The settings endpoint accepts `{enabled:true}` with only a configured key and an
-owner browser session. The UI discloses the fields sent, but neither displays the
-provider's retention policy nor asks for the previously required ZDR confirmation.
-There is no stored retention acknowledgement or configured retention policy to
-check before the provider call. A configured key does not establish ZDR.
-
-Local reproduction: the real PUT handler returned 200 and enabled the account
-without any retention acknowledgement. This demonstrates the missing gate, not
-that production currently retains mail.
-
-The repository's guide says ZDR must be active, but its claim that default retention
-is indefinite is outdated. SubQ currently documents deletion within 60 days,
-subject to investigation/legal exceptions; organization ZDR stores no content.
-The per-request `store:false` option is documented for Chat/Responses, not
-Decisions. See [SubQ retention](https://docs.subq.ai/using-the-api/data-retention/).
-
-Recommendation: make the operator's retention policy explicit, disclose it before
-opt-in, and persist a versioned account acknowledgement. Require an operator ZDR
-attestation or explicit consent to the disclosed retention policy; do not present
-an attestation as API verification. Check that policy with consent before calls.
-Prior authorization for a one-time historical pass does not authorize ongoing
-retention-enabled processing.
+The operator confirmed ZDR is enabled for their account. No additional retention
+acknowledgement or operator policy gate is required for this deployment.
 
 ### 2. Medium: failed jobs can prevent older mail from ever entering backfill
 

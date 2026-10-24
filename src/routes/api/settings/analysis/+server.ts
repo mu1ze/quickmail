@@ -1,5 +1,5 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { analysisEnabled, setAnalysisEnabled, enqueueAnalysisBackfill, countUnanalyzed, backfillAllActive, setBackfillAll } from '$lib/server/mail-analysis-store';
+import { analysisProgress, analysisEnabled, setAnalysisEnabled, enqueueAnalysisBackfill, countUnanalyzed, backfillAllActive, setBackfillAll } from '$lib/server/mail-analysis-store';
 import { dispatchAnalysis } from '$lib/server/mail-analysis-jobs';
 import { ANALYSIS_VERSION } from '$lib/mail-analysis';
 
@@ -7,7 +7,7 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
 	if (!locals.user || !platform?.env.DB) return json({error:'Unauthorized'},{status:401});
 	if (locals.authMethod !== 'session') return json({error:'Sign in with a browser session.'},{status:403});
 	const db=platform.env.DB,userId=locals.user.id;
-	const {results:counts}=await db.prepare('SELECT status,COUNT(*) AS count FROM email_analysis_jobs WHERE user_id=? AND version=? GROUP BY status').bind(userId,ANALYSIS_VERSION).all<{status:string;count:number}>();
+	const counts=await analysisProgress(db,userId);
 	const provider=await db.prepare('SELECT pause_until,error_code FROM mail_analysis_provider_state WHERE id=1').first<{pause_until:number;error_code:string}>();
 	const {results:corrections}=await db.prepare(`SELECT CASE WHEN a.confidence>=0.9 THEN '>=0.90' WHEN a.confidence>=0.6 THEN '0.60–0.89' ELSE '<0.60' END AS band,
 		COUNT(*) AS reviewed,SUM(CASE WHEN a.predicted_category=c.category THEN 1 ELSE 0 END) AS agreed

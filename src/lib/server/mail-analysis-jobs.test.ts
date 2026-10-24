@@ -7,7 +7,7 @@ import type { D1Database } from '@cloudflare/workers-types';
 import { listMailbox, insertEmail } from './mail-store';
 import { ANALYSIS_VERSION, SUBQ_MODEL } from '../mail-analysis';
 import { answers } from './testing/analysis-fixtures';
-import { analysisEnabled, setAnalysisEnabled, enqueueAnalysisBackfill, loadMailAnalyses, correctMailAnalysis, continueBackfill, countUnanalyzed, setBackfillAll, backfillAllActive } from './mail-analysis-store';
+import { analysisProgress, analysisEnabled, setAnalysisEnabled, enqueueAnalysisBackfill, loadMailAnalyses, correctMailAnalysis, continueBackfill, countUnanalyzed, setBackfillAll, backfillAllActive } from './mail-analysis-store';
 import { dispatchAnalysis, processAnalysisJob, reconcileAnalysisJobs, consumeAnalysisQueue } from './mail-analysis-jobs';
 import { handleCloudflareInbound } from './cloudflare-inbound';
 import { handleResendWebhook } from './inbound';
@@ -240,4 +240,79 @@ test('low-confidence mail is filed under its best-guess tab, flagged for review,
  a=(await loadMailAnalyses(db,'owner',[id])).get(id)!;
  assert.equal(a.suggested,false); assert.equal(a.corrected,true); assert.equal(a.review,false);
  assert.equal((await listMailbox(db,'owner',{view:'inbox',q:'needs:review'})).total,0);
+});
+
+
+test('failed recent jobs do not starve older unqueued mail', async () => {
+ for (let i=0;i<201;i++) await receive();
+ await setAnalysisEnabled(db,'owner',true);
+ assert.equal(await enqueueAnalysisBackfill(db,'owner'),200);
+ sqlite.exec("UPDATE email_analysis_jobs SET status='failed'");
+ await setBackfillAll(db,'owner',true);
+ assert.equal(await continueBackfill(db,'owner'),1);
+ assert.equal(await countUnanalyzed(db,'owner'),0);
+ assert.equal(await backfillAllActive(db,'owner'),true);
+});
+
+test('trash during inference remains recoverable after restore, including legacy completed jobs', async () => {
+ await setAnalysisEnabled(db,'owner',true); const id=await receive();
+ await processAnalysisJob({DB:db,SUBQ_API_KEY:'test',fetch:(async()=>{
+  sqlite.query("UPDATE emails SET deleted_at=datetime('now') WHERE id=?").run(id);
+  return response();
+ }) as typeof fetch},message(id));
+ assert.equal(sqlite.query<{status:string},[string]>('SELECT status FROM email_analysis_jobs WHERE email_id=?').get(id)!.status,'pending');
+ assert.deepEqual(await analysisProgress(db,'owner'),[]);
+ sqlite.query('UPDATE emails SET deleted_at=NULL WHERE id=?').run(id);
+ // Simulate the old bug to verify cron also repairs existing broken jobs.
+ sqlite.exec("UPDATE email_analysis_jobs SET status='analyzed',attempts=5");
+ assert.deepEqual(await analysisProgress(db,'owner'),[{status:'pending',count:1}]);
+ await reconcileAnalysisJobs({DB:db,SUBQ_API_KEY:'test',fetch:(async()=>response()) as typeof fetch});
+ assert.equal((await loadMailAnalyses(db,'owner',[id])).get(id)!.status,'analyzed');
+ assert.deepEqual(await analysisProgress(db,'owner'),[{status:'analyzed',count:1}]);
+});
+
+test('settings report eligible saved results, unqueued mail, pending and failed work separately', async () => {
+ await receive(); await setAnalysisEnabled(db,'owner',true);
+ const pending=await receive(), failed=await receive(), done=await receive(), trashed=await receive();
+ sqlite.query("UPDATE email_analysis_jobs SET status='failed' WHERE email_id=?").run(failed);
+ sqlite.query("UPDATE emails SET deleted_at=datetime('now') WHERE id=?").run(trashed);
+ await processAnalysisJob({DB:db,SUBQ_API_KEY:'test',fetch:(async()=>response()) as typeof fetch},message(done));
+ await receive('other');
+ const data=await (await getSettings({locals:{user:{id:'owner'},authMethod:'session'},platform:{env:{DB:db,SUBQ_API_KEY:'test'}}} as any)).json();
+ assert.deepEqual(Object.fromEntries(data.counts.map((c:any)=>[c.status,c.count])),{analyzed:1,failed:1,pending:1,unqueued:1});
+ assert.equal(data.remaining,1);
+ assert.equal((await loadMailAnalyses(db,'owner',[pending])).get(pending)!.status,'pending');
+});
+
+
+test('restored mail retries a discarded result without manual intervention or duplicate billing', async () => {
+ await setAnalysisEnabled(db,'owner',true); const id=await receive(); let calls=0;
+ const env={DB:db,SUBQ_API_KEY:'test',fetch:(async()=>{
+  calls++;
+  if(calls===1) sqlite.query("UPDATE emails SET deleted_at=datetime('now') WHERE id=?").run(id);
+  return response();
+ }) as typeof fetch};
+ await processAnalysisJob(env,message(id));
+ assert.equal(sqlite.query<{n:number},[]>('SELECT COUNT(*) AS n FROM email_analysis').get()!.n,0);
+ await reconcileAnalysisJobs(env);
+ assert.equal(calls,1,'trashed mail must not be sent again');
+ sqlite.query('UPDATE emails SET deleted_at=NULL WHERE id=?').run(id);
+ await reconcileAnalysisJobs(env);
+ assert.equal(calls,2,'restored mail is automatically retried');
+ assert.equal((await loadMailAnalyses(db,'owner',[id])).get(id)!.status,'analyzed');
+ await reconcileAnalysisJobs(env); await processAnalysisJob(env,message(id));
+ assert.equal(calls,2,'completed work is not sent again');
+});
+
+test('backfill reaches older mail past 200 failures and stops without claiming failures are analyzed', async () => {
+ for(let i=0;i<201;i++) await receive();
+ await setAnalysisEnabled(db,'owner',true);
+ await enqueueAnalysisBackfill(db,'owner');
+ sqlite.exec("UPDATE email_analysis_jobs SET status='failed'");
+ await setBackfillAll(db,'owner',true);
+ const env={DB:db,SUBQ_API_KEY:'test',fetch:(async()=>response()) as typeof fetch};
+ await reconcileAnalysisJobs(env); await reconcileAnalysisJobs(env);
+ assert.equal(await backfillAllActive(db,'owner'),false);
+ assert.deepEqual(Object.fromEntries((await analysisProgress(db,'owner')).map(c=>[c.status,c.count])),{analyzed:1,failed:200});
+ assert.equal(await countUnanalyzed(db,'owner'),0);
 });

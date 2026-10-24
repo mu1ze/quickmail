@@ -59,11 +59,6 @@ correspondence do not establish safety. The integration is semantic triage,
 not antivirus, domain reputation, or SPF/DKIM/DMARC verification. Legacy
 messages have unknown metadata where ingestion previously discarded it.
 
-SubQ's default retention is indefinite and Decisions has no documented
-`store:false` switch, so retention is an organization-level setting. Zero data
-retention must be active for the organization that owns `SUBQ_API_KEY`; the app
-cannot verify this through the API. See
-<https://docs.subq.ai/using-the-api/data-retention/>.
 
 D1 stores selected inbound metadata, typed answer probabilities, version/model,
 input hash, token usage, status, and manual corrections. Analysis does not store
@@ -129,7 +124,7 @@ matched 15 categories (14 at confidence ≥0.90; threshold since lowered to 0.60
 flagged the one phishing example. Median end-to-end latency was 305 ms, with
 14,967 reported input tokens total. These are one-run observations, not an SLA.
 
-Before changing thresholds, review roughly 200 real messages with zero data retention active.
+Before changing thresholds, review roughly 200 real messages .
 Settings reports category agreement by confidence band for manually reviewed
 messages only; uncorrected predictions are not assumed correct. Include wanted
 marketing, authentic security mail, scams, retractions, CC-only requests,

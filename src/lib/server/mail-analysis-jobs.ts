@@ -93,7 +93,11 @@ export async function processAnalysisJob(env: AnalysisEnv, message: AnalysisQueu
 				confidence=excluded.confidence,review=excluded.review,phishing=excluded.phishing,spam=excluded.spam,needs_reply=excluded.needs_reply,deadline=excluded.deadline,urgency=excluded.urgency,
 				answers_json=excluded.answers_json,input_tokens=excluded.input_tokens,analyzed_at=datetime('now')`)
 				.bind(message.emailId,message.userId,ANALYSIS_VERSION,SUBQ_MODEL,hash,signals.category,result.answers.folder.choice,signals.confidence,Number(signals.review),Number(signals.phishing),Number(signals.spam),Number(signals.needsReply),Number(signals.deadline),signals.urgency,JSON.stringify(result.answers),result.inputTokens,message.emailId,message.userId,ANALYSIS_VERSION,token),
-			db.prepare("UPDATE email_analysis_jobs SET status='analyzed',lease_until=0,lease_token=NULL,error_code=NULL WHERE email_id=? AND user_id=? AND version=? AND lease_token=?")
+			db.prepare(`UPDATE email_analysis_jobs SET
+				status=CASE WHEN EXISTS(SELECT 1 FROM email_analysis a WHERE a.email_id=email_analysis_jobs.email_id AND a.user_id=email_analysis_jobs.user_id AND a.version=email_analysis_jobs.version) THEN 'analyzed' ELSE 'pending' END,
+				attempts=CASE WHEN EXISTS(SELECT 1 FROM email_analysis a WHERE a.email_id=email_analysis_jobs.email_id AND a.user_id=email_analysis_jobs.user_id AND a.version=email_analysis_jobs.version) THEN attempts ELSE 0 END,
+				next_attempt_at=0,queued_until=0,lease_until=0,lease_token=NULL,error_code=NULL
+				WHERE email_id=? AND user_id=? AND version=? AND lease_token=?`)
 				.bind(message.emailId,message.userId,ANALYSIS_VERSION,token)
 		]);
 	} catch (error) {
@@ -115,6 +119,11 @@ export async function reconcileAnalysisJobs(env: AnalysisEnv): Promise<void> {
 	if (!env.SUBQ_API_KEY) return;
 	await env.DB.prepare(`UPDATE email_analysis_jobs SET status=CASE WHEN attempts>=? THEN 'failed' ELSE 'pending' END,lease_token=NULL,lease_until=0,error_code='analysis_lease_expired'
 		WHERE status='processing' AND lease_until<=?`).bind(MAX_ATTEMPTS,now()).run();
+	// Repair legacy jobs completed without a saved result (including trash/restore races).
+	await env.DB.prepare(`UPDATE email_analysis_jobs SET status='pending',attempts=0,next_attempt_at=0,queued_until=0,lease_until=0,lease_token=NULL,error_code=NULL
+		WHERE version=? AND status='analyzed'
+		AND NOT EXISTS(SELECT 1 FROM email_analysis a WHERE a.email_id=email_analysis_jobs.email_id AND a.user_id=email_analysis_jobs.user_id AND a.version=email_analysis_jobs.version)`)
+		.bind(ANALYSIS_VERSION).run();
 	// "Analyze all existing mail" keeps feeding bounded batches until it runs dry.
 	const paused = await env.DB.prepare('SELECT pause_until FROM mail_analysis_provider_state WHERE id=1').first<{ pause_until: number }>();
 	if (!paused || paused.pause_until <= now()) {

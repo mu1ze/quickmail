@@ -23,11 +23,13 @@
 		return ()=>clearInterval(timer);
 	});
 	const open=$derived(counts.filter(c=>c.status==='pending'||c.status==='processing').reduce((n,c)=>n+c.count,0));
+	const failed=$derived(counts.filter(c=>c.status==='failed').reduce((n,c)=>n+c.count,0));
 	let showDetails=$state(false);
 	const existingSummary=$derived(
 		loading ? 'Checking…'
-		: backfillAll ? `Analyzing in batches of 200: ${remaining} not yet queued, ${open} in progress. This continues if you leave the page.`
+		: backfillAll ? `Analyzing in batches of 200: ${remaining} not yet queued, ${open} in progress, ${failed} failed. This continues if you leave the page.`
 		: !enabled ? 'Turn on analysis to categorize what is already in your mailbox.'
+		: open>0 || failed>0 ? `${remaining} not yet queued, ${open} in progress, ${failed} failed.${failed ? ' Retry failed messages to finish analysis.' : ''}`
 		: remaining>0 ? `${remaining} message${remaining===1?' has':'s have'} not been analyzed yet.`
 		: 'All existing mail has been analyzed.'
 	);
