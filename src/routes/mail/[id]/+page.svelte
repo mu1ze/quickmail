@@ -459,14 +459,16 @@
 				</button>
 			{/if}
 
-			<button type="button" class="btn-ghost" onclick={() => seedReply('reply')}>
-				<Icon name="reply-line" size={16} />
-				Reply
-			</button>
-			<button type="button" class="btn-ghost" onclick={() => seedReply('replyAll')}>
-				<Icon name="reply-all-line" size={16} />
-				Reply all
-			</button>
+			<div class="reply-buttons">
+				<button type="button" class="btn-ghost" onclick={() => seedReply('reply')}>
+					<Icon name="reply-line" size={16} />
+					Reply
+				</button>
+				<button type="button" class="btn-ghost" onclick={() => seedReply('replyAll')}>
+					<Icon name="reply-all-line" size={16} />
+					Reply all
+				</button>
+			</div>
 		</div>
 	</header>
 
@@ -612,6 +614,58 @@
 		gap: 0.375rem;
 	}
 
+	/* Toolbar buttons: always-visible outline + fill, and a clear pressed state. */
+	.mail-toolbar > .btn-ghost,
+	.mail-toolbar :global(.icon-btn),
+	.mail-toolbar :global(.trigger),
+	.reply-buttons .btn-ghost {
+		border: 1px solid color-mix(in srgb, var(--color-text) 24%, transparent);
+		background: var(--color-surface-muted);
+		color: var(--color-text);
+		box-shadow: none;
+		transition: background 0.12s, border-color 0.12s, color 0.12s, transform 0.08s;
+	}
+
+	.mail-toolbar > .btn-ghost:hover,
+	.mail-toolbar :global(.icon-btn:hover),
+	.mail-toolbar :global(.trigger:hover),
+	.reply-buttons .btn-ghost:hover {
+		background: var(--color-surface-hover);
+		border-color: color-mix(in srgb, var(--color-text) 40%, transparent);
+	}
+
+	.mail-toolbar > .btn-ghost:active,
+	.mail-toolbar :global(.icon-btn:active),
+	.mail-toolbar :global(.trigger:active),
+	.mail-toolbar :global(.icon-btn[aria-expanded='true']),
+	.reply-buttons .btn-ghost:active {
+		background: var(--color-accent-soft);
+		border-color: var(--color-accent);
+		color: var(--color-accent-text);
+		transform: scale(0.95);
+	}
+
+	.mail-toolbar > .btn-ghost,
+	.mail-toolbar :global(.icon-btn),
+	.mail-toolbar :global(.trigger) {
+		width: 2.25rem;
+		height: 2.25rem;
+		min-height: 0;
+		padding: 0;
+		border-radius: 9px;
+	}
+
+	.reply-buttons {
+		display: flex;
+		gap: 0.375rem;
+	}
+
+	.reply-buttons .btn-ghost {
+		min-height: 2.25rem;
+		padding: 0 0.75rem;
+		white-space: nowrap;
+	}
+
 	.toolbar-actions :global(.icon-btn.starred) {
 		color: var(--color-star);
 	}
@@ -742,9 +796,36 @@
 			overflow: auto;
 		}
 
+		/* Row 1: back + icon actions share the width evenly. Row 2: Reply / Reply all side by side. */
 		.mail-toolbar {
+			flex-wrap: wrap;
 			padding: max(0.5rem, env(safe-area-inset-top)) 0.75rem 0.5rem;
-			gap: 0.5rem;
+			gap: 0.375rem;
+		}
+
+		.toolbar-actions { display: contents; }
+		.mail-toolbar:has(.toolbar-actions[aria-busy="true"]) { opacity: 0.6; }
+
+		.mail-toolbar > .btn-ghost,
+		.mail-toolbar :global(.icon-btn),
+		.mail-toolbar :global(.trigger),
+		.snooze-wrap {
+			flex: 1 1 0;
+			min-width: 0;
+			max-width: 2.75rem;
+			width: auto;
+		}
+
+		.snooze-wrap :global(.icon-btn) { width: 100%; max-width: none; }
+
+		.reply-buttons {
+			order: 1;
+			flex: 1 1 100%;
+		}
+
+		.reply-buttons .btn-ghost {
+			flex: 1 1 0;
+			min-width: 0;
 		}
 
 		.mail-reading {
