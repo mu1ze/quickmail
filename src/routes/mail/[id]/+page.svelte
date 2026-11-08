@@ -478,7 +478,6 @@
 				<span class="thread-count">{messages.length}{hasOlder ? '+' : ''} messages</span>
 			{/if}
 		</div>
-		{#if messages.length > 1}<p class="thread-order"><Icon name="sort-desc" size={14} />Newest first · older messages below</p>{/if}
 
 		{#if replyOpen}
 			<form class="reply-section" onsubmit={sendReply}>
@@ -549,7 +548,6 @@
 				{/if}
 				<ThreadMessage
 					{message}
-					newest={message.id === latest?.id && messages.length > 1}
 					expanded={opened.has(message.id)}
 					onToggle={() => toggleMessage(message.id)}
 					onTrashCode={!message.deleted_at ? () => trashCodeEmail(message.id) : undefined}
@@ -575,7 +573,6 @@
 </div>
 
 <style>
-	.thread-order { display: flex; align-items: center; gap: 0.4rem; margin: 0.5rem 0; color: var(--color-text-secondary); font-size: 0.75rem; }
 	.message-analysis { margin:0.7rem 0; padding:0.7rem; border:1px solid var(--color-line); border-radius:8px; }
 	.message-analysis p { font-size:0.875rem; line-height:1.6; }
 	.message-analysis summary { padding:0.5rem 0; font-size:0.8125rem; cursor:pointer; }

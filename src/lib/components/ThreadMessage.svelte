@@ -15,14 +15,12 @@
 	let {
 		message,
 		expanded = false,
-		newest = false,
 		onTrashCode,
 		actionBusy = false,
 		onToggle
 	}: {
 		message: ThreadMessage;
 		expanded?: boolean;
-		newest?: boolean;
 		onTrashCode?: () => void;
 		actionBusy?: boolean;
 		onToggle: () => void;
@@ -64,17 +62,24 @@
 						<span>bcc {message.bcc_addr}</span>
 					{/if}
 				</p>
-				<p class="when message-date"><span>{formatFullDate(message.created_at)}</span>{#if newest}<span class="latest-label">Latest</span>{/if}</p>
+				<p class="when message-date"><span>{formatFullDate(message.created_at)}</span></p>
 			</button>
 
 			{#if outbound}
 				<DeliveryStatus status={message.status} detail={message.status_detail} />
 			{/if}
+			{#if message.body_html && message.body_text?.trim()}
+				<button
+					type="button"
+					class="content-mode"
+					aria-pressed={plain}
+					aria-label={plain ? 'View formatted message' : 'View plain text'}
+					title={plain ? 'View formatted message' : 'View plain text'}
+					onclick={() => (plain = !plain)}
+				><Icon name={plain ? 'layout-line' : 'text'} size={16} /></button>
+			{/if}
 		</header>
 		{#if code}<VerificationCode {code} variant="card" onTrash={onTrashCode} busy={actionBusy} cleanupAt={message.code_cleanup_at} />{/if}
-		{#if message.body_html && message.body_text?.trim()}
-			<button type="button" class="content-mode" aria-pressed={plain} onclick={() => (plain = !plain)}><Icon name={plain ? 'layout-line' : 'text'} size={13} />{plain ? 'View formatted message' : 'View plain text'}</button>
-		{/if}
 
 		<div class="body mail-body">
 			{#if message.body_html && !plain}
@@ -125,9 +130,8 @@
 
 <style>
 	.when.message-date { display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem 0.5rem; white-space: normal; }
-	.latest-label { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 4px; background: var(--color-accent-soft); color: var(--color-accent-text); font-size: 0.625rem; }
-	.content-mode { display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 1rem; padding: 0.45rem 0.65rem; border: 1px solid var(--color-line); border-radius: 8px; color: var(--color-text-secondary); font-size: 0.7rem; }
-	.content-mode:hover { background: var(--color-well); color: var(--color-text); }
+	.content-mode { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; align-self: flex-start; width: 2rem; height: 2rem; border-radius: 8px; color: var(--color-muted); }
+	.content-mode:hover, .content-mode[aria-pressed='true'] { background: var(--color-well); color: var(--color-text); }
 	.message {
 		padding: 1.25rem 0;
 		box-shadow: inset 0 -1px 0 var(--color-line);
