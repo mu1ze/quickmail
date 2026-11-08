@@ -14,12 +14,15 @@
 	// Deploys to <name>.<your-subdomain>.workers.dev out of the box. To serve it
 	// from your own domain instead, uncomment this and make sure the zone is on
 	// the same Cloudflare account.
-	"routes": [
-		{
-			"pattern": "mail.noreedo.com",
-			"custom_domain": true
-		}
-	],
+	// NOT enabled yet: mail.noreedo.com is currently the MX target (and imap/pop/smtp
+	// CNAME target) for noreedo.com on an existing cPanel host. Pick a free hostname,
+	// or migrate mail first, before turning this on.
+	// "routes": [
+	// 	{
+	// 		"pattern": "<hostname>.noreedo.com",
+	// 		"custom_domain": true
+	// 	}
+	// ],
 
 	"assets": {
 		"directory": ".svelte-kit/cloudflare",
