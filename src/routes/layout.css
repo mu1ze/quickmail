@@ -44,10 +44,10 @@
 	--shadow-header: inset 0 -1px 0 var(--color-line);
 	--sidebar-width: 14rem;
 	--sidebar-width-collapsed: 3rem;
-	--topbar-height: 4.5rem;
+	--topbar-height: 3.5rem;
 	--mobile-dock-height: 4.5rem;
-	--radius-panel: 22px;
-	--gutter: 16px;
+	--radius-panel: 16px;
+	--gutter: 10px;
 }
 
 :root[data-theme='dark'] {
@@ -570,5 +570,12 @@ body.nav-open {
 	.switch,
 	.switch::after {
 		transition: none;
+	}
+}
+
+/* The open-message toolbar sits directly under the top bar on wide screens. */
+@media (min-width: 901px) {
+	.app-shell.mail-mobile .app-main {
+		padding-top: 0;
 	}
 }

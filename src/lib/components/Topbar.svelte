@@ -110,10 +110,10 @@
 		align-items: center;
 		flex: 1;
 		max-width: 42rem;
-		height: 2.875rem;
-		padding: 0 0.75rem;
+		height: 2.25rem;
+		padding: 0 0.375rem 0 0.75rem;
 		border: 1px solid transparent;
-		border-radius: 14px;
+		border-radius: 10px;
 		background: var(--color-well);
 		color: var(--color-muted);
 		box-shadow: none;
@@ -179,6 +179,7 @@
 		.search {
 			height: 2.5rem;
 			max-width: none;
+			border-radius: 12px;
 		}
 
 	}

@@ -231,7 +231,7 @@
 </aside>
 
 <style>
-	.sidebar-account { margin-bottom: 0.5rem; }
+	.sidebar-account { margin-bottom: 0.375rem; }
 	.sidebar {
 		overflow-y: auto;
 		scrollbar-width: none;
@@ -261,7 +261,7 @@
 		justify-content: space-between;
 		gap: 0.5rem;
 		min-height: var(--topbar-height);
-		padding: 0 0.25rem 0.75rem 0.75rem;
+		padding: 0 0.25rem 0.25rem 0.75rem;
 	}
 
 	.brand-name { display: flex; flex-direction: column; gap: 0.25rem; }
@@ -280,12 +280,12 @@
 		display: flex;
 		align-items: center;
 		justify-content: flex-start;
-		gap: 0.7rem;
-		height: 3.25rem;
-		padding: 0 1.2rem;
-		margin-bottom: 1.25rem;
-		border-radius: 14px;
-		font-size: 14px;
+		gap: 0.6rem;
+		height: 2.5rem;
+		padding: 0 0.875rem;
+		margin-bottom: 0.75rem;
+		border-radius: 12px;
+		font-size: 13px;
 		font-weight: 500;
 		color: var(--color-on-accent);
 		background: var(--color-accent);
@@ -321,9 +321,9 @@
 		display: flex;
 		align-items: center;
 		gap: 0.625rem;
-		height: 2.5rem;
+		height: 2.125rem;
 		padding: 0 0.875rem;
-		border-radius: 12px;
+		border-radius: 9px;
 		font-size: 13px;
 		color: var(--color-text-secondary);
 		transition: background 0.15s, color 0.15s;
@@ -398,7 +398,7 @@
 	}
 
 	.section {
-		margin-top: 1.125rem;
+		margin-top: 0.75rem;
 	}
 
 	.section-title {

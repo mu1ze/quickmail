@@ -73,7 +73,7 @@
 	/* Desktop: a plain underline tab row that shares its line with the filters. */
 	@media (min-width: 901px) {
 		.category-track { gap: 0.125rem; padding: 0; border-radius: 0; background: transparent; }
-		.category { height: 2.875rem; gap: 0.375rem; padding: 0 0.625rem; border: 0; border-radius: 0; }
+		.category { height: 2.5rem; gap: 0.375rem; padding: 0 0.625rem; border: 0; border-radius: 0; }
 		.category:hover { background: transparent; }
 		.category:hover .category-name { color: var(--color-text); }
 		.category.active { background: transparent; box-shadow: inset 0 -2px 0 var(--color-accent); }
@@ -83,13 +83,14 @@
 	}
 	@media (min-width: 901px) and (max-width: 1280px) { .category { padding: 0 0.4rem; } .category-name { font-size: 0.78rem; } }
 	@media (max-width: 900px) {
-		.categories { margin: 0.35rem 1rem 0.75rem; gap: 0.3rem; }
-		.category-track { display: flex; overflow-x: auto; scrollbar-width: none; border-radius: 13px; gap: 0.2rem; padding: 0.25rem; }
+		.categories { margin: 0 0.75rem 0.5rem; gap: 0.25rem; }
+		.category-track { display: flex; overflow-x: auto; scrollbar-width: none; border-radius: 11px; gap: 0.125rem; padding: 0.1875rem; }
 		.category-track::-webkit-scrollbar { display: none; }
-		.category { flex: none; flex-direction: row; align-items: center; gap: 0.4rem; padding: 0.5rem 0.65rem; border-radius: 9px; }
-		.category-icon { width: 1.4rem; height: 1.4rem; background: transparent; }
+		.category { flex: none; flex-direction: row; align-items: center; gap: 0.35rem; padding: 0.3rem 0.65rem 0.3rem 0.5rem; border-radius: 8px; }
+		.category-icon { width: 1.125rem; height: 1.125rem; background: transparent; }
+		.category-icon :global(i) { font-size: 1rem !important; }
 		.category-name { white-space: nowrap; font-size: 0.75rem; }
 		.active-mark { display: none; }
-		summary { min-height: 2.75rem; padding: 0.45rem; }
+		summary { min-height: 2.25rem; padding: 0.35rem 0.45rem; }
 	}
 </style>

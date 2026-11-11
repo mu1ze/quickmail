@@ -45,6 +45,7 @@
 		}
 	}));
 	let snoozeOpen = $state(false);
+	let moreOpen = $state(false);
 	let selectedSignatureId = $state('');
 
 	let older = $state<{threadId:string;messages:PageData['messages'];hasOlder:boolean}|null>(null);
@@ -378,7 +379,7 @@
 				<button type="button" class="icon-btn" aria-label="Archive" use:tooltip={'Archive (e)'} onclick={archive}><Icon name="archive-line" size={18} /></button>
 			{/if}
 			{#if !data.trashed}
-				<button type="button" class="icon-btn" aria-label={data.spam ? 'Not spam' : 'Mark as spam'} use:tooltip={data.spam ? 'Not spam' : 'Mark as spam'} onclick={toggleSpam}><Icon name="spam-2-line" size={18} /></button>
+				<button type="button" class="icon-btn wide-only" aria-label={data.spam ? 'Not spam' : 'Mark as spam'} use:tooltip={data.spam ? 'Not spam' : 'Mark as spam'} onclick={toggleSpam}><Icon name="spam-2-line" size={18} /></button>
 			{/if}
 			<button
 				type="button"
@@ -392,7 +393,7 @@
 			</button>
 			<button
 				type="button"
-				class="icon-btn"
+				class="icon-btn wide-only"
 				class:pinned
 				aria-label={pinned ? 'Unpin' : 'Pin to top'}
 				use:tooltip={pinned ? 'Unpin (p)' : 'Pin to top (p)'}
@@ -402,7 +403,7 @@
 			</button>
 			<button
 				type="button"
-				class="icon-btn"
+				class="icon-btn wide-only"
 				aria-label="Forward"
 				use:tooltip={'Forward (f)'}
 				onclick={forwardLatest}
@@ -459,7 +460,27 @@
 				</button>
 			{/if}
 
-			<div class="reply-buttons">
+			<!-- Phones keep the bar to the everyday actions; the rest live behind one overflow button. -->
+			<div class="more-wrap narrow-only">
+				<button type="button" class="icon-btn" aria-label="More actions" aria-expanded={moreOpen} onclick={() => (moreOpen = !moreOpen)}>
+					<Icon name="more-2-fill" size={18} />
+				</button>
+				{#if moreOpen}
+					<button type="button" class="backdrop" aria-label="Close menu" onclick={() => (moreOpen = false)}></button>
+					<div class="more-menu" role="menu">
+						<button type="button" role="menuitem" onclick={() => { moreOpen = false; togglePin(); }}>
+							<Icon name={pinned ? 'pushpin-2-fill' : 'pushpin-2-line'} size={17} />{pinned ? 'Unpin' : 'Pin to top'}
+						</button>
+						{#if !data.trashed}
+							<button type="button" role="menuitem" onclick={() => { moreOpen = false; toggleSpam(); }}>
+								<Icon name="spam-2-line" size={17} />{data.spam ? 'Not spam' : 'Mark as spam'}
+							</button>
+						{/if}
+					</div>
+				{/if}
+			</div>
+
+			<div class="reply-buttons" class:reply-open={replyOpen}>
 				<button type="button" class="btn-ghost" onclick={() => seedReply('reply')}>
 					<Icon name="reply-line" size={16} />
 					Reply
@@ -467,6 +488,10 @@
 				<button type="button" class="btn-ghost" onclick={() => seedReply('replyAll')}>
 					<Icon name="reply-all-line" size={16} />
 					Reply all
+				</button>
+				<button type="button" class="btn-ghost narrow-only" onclick={forwardLatest}>
+					<Icon name="share-forward-line" size={16} />
+					Forward
 				</button>
 			</div>
 		</div>
@@ -596,32 +621,34 @@
 		position: sticky;
 		top: 0;
 		z-index: 2;
-		padding: 0.75rem 1.25rem;
+		padding: 0.375rem 0.75rem;
 		background: var(--color-surface);
 		box-shadow: inset 0 -1px 0 var(--color-line);
 	}
 
+	.narrow-only { display: none; }
+
 	.mail-reading {
 		flex: 1;
 		min-width: 0;
-		width: 100%; max-width: 62rem; margin: 0 auto; padding: 2rem 2rem 3rem;
+		width: 100%; max-width: 62rem; margin: 0 auto; padding: 1.25rem 2rem 3rem;
 	}
 
 	.toolbar-actions {
 		display: flex;
 		align-items: center;
 		flex-wrap: wrap;
-		gap: 0.375rem;
+		gap: 0.125rem;
 	}
 
-	/* Toolbar buttons: always-visible outline + fill, and a clear pressed state. */
+	/* Toolbar buttons: quiet until hovered, with a clear pressed state. */
 	.mail-toolbar > .btn-ghost,
 	.mail-toolbar :global(.icon-btn),
 	.mail-toolbar :global(.trigger),
 	.reply-buttons .btn-ghost {
-		border: 1px solid color-mix(in srgb, var(--color-text) 24%, transparent);
-		background: var(--color-surface-muted);
-		color: var(--color-text);
+		border: 0;
+		background: transparent;
+		color: var(--color-text-secondary);
 		box-shadow: none;
 		transition: background 0.12s, border-color 0.12s, color 0.12s, transform 0.08s;
 	}
@@ -631,7 +658,7 @@
 	.mail-toolbar :global(.trigger:hover),
 	.reply-buttons .btn-ghost:hover {
 		background: var(--color-surface-hover);
-		border-color: color-mix(in srgb, var(--color-text) 40%, transparent);
+		color: var(--color-text);
 	}
 
 	.mail-toolbar > .btn-ghost:active,
@@ -640,7 +667,6 @@
 	.mail-toolbar :global(.icon-btn[aria-expanded='true']),
 	.reply-buttons .btn-ghost:active {
 		background: var(--color-accent-soft);
-		border-color: var(--color-accent);
 		color: var(--color-accent-text);
 		transform: scale(0.95);
 	}
@@ -648,23 +674,32 @@
 	.mail-toolbar > .btn-ghost,
 	.mail-toolbar :global(.icon-btn),
 	.mail-toolbar :global(.trigger) {
-		width: 2.25rem;
-		height: 2.25rem;
+		width: 2.125rem;
+		height: 2.125rem;
 		min-height: 0;
 		padding: 0;
-		border-radius: 9px;
+		border-radius: 50%;
 	}
 
 	.reply-buttons {
 		display: flex;
-		gap: 0.375rem;
+		gap: 0.125rem;
+		margin-left: 0.375rem;
+		padding-left: 0.5rem;
+		box-shadow: inset 1px 0 0 var(--color-line);
 	}
 
 	.reply-buttons .btn-ghost {
-		min-height: 2.25rem;
-		padding: 0 0.75rem;
+		min-height: 2.125rem;
+		padding: 0 0.625rem;
+		border-radius: 999px;
 		white-space: nowrap;
 	}
+
+	.more-wrap { position: relative; }
+	.more-menu { position: absolute; top: calc(100% + 0.375rem); right: 0; z-index: 40; min-width: 12rem; padding: 0.25rem; border-radius: 14px; background: var(--color-surface); box-shadow: 0 0 0 1px var(--color-line), var(--mat-float); }
+	.more-menu button { display: flex; align-items: center; gap: 0.65rem; width: 100%; min-height: 2.75rem; padding: 0 0.75rem; border-radius: 9px; font-size: 0.875rem; color: var(--color-text); text-align: left; white-space: nowrap; }
+	.more-menu button:hover { background: var(--color-surface-muted); }
 
 	.toolbar-actions :global(.icon-btn.starred) {
 		color: var(--color-star);
@@ -689,7 +724,7 @@
 	}
 
 	.mail-reading h1 {
-		font-size: 1.7rem;
+		font-size: 1.375rem;
 		font-weight: 600;
 		letter-spacing: -0.02em;
 		line-height: 1.35;
@@ -700,7 +735,7 @@
 		align-items: baseline;
 		justify-content: space-between;
 		gap: 0.75rem;
-		padding-bottom: 1rem;
+		padding-bottom: 0.75rem;
 		box-shadow: inset 0 -1px 0 var(--color-line);
 	}
 
@@ -796,44 +831,65 @@
 			overflow: auto;
 		}
 
-		/* Row 1: back + icon actions share the width evenly. Row 2: Reply / Reply all side by side. */
+		/* One slim row: back on the left, everyday actions on the right. Replying lives in a bar at the bottom. */
 		.mail-toolbar {
-			flex-wrap: wrap;
-			padding: max(0.5rem, env(safe-area-inset-top)) 0.75rem 0.5rem;
-			gap: 0.375rem;
+			padding: max(0.25rem, env(safe-area-inset-top)) 0.25rem 0.25rem;
+			gap: 0;
 		}
 
-		.toolbar-actions { display: contents; }
-		.mail-toolbar:has(.toolbar-actions[aria-busy="true"]) { opacity: 0.6; }
+		.wide-only { display: none !important; }
+		.narrow-only { display: flex; }
 
+		.toolbar-actions { flex: 1; flex-wrap: nowrap; justify-content: flex-end; gap: 0; min-width: 0; }
+
+		/* Buttons shrink together on narrow phones rather than wrapping to a second row. */
 		.mail-toolbar > .btn-ghost,
 		.mail-toolbar :global(.icon-btn),
 		.mail-toolbar :global(.trigger),
-		.snooze-wrap {
-			flex: 1 1 0;
-			min-width: 0;
-			max-width: 2.75rem;
+		.snooze-wrap,
+		.more-wrap {
+			flex: 0 1 2.625rem;
 			width: auto;
+			min-width: 0;
+			height: 2.625rem;
 		}
 
-		.snooze-wrap :global(.icon-btn) { width: 100%; max-width: none; }
+		.snooze-wrap :global(.icon-btn), .more-wrap .icon-btn { width: 100%; }
 
 		.reply-buttons {
-			order: 1;
-			flex: 1 1 100%;
+			position: fixed;
+			right: 0;
+			bottom: 0;
+			left: 0;
+			z-index: 3;
+			gap: 0.5rem;
+			margin: 0;
+			padding: 0.5rem 0.75rem calc(0.5rem + env(safe-area-inset-bottom));
+			background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+			box-shadow: inset 0 1px 0 var(--color-line);
+			backdrop-filter: blur(16px);
 		}
+
+		.reply-buttons.reply-open { display: none; }
 
 		.reply-buttons .btn-ghost {
 			flex: 1 1 0;
 			min-width: 0;
+			min-height: 2.5rem;
+			padding: 0 0.5rem;
+			background: var(--color-well);
+			color: var(--color-text);
 		}
 
+		/* The bottom bar already offers Reply. */
+		.reply-prompt { display: none !important; }
+
 		.mail-reading {
-			padding: 1rem 1rem calc(1.25rem + env(safe-area-inset-bottom));
+			padding: 0.75rem 1rem calc(4.5rem + env(safe-area-inset-bottom));
 		}
 
 		.mail-reading h1 {
-			font-size: 1.125rem;
+			font-size: 1.1875rem;
 		}
 
 		.subject-row {
@@ -852,8 +908,5 @@
 			justify-content: flex-end;
 		}
 
-		.reply-prompt {
-			min-height: 2.75rem;
-		}
 	}
 </style>

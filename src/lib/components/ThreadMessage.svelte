@@ -133,7 +133,7 @@
 	.content-mode { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; align-self: flex-start; width: 2rem; height: 2rem; border-radius: 8px; color: var(--color-muted); }
 	.content-mode:hover, .content-mode[aria-pressed='true'] { background: var(--color-well); color: var(--color-text); }
 	.message {
-		padding: 1.25rem 0;
+		padding: 1rem 0;
 		box-shadow: inset 0 -1px 0 var(--color-line);
 	}
 
@@ -159,7 +159,7 @@
 		flex-shrink: 0;
 		width: 2.25rem;
 		height: 2.25rem;
-		border-radius: 9px;
+		border-radius: 50%;
 		font-size: 0.75rem;
 		font-weight: 600;
 		color: var(--color-text);
