@@ -229,7 +229,12 @@
 		{ id: 'float', label: 'Float', hint: 'Bobs gently' },
 		{ id: 'pulse', label: 'Pulse', hint: 'Swells softly' },
 		{ id: 'wave', label: 'Wave', hint: 'Rocks side to side' },
-		{ id: 'spin', label: 'Spin', hint: 'Turns slowly' }
+		{ id: 'spin', label: 'Spin', hint: 'Turns slowly' },
+		{ id: 'shatter', label: 'Shatter', hint: 'Breaks into shards, reforms' },
+		{ id: 'dust', label: 'Dust', hint: 'Blows away, settles back' },
+		{ id: 'glitch', label: 'Glitch', hint: 'Bursts of interference' },
+		{ id: 'orbit', label: 'Orbit', hint: 'Two sparks circle it' },
+		{ id: 'flip', label: 'Flip', hint: 'Turns over like a coin' }
 	];
 
 	const scriptFonts = Object.entries(SCRIPT_FONTS) as [SignatureScriptFont, (typeof SCRIPT_FONTS)[SignatureScriptFont]][];

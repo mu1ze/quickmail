@@ -11,7 +11,7 @@ export type SignatureSocialKind = (typeof SIGNATURE_SOCIALS)[number];
  * set because the CSS is emitted verbatim into outbound mail — a fixed enum
  * means no user string ever reaches a stylesheet.
  */
-export const SIGNATURE_ANIMATIONS = ['none', 'halo', 'ripple', 'float', 'shine', 'glow', 'pulse', 'wave', 'spin'] as const;
+export const SIGNATURE_ANIMATIONS = ['none', 'halo', 'ripple', 'float', 'shine', 'glow', 'pulse', 'wave', 'spin', 'shatter', 'dust', 'glitch', 'orbit', 'flip'] as const;
 export type SignatureAnimation = (typeof SIGNATURE_ANIMATIONS)[number];
 
 /** Background the animated images are rendered against (GIF has no soft transparency). */
@@ -406,7 +406,15 @@ const ANIMATION_KEYFRAMES: Record<Exclude<SignatureAnimation, 'none'>, string> =
 	pulse: '0%,100%{transform:scale(1)}50%{transform:scale(1.08)}',
 	spin: 'to{transform:rotate(360deg)}',
 	wave: '0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg)}',
-	glow: '0%,100%{filter:drop-shadow(0 0 0 rgba(0,0,0,0))}50%{filter:drop-shadow(0 0 6px ACCENT)}'
+	glow: '0%,100%{filter:drop-shadow(0 0 0 rgba(0,0,0,0))}50%{filter:drop-shadow(0 0 6px ACCENT)}',
+	// One <img> cannot be cut into pieces in CSS, so these approximate the baked effect.
+	shatter: '0%,55%,100%{transform:scale(1) rotate(0);opacity:1}78%{transform:scale(1.18) rotate(8deg);opacity:0}',
+	dust: '0%,55%,100%{transform:translateX(0);opacity:1;filter:blur(0)}78%{transform:translateX(8px);opacity:0;filter:blur(3px)}',
+	glitch:
+		'0%,84%,100%{transform:translateX(0);filter:none}86%{transform:translateX(-3px);filter:hue-rotate(90deg)}90%{transform:translateX(3px);filter:hue-rotate(-90deg)}94%{transform:translateX(-1px);filter:none}',
+	orbit:
+		'0%,100%{transform:translate(3px,0)}25%{transform:translate(0,3px)}50%{transform:translate(-3px,0)}75%{transform:translate(0,-3px)}',
+	flip: '0%,55%{transform:rotateY(0)}100%{transform:rotateY(360deg)}'
 };
 
 /** Timing/easing per preset, appended after the shared `NAME` animation name. */
@@ -418,7 +426,12 @@ const ANIMATION_TIMING: Record<Exclude<SignatureAnimation, 'none'>, string> = {
 	pulse: '2.4s ease-in-out infinite',
 	spin: '6s linear infinite;transform-origin:center',
 	wave: '2.6s ease-in-out infinite;transform-origin:center',
-	glow: '2.8s ease-in-out infinite'
+	glow: '2.8s ease-in-out infinite',
+	shatter: '3.4s ease-in-out infinite',
+	dust: '3.6s ease-in-out infinite',
+	glitch: '3.2s steps(1,end) infinite',
+	orbit: '4s linear infinite',
+	flip: '3.6s ease-in-out infinite'
 };
 
 /**

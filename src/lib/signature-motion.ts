@@ -131,8 +131,26 @@ function drawRound(ctx: CanvasRenderingContext2D, img: HTMLImageElement, cx: num
 const wave = (t: number) => Math.sin(t * Math.PI * 2);
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
-/** Frame count and timing per effect: smooth loops without bloating the file. */
-const MOTION_TIMING: Record<Exclude<SignatureAnimation, 'none'>, { frames: number; delay: number }> = {
+type MotionTiming = { frames: number; delay: number | ((frame: number) => number) };
+
+/** Rests on the untouched first frame, then plays the rest at an even step. */
+const held = (hold: number, step: number) => (frame: number) => (frame === 0 ? hold : step);
+
+/**
+ * How hard each glitch frame is hit (0 is the clean image) and how long it shows.
+ * Short bursts between long rests read as interference rather than constant noise.
+ */
+const GLITCH_FRAMES: readonly (readonly [strength: number, delay: number])[] = [
+	[0, 1500], [1, 60], [0.6, 60], [1, 60], [0.4, 60], [0, 140], [0.8, 60], [0.5, 60],
+	[0, 1900], [0.5, 60], [1, 60], [0.7, 60], [0, 90], [1, 70], [0.5, 70], [0, 700]
+];
+
+/**
+ * Frame count and timing per effect: smooth loops without bloating the file.
+ * Effects that take the image apart always open on the intact image, because
+ * clients that do not animate GIFs (desktop Outlook) show only the first frame.
+ */
+export const MOTION_TIMING: Record<Exclude<SignatureAnimation, 'none'>, MotionTiming> = {
 	halo: { frames: 30, delay: 60 },
 	ripple: { frames: 28, delay: 60 },
 	float: { frames: 28, delay: 70 },
@@ -140,8 +158,284 @@ const MOTION_TIMING: Record<Exclude<SignatureAnimation, 'none'>, { frames: numbe
 	glow: { frames: 26, delay: 80 },
 	pulse: { frames: 24, delay: 70 },
 	wave: { frames: 24, delay: 70 },
-	spin: { frames: 36, delay: 60 }
+	spin: { frames: 36, delay: 60 },
+	shatter: { frames: 34, delay: held(1400, 50) },
+	dust: { frames: 36, delay: held(1400, 55) },
+	glitch: { frames: GLITCH_FRAMES.length, delay: (frame) => GLITCH_FRAMES[frame][1] },
+	orbit: { frames: 32, delay: 60 },
+	flip: { frames: 26, delay: held(1800, 45) }
 };
+
+/** The finished image on a transparent canvas, for effects that cut it up or move it whole. */
+type Still = { el: HTMLCanvasElement; w: number; h: number };
+
+function makeStill(w: number, h: number, paint: (ctx: CanvasRenderingContext2D) => void): Still {
+	const [el, ctx] = canvas(w, h);
+	ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+	paint(ctx);
+	return { el, w, h };
+}
+
+function drawStill(ctx: CanvasRenderingContext2D, still: Still, dx = 0, dy = 0) {
+	ctx.drawImage(still.el, dx, dy, still.w, still.h);
+}
+
+/** Small seeded generator, so a signature renders the same fragments every time. */
+export function seededRandom(seed: number): () => number {
+	let a = seed >>> 0;
+	return () => {
+		a = (a + 0x6d2b79f5) >>> 0;
+		let n = Math.imul(a ^ (a >>> 15), 1 | a);
+		n = (n + Math.imul(n ^ (n >>> 7), 61 | n)) ^ n;
+		return ((n ^ (n >>> 14)) >>> 0) / 4294967296;
+	};
+}
+
+const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
+
+export type Shard = {
+	points: [number, number][];
+	cx: number;
+	cy: number;
+	/** Where the shard ends up, relative to its resting place. */
+	dx: number;
+	dy: number;
+	spin: number;
+	/** 0..1: how late the shard leaves (and how early it returns). */
+	lag: number;
+};
+
+/**
+ * Cuts a w x h box into irregular triangles that tile it exactly: a jittered
+ * grid (edge points stay on the edge) with each cell split along a random diagonal.
+ */
+export function buildShards(w: number, h: number, cell: number, travel: number, seed = 7): Shard[] {
+	const random = seededRandom(seed);
+	const cols = Math.max(2, Math.round(w / cell));
+	const rows = Math.max(2, Math.round(h / cell));
+	const cw = w / cols;
+	const ch = h / rows;
+	const grid: [number, number][][] = [];
+	for (let row = 0; row <= rows; row++) {
+		const line: [number, number][] = [];
+		for (let col = 0; col <= cols; col++) {
+			const jx = col === 0 || col === cols ? 0 : (random() - 0.5) * 0.7 * cw;
+			const jy = row === 0 || row === rows ? 0 : (random() - 0.5) * 0.7 * ch;
+			line.push([col * cw + jx, row * ch + jy]);
+		}
+		grid.push(line);
+	}
+	const reach = Math.hypot(w / 2, h / 2);
+	const shards: Shard[] = [];
+	const add = (points: [number, number][]) => {
+		const cx = (points[0][0] + points[1][0] + points[2][0]) / 3;
+		const cy = (points[0][1] + points[1][1] + points[2][1]) / 3;
+		// Fly away from the centre, with enough scatter that it does not look like a zoom.
+		const angle = Math.atan2(cy - h / 2, cx - w / 2) + (random() - 0.5) * 1.1;
+		const far = Math.hypot(cx - w / 2, cy - h / 2) / reach;
+		const distance = travel * (0.55 + 0.45 * random()) * (0.6 + 0.4 * far);
+		shards.push({
+			points,
+			cx,
+			cy,
+			dx: Math.cos(angle) * distance,
+			dy: Math.sin(angle) * distance,
+			spin: (random() - 0.5) * 1.6,
+			lag: clamp01(0.55 * (1 - far) + 0.25 * random())
+		});
+	};
+	for (let row = 0; row < rows; row++) {
+		for (let col = 0; col < cols; col++) {
+			const a = grid[row][col];
+			const b = grid[row][col + 1];
+			const c = grid[row + 1][col + 1];
+			const d = grid[row + 1][col];
+			if (random() < 0.5) {
+				add([a, b, c]);
+				add([a, c, d]);
+			} else {
+				add([a, b, d]);
+				add([b, c, d]);
+			}
+		}
+	}
+	return shards;
+}
+
+/** How far apart the image is at loop position t: 0 intact, 1 fully scattered. */
+export function shatterProgress(t: number): number {
+	const out = 0.42;
+	return t < out ? easeOut(t / out) : 1 - easeInOut((t - out) / (1 - out));
+}
+
+/** The image bursts into shards that drift off and fade, then fly back together. */
+function drawShatter(ctx: CanvasRenderingContext2D, still: Still, shards: Shard[], t: number, ox = 0, oy = 0) {
+	const p = shatterProgress(t);
+	if (p < 0.004) {
+		drawStill(ctx, still, ox, oy);
+		return;
+	}
+	for (const shard of shards) {
+		const q = clamp01(p * (1 + shard.lag) - shard.lag);
+		ctx.save();
+		ctx.translate(ox, oy);
+		ctx.globalAlpha = 1 - 0.92 * q * q;
+		ctx.translate(shard.cx + shard.dx * q, shard.cy + shard.dy * q);
+		ctx.rotate(shard.spin * q);
+		const s = 1 - 0.25 * q;
+		ctx.scale(s, s);
+		ctx.translate(-shard.cx, -shard.cy);
+		ctx.beginPath();
+		shard.points.forEach(([x, y], n) => {
+			// Grown a hair past its true edge so resting neighbours leave no seam.
+			const gx = x + Math.sign(x - shard.cx) * 0.35;
+			const gy = y + Math.sign(y - shard.cy) * 0.35;
+			if (n === 0) ctx.moveTo(gx, gy);
+			else ctx.lineTo(gx, gy);
+		});
+		ctx.closePath();
+		ctx.clip();
+		drawStill(ctx, still);
+		ctx.restore();
+	}
+}
+
+type Mote = { x: number; y: number; at: number; dx: number; dy: number };
+const MOTE = 3;
+
+/** The grains the image is made of, each with the moment the breeze reaches it. */
+function buildMotes(still: Still): Mote[] {
+	const ctx = still.el.getContext('2d', { willReadFrequently: true });
+	if (!ctx) return [];
+	const data = ctx.getImageData(0, 0, still.el.width, still.el.height).data;
+	const random = seededRandom(11);
+	const motes: Mote[] = [];
+	for (let y = 0; y < still.h; y += MOTE) {
+		for (let x = 0; x < still.w; x += MOTE) {
+			const px = Math.min(still.el.width - 1, Math.round((x + MOTE / 2) * SCALE));
+			const py = Math.min(still.el.height - 1, Math.round((y + MOTE / 2) * SCALE));
+			const drift = random();
+			const jitter = random();
+			if (data[(py * still.el.width + px) * 4 + 3] < 24) continue;
+			motes.push({
+				x,
+				y,
+				// Sweeps from the right edge inward, raggedly.
+				at: 0.62 * (1 - x / still.w) + 0.2 * jitter,
+				dx: 5 + 9 * drift,
+				dy: -(2 + 9 * jitter)
+			});
+		}
+	}
+	return motes;
+}
+
+/** The image blows away as dust from one side, then settles back. */
+function drawDust(ctx: CanvasRenderingContext2D, still: Still, motes: Mote[], t: number, ox = 0, oy = 0) {
+	const p = t < 0.5 ? t / 0.5 : 1 - easeInOut((t - 0.5) / 0.5);
+	if (p < 0.004) {
+		drawStill(ctx, still, ox, oy);
+		return;
+	}
+	for (const mote of motes) {
+		const q = clamp01((p - mote.at) / 0.18);
+		if (q >= 1) continue;
+		const size = MOTE * (1 - 0.55 * q);
+		ctx.globalAlpha = 1 - q;
+		ctx.drawImage(
+			still.el,
+			mote.x * SCALE,
+			mote.y * SCALE,
+			MOTE * SCALE,
+			MOTE * SCALE,
+			ox + mote.x + mote.dx * easeOut(q),
+			oy + mote.y + mote.dy * q * q,
+			size,
+			size
+		);
+	}
+	ctx.globalAlpha = 1;
+}
+
+/** A flat-colour copy of the image, for the colour fringes of a glitch. */
+function tintStill(still: Still, color: string): Still {
+	return makeStill(still.w, still.h, (ctx) => {
+		drawStill(ctx, still);
+		ctx.globalCompositeOperation = 'source-in';
+		ctx.fillStyle = color;
+		ctx.fillRect(0, 0, still.w, still.h);
+	});
+}
+
+type GlitchKit = { still: Still; warm: Still; cool: Still; accent: string };
+
+function makeGlitchKit(still: Still, accent: string): GlitchKit {
+	return { still, warm: tintStill(still, '#ff2a6d'), cool: tintStill(still, '#05d9e8'), accent };
+}
+
+/** Bursts of torn scanlines and split colour, with the clean image in between. */
+function drawGlitch(ctx: CanvasRenderingContext2D, kit: GlitchKit, t: number, ox = 0, oy = 0) {
+	const { still } = kit;
+	const frame = Math.round(t * GLITCH_FRAMES.length) % GLITCH_FRAMES.length;
+	const strength = GLITCH_FRAMES[frame][0];
+	if (strength === 0) {
+		drawStill(ctx, still, ox, oy);
+		return;
+	}
+	const random = seededRandom(frame * 7919 + 3);
+	const split = 3 * strength;
+	ctx.globalAlpha = 0.75;
+	drawStill(ctx, kit.warm, ox - split, oy);
+	drawStill(ctx, kit.cool, ox + split, oy);
+	ctx.globalAlpha = 1;
+	let y = 0;
+	while (y < still.h) {
+		const band = Math.min(still.h - y, 4 + Math.floor(random() * 14));
+		const shift = random() < 0.45 ? Math.round((random() - 0.5) * 12 * strength) : 0;
+		ctx.drawImage(still.el, 0, y * SCALE, still.el.width, band * SCALE, ox + shift, oy + y, still.w, band);
+		y += band;
+	}
+	const barY = Math.floor(random() * (still.h - 3));
+	const barX = random() * still.w * 0.5;
+	ctx.fillStyle = rgba(kit.accent, 0.55);
+	ctx.fillRect(ox + barX, oy + barY, still.w * (0.2 + 0.3 * random()), 1.5);
+}
+
+type Orbit = { cx: number; cy: number; rx: number; ry: number; tilt: number };
+
+/** One half of a pair of satellites circling on a tilted ring: the far half, or the near half. */
+function drawOrbit(ctx: CanvasRenderingContext2D, orbit: Orbit, accent: string, t: number, near: boolean) {
+	ctx.save();
+	ctx.translate(orbit.cx, orbit.cy);
+	ctx.rotate(orbit.tilt);
+	for (const offset of [0, 0.5]) {
+		// A short fading tail behind each satellite.
+		for (let tail = 5; tail >= 0; tail--) {
+			const angle = (t + offset - tail * 0.016) * Math.PI * 2;
+			const depth = Math.sin(angle);
+			if (depth >= 0 !== near) continue;
+			const fade = 1 - tail / 6;
+			ctx.beginPath();
+			ctx.arc(orbit.rx * Math.cos(angle), orbit.ry * depth, (2 + 0.9 * depth) * (0.45 + 0.55 * fade), 0, Math.PI * 2);
+			ctx.fillStyle = rgba(accent, (0.5 + 0.25 * (depth + 1)) * fade * fade);
+			ctx.fill();
+		}
+	}
+	ctx.restore();
+}
+
+/** A coin flip about the vertical axis; both faces show the image the right way round. */
+function drawFlip(ctx: CanvasRenderingContext2D, still: Still, t: number, ox = 0, oy = 0) {
+	const turn = Math.cos(easeInOut(t) * Math.PI * 2);
+	const sx = Math.max(0.03, Math.abs(turn));
+	ctx.save();
+	ctx.translate(ox + still.w / 2, 0);
+	ctx.scale(sx, 1);
+	ctx.translate(-still.w / 2, 0);
+	drawStill(ctx, still, 0, oy);
+	ctx.restore();
+}
 
 /** Box the round photo is drawn in, with room for rings and glow around it. */
 export const PHOTO_BOX = 88;
@@ -158,8 +452,30 @@ export async function renderPhotoMotion(
 	const c = PHOTO_BOX / 2;
 	const r = PHOTO_R;
 	const bg = MATTE_COLORS[matte];
+	const still = makeStill(PHOTO_BOX, PHOTO_BOX, (ctx) => drawRound(ctx, img, c, c, r));
+	const shards = effect === 'shatter' ? buildShards(PHOTO_BOX, PHOTO_BOX, 13, 12) : [];
+	const motes = effect === 'dust' ? buildMotes(still) : [];
+	const glitch = effect === 'glitch' ? makeGlitchKit(still, accent) : null;
+	const orbit: Orbit = { cx: c, cy: c, rx: r + 6, ry: 13, tilt: -0.32 };
 	const draw: DrawFrame = (ctx, t) => {
 		switch (effect) {
+			case 'shatter':
+				drawShatter(ctx, still, shards, t);
+				break;
+			case 'dust':
+				drawDust(ctx, still, motes, t);
+				break;
+			case 'glitch':
+				if (glitch) drawGlitch(ctx, glitch, t);
+				break;
+			case 'orbit':
+				drawOrbit(ctx, orbit, accent, t, false);
+				drawStill(ctx, still);
+				drawOrbit(ctx, orbit, accent, t, true);
+				break;
+			case 'flip':
+				drawFlip(ctx, still, t);
+				break;
 			case 'halo': {
 				// A comet of accent colour sweeping around the photo.
 				const ring = ctx.createConicGradient(t * Math.PI * 2, c, c);
@@ -277,9 +593,24 @@ export async function renderLogoMotion(
 	const pad = 6;
 	const w = lw + pad * 2;
 	const h = lh + pad * 2;
+	const still = makeStill(lw, lh, (ctx) => ctx.drawImage(img, 0, 0, lw, lh));
+	const shards = effect === 'shatter' ? buildShards(lw, lh, 12, 9) : [];
+	const motes = effect === 'dust' ? buildMotes(still) : [];
+	const glitch = effect === 'glitch' ? makeGlitchKit(still, accent) : null;
+	const orbit: Orbit = { cx: w / 2, cy: h / 2, rx: w / 2 - 4, ry: 9, tilt: -0.08 };
 	const draw: DrawFrame = (ctx, t) => {
 		const x = pad;
 		const y = pad;
+		if (effect === 'shatter') return drawShatter(ctx, still, shards, t, x, y);
+		if (effect === 'dust') return drawDust(ctx, still, motes, t, x, y);
+		if (effect === 'glitch') return glitch ? drawGlitch(ctx, glitch, t, x, y) : undefined;
+		if (effect === 'flip') return drawFlip(ctx, still, t, x, y);
+		if (effect === 'orbit') {
+			drawOrbit(ctx, orbit, accent, t, false);
+			drawStill(ctx, still, x, y);
+			drawOrbit(ctx, orbit, accent, t, true);
+			return;
+		}
 		ctx.save();
 		if (effect === 'float') ctx.translate(0, -2.5 * wave(t));
 		if (effect === 'pulse' || effect === 'ripple') {

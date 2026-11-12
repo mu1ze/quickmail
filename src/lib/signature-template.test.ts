@@ -207,6 +207,47 @@ describe('signature templates', () => {
 		assert.equal(parseSignatureConfig(stored).animation, 'spin');
 	});
 
+	test('fragment and motion effects fall back to scoped, reduced-motion-safe CSS', () => {
+		const id = '2f1a0c8e-4b3d-4a9f-8c1e-0a7b6d5c4e3f';
+		for (const animation of ['shatter', 'dust', 'glitch', 'orbit', 'flip'] as const) {
+			for (const layout of ['photo', 'logo'] as const) {
+				const stored = serializeSignatureConfig({
+					version: 1,
+					layout,
+					name: 'Ada',
+					accent: '#0b6e4f',
+					photoId: layout === 'photo' ? id : null,
+					logoId: layout === 'logo' ? id : null,
+					animation
+				});
+				const config = parseSignatureConfig(stored);
+				assert.equal(config.animation, animation);
+				const { html } = compileSignature(config, 'https://mail.example.com');
+				const cls = `qm-sig-${animation}-${id.slice(0, 8)}`;
+				assert.match(html, new RegExp(`<style>@keyframes ${cls}-kf\\{`));
+				assert.match(html, new RegExp(`<img class="${cls}"`));
+				assert.match(html, new RegExp(`\\.${cls}\\{animation:${cls}-kf [\\d.]+s `));
+				assert.match(html, new RegExp(`prefers-reduced-motion:reduce\\)\\{\\.${cls}\\{animation:none\\}`));
+				// The still image is always there underneath, and no accent placeholder leaks out.
+				assert.match(html, new RegExp(`src="https://mail.example.com/s/${id}"`));
+				assert.doesNotMatch(html, /ACCENT/);
+			}
+		}
+	});
+
+	test('a baked fragment effect is one plain image with no CSS', () => {
+		const id = '2f1a0c8e-4b3d-4a9f-8c1e-0a7b6d5c4e3f';
+		const bakedId = '3a2b1c0d-5e4f-4a6b-9c8d-1b2a3c4d5e6f';
+		const { html } = compileSignature(
+			parseSignatureConfig(
+				JSON.stringify({ version: 1, layout: 'photo', name: 'Ada', photoId: id, animation: 'shatter', motion: { id: bakedId, w: 88, h: 88, key: 'k' } })
+			),
+			'https://mail.example.com'
+		);
+		assert.match(html, new RegExp(`<img src="https://mail.example.com/s/${bakedId}" width="88" height="88"`));
+		assert.doesNotMatch(html, /<style|class=|@keyframes/);
+	});
+
 	test('unknown animation values fall back to none (no style block)', () => {
 		const id = '2f1a0c8e-4b3d-4a9f-8c1e-0a7b6d5c4e3f';
 		const config = parseSignatureConfig(
