@@ -20,11 +20,13 @@
 	import { runUndo, showUndo } from '$lib/undo';
 	import { setShellContext } from '$lib/shell-context';
 	import { requestSearchFocus } from '$lib/search-focus';
+	import { requestNewEvent } from '$lib/calendar/ui-state';
 	import {
 		hideDockSearch,
 		hideMobileDock,
 		hideTopbar,
 		hideTopbarOnMobile,
+		isCalendarRoute,
 		isComposeRoute,
 		isHubRoute,
 		isMailRoute,
@@ -64,6 +66,7 @@
 	const composing = $derived(isComposeRoute($page.url.pathname));
 	const mailboxRoute = $derived(isMailboxRoute($page.url.pathname));
 	const mailRoute = $derived(isMailRoute($page.url.pathname));
+	const calendarRoute = $derived(isCalendarRoute($page.url.pathname));
 	const hideMobileTopbar = $derived(hideTopbarOnMobile($page.url.pathname));
 	const hideAllTopbar = $derived(hideTopbar($page.url.pathname));
 	const hideHubSearch = $derived(hideDockSearch($page.url.pathname));
@@ -154,7 +157,8 @@
 		t: '/sent',
 		b: '/later',
 		e: '/trash',
-		a: '/all'
+		a: '/all',
+		c: '/calendar'
 	};
 
 	function onWindowKeydown(event: KeyboardEvent) {
@@ -185,7 +189,8 @@
 		if (key === 'c') {
 			event.preventDefault();
 			event.stopImmediatePropagation();
-			void goto('/compose');
+			if (calendarRoute) requestNewEvent();
+			else void goto('/compose');
 			return;
 		}
 		if (key === '/') {
@@ -283,6 +288,7 @@
 		class:hub-mobile={hubRoute}
 		class:compose-mobile={composing}
 		class:mail-mobile={mailRoute}
+		class:calendar-route={calendarRoute}
 		class:hide-topbar-mobile={hideMobileTopbar}
 		class:hide-topbar={hideAllTopbar}
 		data-collapsed={collapsed}

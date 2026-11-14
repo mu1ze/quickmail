@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import Icon from './Icon.svelte';
+	import { requestNewEvent } from '$lib/calendar/ui-state';
+	import { isCalendarRoute } from '$lib/shell-chrome';
 
 	let {
 		menuOpen = false,
@@ -15,6 +17,7 @@
 	} = $props();
 
 	const composing = $derived($page.url.pathname.startsWith('/compose'));
+	const calendar = $derived(isCalendarRoute($page.url.pathname));
 </script>
 
 {#if !composing}
@@ -38,9 +41,16 @@
 				</button>
 			{/if}
 
-			<a href="/compose" class="dock-btn dock-compose" aria-label="New message">
-				<Icon name="edit-line" size={20} />
-			</a>
+			{#if calendar}
+				<span class="dock-spacer"></span>
+				<button type="button" class="dock-btn dock-compose" aria-label="New event" onclick={() => requestNewEvent()}>
+					<Icon name="add-line" size={22} />
+				</button>
+			{:else}
+				<a href="/compose" class="dock-btn dock-compose" aria-label="New message">
+					<Icon name="edit-line" size={20} />
+				</a>
+			{/if}
 		</div>
 	</nav>
 {/if}
@@ -63,6 +73,10 @@
 			background: color-mix(in srgb, var(--color-surface) 96%, transparent);
 			box-shadow: inset 0 1px 0 var(--color-line);
 			backdrop-filter: blur(16px);
+		}
+
+		.dock-spacer {
+			flex: 1;
 		}
 
 		.dock-pill {

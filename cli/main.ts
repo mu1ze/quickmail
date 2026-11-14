@@ -38,9 +38,18 @@ Admin:
   quickmail addresses create --local <part> --domain <id> [--user <id>]
   quickmail unrouted
 
+Calendar:
+  quickmail calendars
+  quickmail agenda [--days 7] [--from YYYY-MM-DD] [--tz Area/City]
+  quickmail event add --title <text> --start "2026-11-20 14:00" [--end "2026-11-20 15:00" | --minutes 60]
+                      [--all-day] [--calendar <id>] [--location <text>] [--body <text>]
+                      [--guests a@x.com,b@y.com] [--remind 10] [--repeat FREQ=WEEKLY] [--tz Area/City]
+  quickmail event delete <event-id> [--occurrence YYYY-MM-DD --scope this|following|all]
+
 MCP:
   quickmail mcp
 
+Calendar commands need an API key with calendar:read (and calendar:write to change events).
 Auth is a Settings → API keys bearer token. QUICKMAIL_URL and QUICKMAIL_TOKEN
 override the saved config. Use --json on mail/admin commands for raw output.
 `;
@@ -332,6 +341,24 @@ async function run(argv: string[]): Promise<number> {
 			console.log(out);
 			return 0;
 		}
+		case 'calendars': {
+			const calendars = await (await clientFromConfig()).listCalendars();
+			if (json) printJson(calendars);
+			else for (const calendar of calendars) console.log(`${calendar.id}  ${calendar.name}${calendar.is_default ? '  (default)' : ''}${calendar.source_url ? '  (subscribed)' : ''}`);
+			return 0;
+		}
+		case 'agenda': {
+			const tz = flagString(flags, 'tz') ?? localZone();
+			const from = flagString(flags, 'from') ?? zonedDate(Date.now(), tz);
+			if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) throw new Error('--from must be YYYY-MM-DD');
+			const days = Math.min(400, Math.max(1, Number(flagString(flags, 'days')) || 7));
+			const events = await (await clientFromConfig()).listEvents(from, addDays(from, days), tz);
+			if (json) printJson(events);
+			else printAgenda(events, tz, from);
+			return 0;
+		}
+		case 'event':
+			return eventCommand(sub, rest, flags, json);
 		case 'users':
 			return usersCommand(sub, rest, flags, json);
 		case 'domains':
@@ -500,3 +527,139 @@ const code = await run(process.argv.slice(2)).catch((error) => {
 });
 
 if (code !== 0) process.exit(code);
+
+// ---------------------------------------------------------------------------
+// Calendar
+
+function localZone(): string {
+	return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+}
+
+function addDays(date: string, days: number): string {
+	const [y, m, d] = date.split('-').map(Number);
+	return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+function zonedParts(ms: number, tz: string) {
+	const parts = Object.fromEntries(
+		new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+			.formatToParts(new Date(ms))
+			.filter((part) => part.type !== 'literal')
+			.map((part) => [part.type, Number(part.value)])
+	) as Record<string, number>;
+	return parts;
+}
+
+function zonedDate(ms: number, tz: string): string {
+	const p = zonedParts(ms, tz);
+	return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
+}
+
+/** "2026-11-20 14:00" (or "…T14:00") as a wall-clock time in `tz` → ISO instant. */
+function wallToIso(value: string, tz: string): string {
+	const match = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})$/.exec(value.trim());
+	if (!match) throw new Error(`Use "YYYY-MM-DD HH:MM" for times (got "${value}")`);
+	const [, y, mo, d, h, mi] = match.map(Number);
+	const wall = Date.UTC(y, mo - 1, d, h, mi);
+	const offsetAt = (ms: number) => {
+		const p = zonedParts(ms, tz);
+		return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute) - Math.floor(ms / 60_000) * 60_000;
+	};
+	const first = wall - offsetAt(wall);
+	return new Date(wall - offsetAt(first)).toISOString();
+}
+
+function clock(iso: string, tz: string): string {
+	return new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
+}
+
+function printAgenda(events: import('./client.ts').CalendarEvent[], tz: string, from = ''): void {
+	if (!events.length) {
+		console.log('Nothing scheduled.');
+		return;
+	}
+	let day = '';
+	for (const event of events) {
+		const starts = event.allDay ? event.start : zonedDate(Date.parse(event.start), tz);
+		// Events that began before the window are listed on its first day.
+		const date = starts < from ? from : starts;
+		if (date !== day) {
+			day = date;
+			const label = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${date}T12:00:00Z`));
+			console.log(`\n${label}`);
+		}
+		const when = event.allDay ? 'all day' : `${clock(event.start, tz)} – ${clock(event.end, tz)}`;
+		const extra = [event.location, event.myStatus && event.myStatus !== 'accepted' ? event.myStatus : '', event.rrule ? 'repeats' : ''].filter(Boolean).join(' · ');
+		console.log(`  ${when.padEnd(20)} ${event.title || '(No title)'}${extra ? `  (${extra})` : ''}  [${event.eventId}${event.occurrenceKey ? ` ${event.occurrenceKey}` : ''}]`);
+	}
+}
+
+async function eventCommand(sub: string | undefined, rest: string[], flags: Flags, json: boolean): Promise<number> {
+	const client = await clientFromConfig();
+	switch (sub) {
+		case 'add':
+		case 'create': {
+			const title = flagString(flags, 'title');
+			const startText = flagString(flags, 'start');
+			if (!title || !startText) throw new Error('event add requires --title and --start');
+			const tz = flagString(flags, 'tz') ?? localZone();
+			const allDay = flagBool(flags, 'all-day');
+			let start: string;
+			let end: string;
+			if (allDay) {
+				start = startText.slice(0, 10);
+				const last = (flagString(flags, 'end') ?? start).slice(0, 10);
+				if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(last)) throw new Error('All-day events use YYYY-MM-DD dates');
+				end = addDays(last, 1);
+			} else {
+				start = wallToIso(startText, tz);
+				const endText = flagString(flags, 'end');
+				const minutes = Number(flagString(flags, 'minutes')) || 60;
+				end = endText ? wallToIso(endText, tz) : new Date(Date.parse(start) + minutes * 60_000).toISOString();
+			}
+			let calendarId = flagString(flags, 'calendar');
+			if (!calendarId) {
+				const calendars = await client.listCalendars();
+				calendarId = (calendars.find((calendar) => calendar.is_default) ?? calendars[0])?.id;
+				if (!calendarId) throw new Error('No calendar to add to');
+			}
+			const guests = (flagString(flags, 'guests') ?? '').split(',').map((email) => email.trim()).filter(Boolean);
+			const remind = flagString(flags, 'remind');
+			const result = await client.createEvent({
+				calendarId,
+				title,
+				description: flagString(flags, 'body') ?? '',
+				location: flagString(flags, 'location') ?? '',
+				allDay,
+				start,
+				end,
+				timeZone: tz,
+				rrule: flagString(flags, 'repeat') ?? null,
+				attendees: guests.map((email) => ({ email })),
+				reminders: remind ? [Number(remind)] : []
+			});
+			if (json) printJson(result);
+			else {
+				console.log(`Created ${result.id}${guests.length ? ` and invited ${guests.length} guest${guests.length === 1 ? '' : 's'}` : ''}`);
+				for (const warning of result.warnings ?? []) console.error(`warning: ${warning}`);
+			}
+			return 0;
+		}
+		case 'delete':
+		case 'rm': {
+			const id = rest[0];
+			if (!id) throw new Error('event delete requires an event id');
+			const scope = flagString(flags, 'scope') as 'this' | 'following' | 'all' | undefined;
+			if (scope && !['this', 'following', 'all'].includes(scope)) throw new Error('--scope must be this, following, or all');
+			const result = await client.deleteEvent(id, { scope, occurrence: flagString(flags, 'occurrence') });
+			if (json) printJson(result);
+			else {
+				console.log('Deleted.');
+				for (const warning of result.warnings ?? []) console.error(`warning: ${warning}`);
+			}
+			return 0;
+		}
+		default:
+			throw new Error('Usage: quickmail event add|delete …');
+	}
+}

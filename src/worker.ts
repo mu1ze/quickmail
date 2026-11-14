@@ -7,6 +7,8 @@ import {
 } from './lib/server/cloudflare-inbound';
 import { runWeeklyMailAutomations } from './lib/server/mail-automations';
 import { trashExpiredVerificationEmails } from './lib/server/verification-cleanup';
+import { runCalendarReminders, runDailyAgenda } from './lib/server/calendar-reminders';
+import { refreshDueSubscriptions } from './lib/server/calendar-ics';
 // Renamed from `_worker.js` by `scripts/wrap-cloudflare-worker.mjs` after `vite build`.
 // @ts-ignore file and its declaration are created at build time
 import sveltekit from '../.svelte-kit/cloudflare/_sveltekit.js';
@@ -59,6 +61,7 @@ export default {
 		if (controller.cron === '* * * * *' || controller.cron === '*/5 * * * *') {
 			try { await trashExpiredVerificationEmails(env.DB); }
 			catch { console.error('verification code cleanup failed'); }
+			await runCalendarJobs(controller.scheduledTime, env);
 			// Analysis reconciliation keeps its existing five-minute cadence.
 			if (controller.cron === '* * * * *' && new Date(controller.scheduledTime).getUTCMinutes() % 5 !== 0) return;
 		}
@@ -69,3 +72,18 @@ export default {
 		console.log('mail automations', result);
 	}
 };
+
+/** Calendar reminders every minute; agenda mail every 15 minutes; subscriptions every 10. */
+async function runCalendarJobs(scheduledTime: number, env: Env): Promise<void> {
+	const minute = new Date(scheduledTime).getUTCMinutes();
+	try { await runCalendarReminders(env, scheduledTime); }
+	catch (error) { console.error('calendar reminders failed', error instanceof Error ? error.message : error); }
+	if (minute % 15 === 0) {
+		try { await runDailyAgenda(env.DB, scheduledTime); }
+		catch (error) { console.error('daily agenda failed', error instanceof Error ? error.message : error); }
+	}
+	if (minute % 10 === 3) {
+		try { await refreshDueSubscriptions(env.DB); }
+		catch (error) { console.error('calendar subscriptions failed', error instanceof Error ? error.message : error); }
+	}
+}

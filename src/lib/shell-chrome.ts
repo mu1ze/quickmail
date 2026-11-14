@@ -22,6 +22,10 @@ export function isHubRoute(pathname: string): boolean {
 	);
 }
 
+export function isCalendarRoute(pathname: string): boolean {
+	return pathname === '/calendar' || pathname.startsWith('/calendar/');
+}
+
 export function isComposeRoute(pathname: string): boolean {
 	return pathname.startsWith('/compose');
 }
@@ -36,7 +40,8 @@ export function hideTopbarOnMobile(pathname: string): boolean {
 		isMailboxRoute(pathname) ||
 		isHubRoute(pathname) ||
 		isComposeRoute(pathname) ||
-		isMailRoute(pathname)
+		isMailRoute(pathname) ||
+		isCalendarRoute(pathname)
 	);
 }
 
@@ -45,7 +50,7 @@ export function hideTopbarOnMobile(pathname: string): boolean {
  * navigate from the sidebar, so the topbar steps aside there at every width.
  */
 export function hideTopbar(pathname: string): boolean {
-	return isMailboxRoute(pathname) || isHubRoute(pathname);
+	return isMailboxRoute(pathname) || isHubRoute(pathname) || isCalendarRoute(pathname);
 }
 
 /** Inbox dock covers the reading surface; hide it on compose and open mail. */
@@ -54,7 +59,7 @@ export function hideMobileDock(pathname: string): boolean {
 }
 
 export function hideDockSearch(pathname: string): boolean {
-	return isHubRoute(pathname);
+	return isHubRoute(pathname) || isCalendarRoute(pathname);
 }
 
 export type SearchFocusAction = 'mailbox' | 'topbar' | 'inbox-then-mailbox';

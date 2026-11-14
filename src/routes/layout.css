@@ -161,6 +161,7 @@ button:disabled { cursor: default; }
 }
 
 .app-shell.mailbox-mobile .app-main { padding: 0; }
+.app-shell.calendar-route .app-main { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
 .app-shell.hide-topbar .topbar { display: none; }
 
 .surface,
@@ -402,6 +403,10 @@ button:disabled { cursor: default; }
 
 	.app-shell.hide-topbar-mobile .topbar {
 		display: none;
+	}
+
+	.app-shell.calendar-route .app-main {
+		padding: 0 0 calc(4.25rem + env(safe-area-inset-bottom));
 	}
 
 	.app-shell.hub-mobile .app-main {

@@ -83,6 +83,28 @@ const BEARER_ROUTES: RouteRule[] = [
 		match: (pathname) => /^\/api\/drafts\/[^/]+$/.test(pathname),
 		scopes: ['mail:draft']
 	},
+	// Calendar keys: read lists calendars and events; write also changes them (and
+	// can email guests). Invitations in mail and calendar settings stay session-only.
+	{
+		method: 'GET',
+		match: (pathname) => pathname === '/api/calendar/calendars' || pathname === '/api/calendar/events',
+		scopes: ['calendar:read', 'calendar:write']
+	},
+	{
+		method: 'POST',
+		match: (pathname) => pathname === '/api/calendar/calendars' || pathname === '/api/calendar/events' || pathname === '/api/calendar/import',
+		scopes: ['calendar:write']
+	},
+	{
+		method: 'PATCH',
+		match: (pathname) => /^\/api\/calendar\/(calendars|events)\/[^/]+$/.test(pathname),
+		scopes: ['calendar:write']
+	},
+	{
+		method: 'DELETE',
+		match: (pathname) => /^\/api\/calendar\/(calendars|events)\/[^/]+$/.test(pathname),
+		scopes: ['calendar:write']
+	},
 	{
 		method: 'POST',
 		match: (pathname) => pathname === '/api/addresses',

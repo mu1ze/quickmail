@@ -162,6 +162,73 @@ export async function startMcpServer(): Promise<void> {
 		}
 	);
 
+	server.registerTool(
+		'list_events',
+		{
+			description: 'List calendar events (including each date of repeating events) between two days. Needs an API key with calendar:read.',
+			inputSchema: {
+				from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('First day, YYYY-MM-DD.'),
+				to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).describe('Day after the last day, YYYY-MM-DD (exclusive).'),
+				timeZone: z.string().optional().describe('IANA zone the days are in. Defaults to UTC.')
+			}
+		},
+		async ({ from, to, timeZone }) => {
+			try {
+				return textResult(await client.listEvents(from, to, timeZone ?? 'UTC'));
+			} catch (error) {
+				return fail(error);
+			}
+		}
+	);
+
+	server.registerTool(
+		'create_event',
+		{
+			description:
+				'Add an event to the calendar. Timed events take ISO instants; all-day events take dates with an exclusive end. Guests get an email invitation. Needs calendar:write.',
+			inputSchema: {
+				title: z.string(),
+				start: z.string().describe('ISO instant (2026-11-20T19:00:00Z) or, for all-day, a date.'),
+				end: z.string().describe('ISO instant or, for all-day, the day after the last day.'),
+				allDay: z.boolean().optional(),
+				timeZone: z.string().describe('IANA zone the event repeats in, e.g. America/Toronto.'),
+				calendarId: z.string().optional().describe('Defaults to the main calendar.'),
+				location: z.string().optional(),
+				description: z.string().optional(),
+				rrule: z.string().optional().describe('Repeat rule such as FREQ=WEEKLY;BYDAY=MO,WE.'),
+				guests: z.array(z.string()).optional().describe('Email addresses to invite.'),
+				reminders: z.array(z.number().int().min(0)).optional().describe('Minutes before the start.')
+			}
+		},
+		async (input) => {
+			try {
+				let calendarId = input.calendarId;
+				if (!calendarId) {
+					const calendars = await client.listCalendars();
+					calendarId = (calendars.find((calendar) => calendar.is_default) ?? calendars[0])?.id;
+					if (!calendarId) return textResult('No calendar to add to', true);
+				}
+				return textResult(
+					await client.createEvent({
+						calendarId,
+						title: input.title,
+						start: input.start,
+						end: input.end,
+						allDay: input.allDay ?? false,
+						timeZone: input.timeZone,
+						location: input.location ?? '',
+						description: input.description ?? '',
+						rrule: input.rrule ?? null,
+						attendees: (input.guests ?? []).map((email) => ({ email })),
+						reminders: input.reminders ?? []
+					})
+				);
+			} catch (error) {
+				return fail(error);
+			}
+		}
+	);
+
 	const transport = new StdioServerTransport();
 	await server.connect(transport);
 }

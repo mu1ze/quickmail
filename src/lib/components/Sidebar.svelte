@@ -8,7 +8,11 @@
 	import ThemeSwitcher from './ThemeSwitcher.svelte';
 	import LabelManager from './LabelManager.svelte';
 	import { tooltip } from '$lib/actions/tooltip';
-	import { isHubRoute } from '$lib/shell-chrome';
+	import { isCalendarRoute, isHubRoute } from '$lib/shell-chrome';
+	import MiniMonth from './calendar/MiniMonth.svelte';
+	import CalendarList from './calendar/CalendarList.svelte';
+	import { requestNewEvent } from '$lib/calendar/ui-state';
+	import type { CalendarInfo, CalendarView } from '$lib/calendar/types';
 	import { isSettingsLinkActive, settingsGroups } from '$lib/settings-nav';
 	import type { Domain, MailboxCounts, MailLabel } from '$lib/types';
 
@@ -73,6 +77,9 @@
 
 	// Settings and admin take over the sidebar with their own grouped sections.
 	const settingsMode = $derived(isHubRoute($page.url.pathname));
+	const calendarMode = $derived(isCalendarRoute($page.url.pathname));
+	// The calendar page's own data (calendars, date, view) drives the sidebar while it is open.
+	const calendarData = $derived($page.data as { calendars?: CalendarInfo[]; date?: string; today?: string; view?: CalendarView; range?: { from: string; to: string } });
 	const groups = $derived(settingsGroups(isAdmin));
 	let closeButton = $state<HTMLButtonElement>();
 	$effect(() => {
@@ -158,6 +165,30 @@
 			</nav>
 		{/each}
 	{:else}
+		<nav class="apps" class:stacked={!expanded} aria-label="Apps">
+			<a href="/inbox" class="app" class:on={!calendarMode} aria-current={!calendarMode ? 'page' : undefined} title={expanded ? undefined : 'Mail'} onclick={() => (mobileOpen = false)}><Icon name="mail-line" size={16} />{#if expanded}<span>Mail</span>{/if}</a>
+			<a href="/calendar" class="app" class:on={calendarMode} aria-current={calendarMode ? 'page' : undefined} title={expanded ? undefined : 'Calendar (g c)'} onclick={() => (mobileOpen = false)}><Icon name="calendar-line" size={16} />{#if expanded}<span>Calendar</span>{/if}</a>
+		</nav>
+	{/if}
+
+	{#if calendarMode && !settingsMode}
+		<button type="button" class="new-message" title="New event" onclick={() => { mobileOpen = false; requestNewEvent(); }}>
+			<Icon name="add-line" size={expanded ? 16 : 18} />
+			{#if expanded}<span>New event</span><kbd>C</kbd>{/if}
+		</button>
+		{#if expanded && calendarData.date && calendarData.today && calendarData.view && calendarData.range}
+			<MiniMonth selected={calendarData.date} today={calendarData.today} view={calendarData.view} range={calendarData.range} onPick={() => (mobileOpen = false)} />
+		{/if}
+		<CalendarList calendars={calendarData.calendars ?? []} collapsed={!expanded} />
+		<nav class="nav nav-tools">
+			{#each tools as item (item.href)}
+				<a href={item.href} class="nav-link" title={expanded ? undefined : item.label} onclick={() => (mobileOpen = false)}>
+					<Icon name={item.icon} size={17} />
+					{#if expanded}<span class="nav-label">{item.label}</span>{/if}
+				</a>
+			{/each}
+		</nav>
+	{:else if !settingsMode}
 		<a href="/compose" class="new-message" title="New message" onclick={() => (mobileOpen = false)}>
 			<Icon name="pencil-line" size={expanded ? 16 : 18} />
 			{#if expanded}<span>Compose</span><kbd>C</kbd>{/if}
@@ -232,6 +263,12 @@
 
 <style>
 	.sidebar-account { margin-bottom: 0.5rem; }
+	.apps { display: flex; gap: 0.125rem; margin: 0 0 0.75rem; padding: 0.1875rem; border-radius: 12px; background: var(--color-well); box-shadow: var(--mat-well); }
+	.apps.stacked { flex-direction: column; padding: 0.125rem; }
+	.app { flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.4rem; min-height: 2rem; border-radius: 9px; font-size: 12.5px; font-weight: 500; color: var(--color-text-secondary); }
+	.app:hover { color: var(--color-text); }
+	.app.on { background: var(--color-surface); color: var(--color-text); box-shadow: var(--mat-cap); }
+	button.new-message { width: 100%; text-align: left; }
 	.sidebar {
 		overflow-y: auto;
 		scrollbar-width: none;

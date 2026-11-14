@@ -6,6 +6,7 @@ import {
 	hideTopbarOnMobile,
 	hideMobileDock,
 	isComposeRoute,
+	isCalendarRoute,
 	isHubRoute,
 	isMailRoute,
 	isMailboxRoute,
@@ -82,5 +83,14 @@ describe('shell chrome routing', () => {
 			resolveSearchFocusAction({ pathname: '/mail/abc', mobileViewport: true }),
 			'topbar'
 		);
+	});
+
+	test('calendar brings its own header and hides mail search', () => {
+		assert.equal(isCalendarRoute('/calendar'), true);
+		assert.equal(isCalendarRoute('/calendars'), false);
+		assert.equal(hideTopbar('/calendar'), true);
+		assert.equal(hideTopbarOnMobile('/calendar'), true);
+		assert.equal(hideDockSearch('/calendar'), true);
+		assert.equal(hideMobileDock('/calendar'), false);
 	});
 });

@@ -5,6 +5,7 @@
 	import EmailBody from './EmailBody.svelte';
 	import PlainTextBody from './PlainTextBody.svelte';
 	import VerificationCode from './VerificationCode.svelte';
+	import InviteCard from './calendar/InviteCard.svelte';
 	import { findVerificationCode } from '$lib/verification-code';
 	import { formatFullDate, formatRelativeDate } from '$lib/utils/date';
 	import { splitQuotedText } from '$lib/utils/quotes';
@@ -27,6 +28,8 @@
 	} = $props();
 
 	const outbound = $derived(message.direction === 'outbound');
+	/** Invitations, updates, cancellations and answers carry a calendar file. */
+	const invitation = $derived(!outbound && message.attachments.some((file) => /^(text\/calendar|application\/ics)/i.test(file.content_type) || /\.ics$/i.test(file.filename)));
 	const sender = $derived(outbound ? 'me' : message.from_name?.trim() || displayAddress(message.from_addr));
 	const initial = $derived((sender[0] ?? '?').toUpperCase());
 
@@ -80,6 +83,7 @@
 			{/if}
 		</header>
 		{#if code}<VerificationCode {code} variant="card" onTrash={onTrashCode} busy={actionBusy} cleanupAt={message.code_cleanup_at} />{/if}
+		{#if invitation}<InviteCard emailId={message.id} />{/if}
 
 		<div class="body mail-body">
 			{#if message.body_html && !plain}

@@ -9,6 +9,7 @@ import { recordUnroutedEmail, resolveInboundRoute } from './domains';
 import { emailExistsByProviderId, insertEmail, updateEmailStatusByProviderId } from './mail-store';
 import { scheduleNewMailNotification, type PushNotificationEnv } from './push-notifications';
 import type { ResendClient } from './resend';
+import { applyCalendarMail } from './calendar-invites';
 
 export type ResendWebhookEvent = {
 	type: string;
@@ -132,6 +133,7 @@ async function handleInboundEmail(
 	});
 
 	await storeInboundAttachments(env, client, providerId, emailId);
+	await applyCalendarMail(env, route.userId, emailId);
 	const analysis = dispatchAnalysis(env, route.userId, emailId).catch(() => undefined);
 	if (env.waitUntil) env.waitUntil(analysis); else await analysis;
 	await scheduleNewMailNotification(env, {

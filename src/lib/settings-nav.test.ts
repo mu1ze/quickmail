@@ -4,8 +4,8 @@ import { FIRST_SETTINGS_HREF, isSettingsLinkActive, settingsGroups } from './set
 
 describe('settings navigation', () => {
 	test('admin sections only appear for admins', () => {
-		assert.deepEqual(settingsGroups(false).map((group) => group.id), ['account', 'mail', 'developer']);
-		assert.deepEqual(settingsGroups(true).map((group) => group.id), ['account', 'mail', 'developer', 'admin']);
+		assert.deepEqual(settingsGroups(false).map((group) => group.id), ['account', 'mail', 'calendar', 'developer']);
+		assert.deepEqual(settingsGroups(true).map((group) => group.id), ['account', 'mail', 'calendar', 'developer', 'admin']);
 	});
 
 	test('every link is unique and the landing section is one of them', () => {

@@ -10,6 +10,7 @@ import { collectInboundRecipients, parseEmailAddress, senderDisplayName, visible
 import { emailExistsByProviderId, insertEmail } from './mail-store';
 import { scheduleNewMailNotification, type PushNotificationEnv } from './push-notifications';
 import { normalizeMessageId } from './send-mail';
+import { applyCalendarMail } from './calendar-invites';
 
 export type CloudflareInboundMessage = {
 	/** SMTP envelope MAIL FROM (Return-Path), not the RFC 5322 From header. */
@@ -101,6 +102,9 @@ export async function handleCloudflareInbound(
 	});
 
 	await storeInboundAttachments(env, emailId, parsed.attachments);
+	if (parsed.attachments.some((file) => /calendar|ics/i.test(file.mimeType ?? '') || /\.ics$/i.test(file.filename ?? ''))) {
+		await applyCalendarMail(env, route.userId, emailId);
+	}
 	const analysis = dispatchAnalysis(env, route.userId, emailId).catch(() => undefined);
 	if (env.waitUntil) env.waitUntil(analysis); else await analysis;
 	await scheduleNewMailNotification(env, {

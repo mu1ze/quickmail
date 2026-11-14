@@ -500,3 +500,65 @@ async function deliverBrrrNotification(
 		);
 	}
 }
+
+/** A notification that is not about a new email (calendar reminders). */
+export type GenericPushPayload = {
+	userId: string;
+	title: string;
+	body: string;
+	tag: string;
+	url: string;
+};
+
+/**
+ * Sends one notification to every browser the user turned push on in, and to their
+ * Brrr destination. Best effort: failures are logged, dead endpoints removed.
+ */
+export async function deliverPushPayload(env: PushNotificationEnv, payload: GenericPushPayload, brrr: { threadId: string } | null = null): Promise<void> {
+	const tasks: Promise<void>[] = [];
+	const vapid = readVapidConfiguration(env);
+	if (vapid) {
+		tasks.push(
+			(async () => {
+				const subscriptions = await listPushSubscriptions(env.DB, payload.userId);
+				if (!subscriptions.length) return;
+				webpush.setVapidDetails(vapid.subject, vapid.publicKey, vapid.privateKey);
+				const body = JSON.stringify(payload);
+				const dead: string[] = [];
+				await Promise.all(
+					subscriptions.map(async (subscription) => {
+						try {
+							await webpush.sendNotification(
+								{ endpoint: subscription.endpoint, expirationTime: subscription.expiration_time, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
+								body,
+								{ TTL: 600, urgency: 'high', timeout: PUSH_REQUEST_TIMEOUT_MS }
+							);
+						} catch (error) {
+							const status = pushErrorStatus(error);
+							if (status === 404 || status === 410) dead.push(subscription.endpoint);
+							else console.error('Failed to send push notification', status ?? (error instanceof Error ? error.message : 'Unknown error'));
+						}
+					})
+				);
+				await removeDeadSubscriptions(env.DB, dead);
+			})()
+		);
+	}
+	if (brrr) {
+		tasks.push(
+			(async () => {
+				const destination = await loadBrrrDestination(env.DB, payload.userId);
+				if (!destination) return;
+				const origin = readPublicAppOrigin(env.PUBLIC_APP_URL);
+				const result = await sendBrrrNotification(
+					destination.webhookKey,
+					{ title: truncate(payload.title, 120), message: truncate(payload.body, 240), thread_id: brrr.threadId, sound: destination.defaultSound, ...(origin ? { open_url: `${origin}${payload.url}` } : {}) },
+					env.fetch ?? globalThis.fetch
+				);
+				if (!result.ok) console.error('Failed to send Brrr notification', result.status);
+			})()
+		);
+	}
+	const results = await Promise.allSettled(tasks);
+	for (const result of results) if (result.status === 'rejected') console.error('Notification failed', result.reason instanceof Error ? result.reason.message : result.reason);
+}

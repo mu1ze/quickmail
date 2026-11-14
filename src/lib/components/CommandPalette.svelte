@@ -70,6 +70,7 @@
 			run: () => goto('/later')
 		},
 		{ id: 'all', label: 'Go to all mail', hint: 'g a', icon: 'mail-line', run: () => goto('/all') },
+		{ id: 'calendar', label: 'Go to calendar', hint: 'g c', icon: 'calendar-line', run: () => goto('/calendar') },
 		{ id: 'spam', label: 'Go to spam', icon: 'spam-2-line', run: () => goto('/spam') },
 		{
 			id: 'trash',

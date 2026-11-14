@@ -23,6 +23,11 @@ export function settingsGroups(isAdmin: boolean): SettingsGroup[] {
 			]
 		},
 		{
+			id: 'calendar',
+			label: 'Calendar',
+			links: [{ href: '/settings/calendar', label: 'Calendar', icon: 'calendar-line' }]
+		},
+		{
 			id: 'developer',
 			label: 'Developer',
 			links: [{ href: '/settings/api-keys', label: 'API keys', icon: 'key-2-line' }]

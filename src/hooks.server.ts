@@ -20,7 +20,9 @@ const PUBLIC_PREFIXES = [
 	'/api/setup',
 	'/api/webhooks',
 	'/install.sh',
-	'/s'
+	'/s',
+	// Private calendar subscribe links carry their own random token.
+	'/ical'
 ];
 
 function isPublicPath(pathname: string): boolean {
@@ -143,7 +145,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 			pathname === '/api/mail' ||
 			pathname === '/api/drafts' ||
 			/^\/api\/mail\/[^/]+$/.test(pathname);
-		const limit = upload ? 1100000 : large ? 12000000 : 65536;
+		// Calendar files are imported as JSON text and can be larger than an ordinary request.
+		const calendarImport = pathname === '/api/calendar/import';
+		const limit = upload ? 1100000 : large ? 12000000 : calendarImport ? 3300000 : 65536;
 		const declared = Number(event.request.headers.get('content-length') ?? 0);
 		if (!Number.isSafeInteger(declared) || declared < 0 || declared > limit)
 			return jsonError('Request body too large', 413);

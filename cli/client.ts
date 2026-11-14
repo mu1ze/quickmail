@@ -102,6 +102,39 @@ export type ListThreadsQuery = {
 	domain?: string;
 };
 
+export type CalendarInfo = { id: string; name: string; color: string; is_default: boolean; source_url: string | null };
+
+export type CalendarEvent = {
+	id: string;
+	eventId: string;
+	calendarId: string;
+	title: string;
+	location: string;
+	description: string;
+	allDay: boolean;
+	start: string;
+	end: string;
+	timeZone: string;
+	rrule: string | null;
+	occurrenceKey: string | null;
+	attendees: { email: string; name: string | null; status: string }[];
+	myStatus: string | null;
+};
+
+export type NewCalendarEvent = {
+	calendarId: string;
+	title: string;
+	description?: string;
+	location?: string;
+	allDay: boolean;
+	start: string;
+	end: string;
+	timeZone: string;
+	rrule?: string | null;
+	attendees?: { email: string }[];
+	reminders?: number[];
+};
+
 export class QuickMailClient {
 	readonly url: string;
 
@@ -133,6 +166,28 @@ export class QuickMailClient {
 			throw new QuickMailError(res.status, res.statusText);
 		}
 		return undefined as T;
+	}
+
+	async listCalendars(): Promise<CalendarInfo[]> {
+		return (await this.request<{ calendars: CalendarInfo[] }>('/api/calendar/calendars')).calendars;
+	}
+
+	/** Events overlapping `from` (inclusive) to `to` (exclusive) days in `tz`. */
+	async listEvents(from: string, to: string, tz: string): Promise<CalendarEvent[]> {
+		const params = new URLSearchParams({ from, to, tz });
+		return (await this.request<{ events: CalendarEvent[] }>(`/api/calendar/events?${params}`)).events;
+	}
+
+	async createEvent(input: NewCalendarEvent): Promise<{ id: string; warnings?: string[] }> {
+		return this.request('/api/calendar/events', { method: 'POST', body: JSON.stringify(input) });
+	}
+
+	async deleteEvent(id: string, options: { scope?: 'this' | 'following' | 'all'; occurrence?: string } = {}): Promise<{ ok: boolean; warnings?: string[] }> {
+		const params = new URLSearchParams();
+		if (options.scope) params.set('scope', options.scope);
+		if (options.occurrence) params.set('occurrence', options.occurrence);
+		const suffix = params.size ? `?${params}` : '';
+		return this.request(`/api/calendar/events/${encodeURIComponent(id)}${suffix}`, { method: 'DELETE' });
 	}
 
 	async whoami(): Promise<User> {
