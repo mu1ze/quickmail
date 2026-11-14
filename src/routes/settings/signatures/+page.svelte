@@ -19,6 +19,7 @@
 	let bodyDraft = $state(untrack(() => data.signatures[0]?.body ?? ''));
 	let signatureBusy = $state(false);
 	let signatureError = $state('');
+	let createError = $state('');
 	let signatureSaved = $state(false);
 	let editor = $state<ReturnType<typeof SignatureEditor>>();
 
@@ -33,6 +34,7 @@
 		bodyDraft = next?.body ?? '';
 		signatureSaved = false;
 		signatureError = '';
+		createError = '';
 	}
 
 	function applySignatures(next: SavedSignature[], preferId?: string) {
@@ -48,19 +50,23 @@
 	async function addSignature() {
 		if (signatureBusy || signatures.length >= MAX_SAVED_SIGNATURES) return;
 		signatureBusy = true;
-		signatureError = '';
+		createError = '';
 		signatureSaved = false;
 		try {
-			const res = await fetch('/api/signatures', { method: 'POST' });
-			const body = await res.json();
+			const res = await fetch('/api/signatures', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: '{}'
+			});
+			const body = await res.json().catch(() => ({}));
 			if (!res.ok) {
-				signatureError = body.error ?? 'Could not add a signature';
+				createError = body.error ?? 'Could not add a signature';
 				return;
 			}
 			const created = (body.signatures as SavedSignature[]).at(-1);
 			applySignatures(body.signatures, created?.id);
 		} catch {
-			signatureError = 'Network error';
+			createError = 'Network error';
 		} finally {
 			signatureBusy = false;
 		}
@@ -178,6 +184,7 @@
 				</button>
 			{/if}
 		</div>
+		{#if createError}<p class="error" role="alert">{createError}</p>{/if}
 
 		{#if activeSignature}
 			<form class="signature-form" onsubmit={saveSignature}>
@@ -233,7 +240,6 @@
 			<button type="button" class="btn-primary" disabled={signatureBusy} onclick={addSignature}>
 				Create a signature
 			</button>
-			{#if signatureError}<p class="error">{signatureError}</p>{/if}
 		{/if}
 	</GroupedPanel>
 </HubShell>

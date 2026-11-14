@@ -138,8 +138,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 			.trim()
 			.toLowerCase();
 		const upload = pathname === '/api/signature-assets';
-		if (event.request.body && contentType !== (upload ? 'multipart/form-data' : 'application/json'))
-			return jsonError('Unsupported request content type', 415);
+		const expectedType = upload ? 'multipart/form-data' : 'application/json';
 		const large =
 			pathname === '/api/mail' ||
 			pathname === '/api/drafts' ||
@@ -148,6 +147,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 		const declared = Number(event.request.headers.get('content-length') ?? 0);
 		if (!Number.isSafeInteger(declared) || declared < 0 || declared > limit)
 			return jsonError('Request body too large', 413);
+		if (declared > 0 && contentType !== expectedType)
+			return jsonError('Unsupported request content type', 415);
 		if (db && event.locals.user && (large || upload)) {
 			if (
 				!(await reserveRequestQuota(
@@ -167,6 +168,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 		try {
 			if (event.request.body) {
 				const bytes = await readBoundedBody(event.request.body, limit);
+				// Workers gives bodyless POST/DELETE requests an empty stream; only real content needs a type.
+				if (bytes.length && contentType !== expectedType)
+					return jsonError('Unsupported request content type', 415);
 				if (!upload && bytes.length) {
 					let data: Record<string, unknown>;
 					try {
